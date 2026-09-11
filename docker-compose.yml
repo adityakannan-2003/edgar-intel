@@ -1,0 +1,46 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: edgar
+      POSTGRES_PASSWORD: edgar
+      POSTGRES_DB: edgar
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edgar -d edgar"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # OpenTelemetry collector. Traces every model and tool call so you can answer
+  # "what did this system do last Tuesday" -- which is the whole point of the
+  # observability requirement that shows up in 78% of AI job descriptions.
+  otel:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./otel-collector.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      EDGAR_DB_DSN: postgresql://edgar:edgar@db:5432/edgar
+      EDGAR_OTLP_ENDPOINT: http://otel:4318
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    command: uvicorn edgar_intel.serving.app:app --host 0.0.0.0 --port 8000
+
+volumes:
+  pgdata:

@@ -111,6 +111,59 @@ def ingest_run(
     console.print_json(json.dumps(stats.as_dict(), indent=2))
 
 
+@ingest_app.command("doctor")
+def ingest_doctor(
+    tickers: str = typer.Option("", help="Comma-separated tickers; default is the universe."),
+    form: str = typer.Option("10-K"),
+    save_html: bool = typer.Option(False, help="Keep the raw HTML for offline debugging."),
+    html_dir: str = typer.Option("data/raw_filings"),
+    report: str = typer.Option("reports/parser_doctor.json"),
+) -> None:
+    """Check the parser against real filings without touching the database.
+
+    Run this BEFORE `ingest run`. The parser works on the fixture corpus; real
+    filings are inconsistent between filers and years, and when parsing fails it
+    fails quietly — sections come back fused or empty, retrieval degrades, and
+    it looks like a model problem. This turns that into a report that names the
+    filing and the fix.
+    """
+    from .ingest import doctor
+
+    ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()] or None
+    with console.status("fetching filings from EDGAR..."):
+        payload = doctor.run(
+            ticker_list,
+            form,
+            save_html_dir=html_dir if save_html else None,
+            progress=lambda msg: console.log(msg),
+        )
+
+    for entry in payload["diagnoses"]:
+        diag = doctor.FilingDiagnosis(
+            ticker=entry["ticker"],
+            accession=entry["accession"],
+            fiscal_year=entry["fiscal_year"],
+            html_bytes=entry["html_bytes"],
+            text_chars=entry["text_chars"],
+            items_found=entry["items_found"],
+            sections=entry["sections"],
+            checks=[doctor.Check(**c) for c in entry["checks"]],
+            error=entry["error"],
+        )
+        colour = "green" if diag.healthy else "red"
+        console.print(f"[{colour}]{diag.render()}[/{colour}]")
+        console.print()
+
+    path = doctor.save_report(payload, report)
+    console.print(
+        f"[bold]{payload['healthy']}/{payload['filings_checked']} filings parsed cleanly[/bold]"
+    )
+    console.print(payload["verdict"])
+    console.print(f"[dim]full report: {path}[/dim]")
+    if payload["broken"]:
+        raise typer.Exit(1)
+
+
 # -------------------------------------------------------------------- index
 @index_app.command("build")
 def index_build(

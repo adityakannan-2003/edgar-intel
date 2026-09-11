@@ -1,0 +1,47 @@
+from .index import IndexStats, embed_pending, index_all, index_report, index_strategy
+from .metrics import (
+    aggregate,
+    cohens_kappa,
+    hit_rate,
+    mean_reciprocal_rank,
+    ndcg_at_k,
+    precision_at_k,
+    recall_at_k,
+    reciprocal_rank,
+    summarise,
+)
+from .search import (
+    Hit,
+    RetrievalResult,
+    build_context,
+    dense_search,
+    lexical_search,
+    reciprocal_rank_fusion,
+    rerank,
+    search,
+)
+
+__all__ = [
+    "Hit",
+    "IndexStats",
+    "RetrievalResult",
+    "aggregate",
+    "build_context",
+    "cohens_kappa",
+    "dense_search",
+    "embed_pending",
+    "hit_rate",
+    "index_all",
+    "index_report",
+    "index_strategy",
+    "lexical_search",
+    "mean_reciprocal_rank",
+    "ndcg_at_k",
+    "precision_at_k",
+    "recall_at_k",
+    "reciprocal_rank",
+    "reciprocal_rank_fusion",
+    "rerank",
+    "search",
+    "summarise",
+]

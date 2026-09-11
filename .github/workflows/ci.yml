@@ -1,0 +1,67 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: ruff check src tests
+      - run: pytest --cov=edgar_intel --cov-report=term-missing
+
+  # The eval gate. This is the part that matters: a pull request that changes a
+  # prompt, a chunking parameter, or a retrieval weight has to prove it did not
+  # make answer quality worse. Without this, prompt edits silently regress and
+  # nobody finds out until a user complains.
+  eval-gate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: edgar
+          POSTGRES_PASSWORD: edgar
+          POSTGRES_DB: edgar
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U edgar -d edgar"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      EDGAR_DB_DSN: postgresql://edgar:edgar@localhost:5432/edgar
+      # Deterministic providers: the gate measures whether *our* code changed
+      # behaviour, not whether a vendor silently swapped model weights.
+      EDGAR_LLM_PROVIDER: fake
+      EDGAR_EMBED_PROVIDER: fake
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - name: Apply schema
+        run: psql "$EDGAR_DB_DSN" -f sql/001_schema.sql
+      - name: Load the frozen evaluation fixture
+        run: edgar-intel fixture load --path tests/fixtures/mini_corpus.json
+      - name: Build the index
+        run: edgar-intel index build --strategy section_aware
+      - name: Run the evaluation suite
+        run: edgar-intel eval run --label "ci-${{ github.sha }}" --git-sha "${{ github.sha }}"
+      - name: Fail on regression greater than 3 points
+        run: edgar-intel eval gate --max-regression 0.03
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-report
+          path: reports/

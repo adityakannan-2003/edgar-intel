@@ -10,3 +10,4 @@ reports/
 data/
 artifacts/
 evalset/
+.DS_Store

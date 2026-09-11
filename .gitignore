@@ -11,3 +11,6 @@ data/
 artifacts/
 evalset/
 .DS_Store
+
+# Saved filings and run reports — regenerate with `edgar-intel ingest doctor`
+data/raw_filings/

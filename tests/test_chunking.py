@@ -157,6 +157,31 @@ class TestParsing:
         assert offsets["1A"] > toc_end
         assert offsets["7"] > offsets["1A"]
 
+    def test_item_offsets_ignore_late_cross_reference(self):
+        """A prose reference after Item 7A must not replace the real Item 7 heading."""
+        text = """
+        Table of Contents
+        Item 7. Management's Discussion and Analysis
+        Item 7A. Quantitative and Qualitative Disclosures About Market Risk
+
+        Item 7. Management's Discussion and Analysis
+        This is the real MD&A section with financial discussion.
+
+        Item 7A. Quantitative and Qualitative Disclosures About Market Risk
+        This is the real market-risk section.
+
+        The information called for by this item is incorporated herein by reference
+        to Item 7. Management's Discussion and Analysis of Results of Operations
+        and Financial Condition.
+
+        Item 8. Financial Statements and Supplementary Data
+        """
+
+        offsets = dict(find_item_offsets(text))
+
+        assert offsets["7"] < offsets["7A"]
+        assert offsets["7A"] < offsets["8"]
+        
     def test_split_sections_labels_items(self, sample_filing_text):
         sections = split_sections(sample_filing_text, min_chars=50)
         items = [s.item for s in sections]

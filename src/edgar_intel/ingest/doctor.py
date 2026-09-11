@@ -37,6 +37,14 @@ from .parse import find_item_offsets, html_to_text, split_sections
 # signal that heading detection failed rather than that the filer omitted it.
 EXPECTED_ITEMS = {"1", "1A", "7", "7A", "8"}
 
+# Items that are always written out in full. Filers satisfy 1B, 2, 3, 5, 7A,
+# 8 and 9A by incorporation by reference all the time -- a 275-character
+# Item 7A pointing at the MD&A is a correct filing, not a broken parse. But
+# nobody incorporates Risk Factors by reference, so if one of these is thin
+# the section boundary is wrong.
+SUBSTANTIVE_ITEMS = {"1", "1A", "7"}
+SUBSTANTIVE_MIN_CHARS = 5_000
+
 # A parsed MD&A section that contains no large numbers almost certainly lost
 # its tables — the single most damaging parse failure for retrieval, and the
 # one that is invisible without a check like this.
@@ -158,19 +166,36 @@ def diagnose_html(ticker: str, accession: str, fiscal_year: int | None, html: st
             )
         )
 
-    # 4. Are sections plausibly sized?
-    tiny = [s.item for s in sections if s.item and s.char_len < 500]
+    # 4. Did every located item survive section splitting?
+    section_items = {s.item for s in sections if s.item}
+    dropped = sorted(set(diag.items_found) - section_items)
     diag.checks.append(
         Check(
-            "sections non-trivial",
-            not tiny,
-            "all sections have body text"
-            if not tiny
-            else f"near-empty sections: {', '.join(tiny)} — boundaries likely wrong",
+            "located items survive splitting",
+            not dropped,
+            "all located items became sections"
+            if not dropped
+            else f"dropped during splitting: {', '.join(dropped)}",
         )
     )
 
-    # 5. Did MD&A keep its financial tables?
+    # 5. Do the items that can never be a cross-reference have real content?
+    thin = sorted(
+        i for i in SUBSTANTIVE_ITEMS
+        if i in by_item and by_item[i].char_len < SUBSTANTIVE_MIN_CHARS
+    )
+    absent = sorted(SUBSTANTIVE_ITEMS - set(by_item))
+    diag.checks.append(
+        Check(
+            "substantive items have content",
+            not thin and not absent,
+            "Items 1, 1A and 7 all have full bodies"
+            if not thin and not absent
+            else f"thin: {thin or 'none'}; absent: {absent or 'none'}",
+        )
+    )
+
+    # 6. Did MD&A keep its financial tables?
     mdna = by_item.get("7")
     if mdna:
         numbers = len(_BIG_NUMBER.findall(mdna.body))
@@ -186,7 +211,7 @@ def diagnose_html(ticker: str, accession: str, fiscal_year: int | None, html: st
     else:
         diag.checks.append(Check("MD&A retained figures", False, "Item 7 not found at all"))
 
-    # 6. Did Risk Factors stay prose rather than absorbing the financials?
+    # 7. Did Risk Factors stay prose rather than absorbing the financials?
     risk = by_item.get("1A")
     if risk:
         leaked = len(_BIG_NUMBER.findall(risk.body))
@@ -201,7 +226,7 @@ def diagnose_html(ticker: str, accession: str, fiscal_year: int | None, html: st
     else:
         diag.checks.append(Check("risk factors not fused with financials", False, "Item 1A not found"))
 
-    # 7. Are the item headings in document order?
+    # 8. Are the item headings in document order?
     positions = [pos for _, pos in offsets]
     diag.checks.append(
         Check(
@@ -309,9 +334,14 @@ def _verdict(diagnoses: list[FilingDiagnosis]) -> str:
             "The 'last occurrence' rule is not enough for these filings; consider "
             "requiring headings to be spread across the document."
         ),
-        "sections non-trivial": (
-            "Section boundaries are collapsing. Check the offsets directly before "
-            "blaming split_sections."
+        "located items survive splitting": (
+            "split_sections is discarding located items. Check its filtering -- a "
+            "short section is usually incorporation by reference, not a bad parse."
+        ),
+        "substantive items have content": (
+            "Item 1, 1A or 7 came back thin, which means a section boundary is "
+            "wrong -- those are never incorporated by reference. Check where the "
+            "next Item heading matched."
         ),
         "risk factors not fused with financials": (
             "A section boundary is running past where it should stop, so Item 1A is "

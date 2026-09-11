@@ -23,7 +23,7 @@ def healthy_filing_html() -> str:
         "Disruption at any such supplier could materially affect the Company's "
         "ability to meet customer demand. Competition is intense and characterised "
         "by rapid technological change and frequent product introductions.</p>"
-    ) * 12
+    ) * 40
     mdna_rows = "".join(
         f"<tr><td>Line item {i}</td><td>{380000 + i * 137:,}</td>"
         f"<td>{394000 + i * 211:,}</td></tr>"

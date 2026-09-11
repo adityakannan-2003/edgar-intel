@@ -198,35 +198,58 @@ def html_to_text(html: str) -> str:
 
 
 def find_item_offsets(text: str) -> list[tuple[str, int]]:
-    """Locate each Item heading in the flattened text.
+    """Locate Item headings while preserving canonical 10-K order.
 
-    A 10-K names every Item twice: once in the table of contents and once at
-    the actual section. We take the *last* occurrence of each, because the ToC
-    always comes first and matching it would make every section start at the
-    front of the document -- a bug that silently destroys section-aware
-    chunking and is invisible unless you look at the offsets.
+    Filings often mention Item headings multiple times: in the table of
+    contents, at the real section heading, and later in cross-references.
+
+    Walk backward through the expected Item order and choose the latest match
+    that still appears before the next selected Item. This prefers body
+    headings over the table of contents without allowing a later prose
+    cross-reference to reorder sections.
     """
-    offsets: list[tuple[str, int]] = []
-    for item, pattern in ITEM_PATTERNS:
+    selected: list[tuple[str, int]] = []
+    upper_bound = len(text) + 1
+
+    for item, pattern in reversed(ITEM_PATTERNS):
         matches = list(re.finditer(pattern, text, flags=re.I))
         if not matches:
             continue
-        chosen = matches[-1] if len(matches) > 1 else matches[0]
-        offsets.append((item, chosen.start()))
-    offsets.sort(key=lambda pair: pair[1])
 
-    # Drop any heading that appears out of document order: a stray match inside
-    # body prose is more likely than a filing that genuinely reorders Items.
-    cleaned: list[tuple[str, int]] = []
-    for item, pos in offsets:
-        if cleaned and pos <= cleaned[-1][1]:
+        valid = [match for match in matches if match.start() < upper_bound]
+        if not valid:
             continue
-        cleaned.append((item, pos))
-    return cleaned
+
+        chosen = valid[-1]
+        selected.append((item, chosen.start()))
+        upper_bound = chosen.start()
+
+    selected.reverse()
+    return selected
 
 
 def split_sections(text: str, min_chars: int = 400) -> list[Section]:
-    """Split flattened filing text into Item-labelled sections."""
+    """Split flattened filing text into Item-labelled sections.
+
+    Every located Item becomes a section regardless of length. A short section
+    is not a parse failure: filers routinely satisfy an Item by *incorporation
+    by reference*, which is standard practice and perfectly legal. Real
+    examples from the corpus:
+
+      NVIDIA Item 8  (305 chars): "The information required by this Item is set
+                                   forth in our Consolidated Financial
+                                   Statements and Notes thereto..."
+      P&G   Item 7A  (274 chars): "...incorporated by reference to the section
+                                   entitled Other Information in the MD&A..."
+
+    An earlier version dropped sections below `min_chars`. That silently threw
+    the text away *and* lost the fact that the Item existed -- and since
+    retrieval filters on `item`, a missing Item is a query that can never
+    match. Cheap to keep, expensive to lose.
+
+    `min_chars` now applies only to the cover block before the first Item,
+    which genuinely is page furniture when it is short.
+    """
     offsets = find_item_offsets(text)
     if not offsets:
         return [Section(item=None, title="Full Document", ordinal=0, body=text)]
@@ -241,7 +264,7 @@ def split_sections(text: str, min_chars: int = 400) -> list[Section]:
     for idx, (item, start) in enumerate(offsets):
         end = offsets[idx + 1][1] if idx + 1 < len(offsets) else len(text)
         body = text[start:end].strip()
-        if len(body) < min_chars:
+        if not body:
             continue
         sections.append(
             Section(

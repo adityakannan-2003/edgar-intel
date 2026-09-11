@@ -1,0 +1,350 @@
+{
+  "companies": [
+    {
+      "cik": "0000000001",
+      "ticker": "ALFA",
+      "name": "Alfa Industries Inc."
+    },
+    {
+      "cik": "0000000002",
+      "ticker": "BETA",
+      "name": "Beta Technologies Corp."
+    }
+  ],
+  "filings": [
+    {
+      "cik": "0000000001",
+      "accession": "0000000001-23-000001",
+      "form": "10-K",
+      "filing_date": "2024-02-15",
+      "period_end": "2023-12-31",
+      "primary_doc": "form10k.htm",
+      "source_url": "https://www.sec.gov/Archives/edgar/data/1/0000000001-23-000001.htm",
+      "sections": [
+        {
+          "item": "1A",
+          "title": "Risk Factors",
+          "body": "The Company depends on a limited number of suppliers for critical components, and certain components are available only from single sources. Disruption at any such supplier could materially affect the Company's ability to meet customer demand. The Company also faces intense competition characterised by rapid technological change, aggressive pricing and frequent product introductions. The Company depends on a limited number of suppliers for critical components, and certain components are available only from single sources. Disruption at any such supplier could materially affect the Company's ability to meet customer demand. The Company also faces intense competition characterised by rapid technological change, aggressive pricing and frequent product introductions. The Company depends on a limited number of suppliers for critical components, and certain components are available only from single sources. Disruption at any such supplier could materially affect the Company's ability to meet customer demand. The Company also faces intense competition characterised by rapid technological change, aggressive pricing and frequent product introductions. The Company depends on a limited number of suppliers for critical components, and certain components are available only from single sources. Disruption at any such supplier could materially affect the Company's ability to meet customer demand. The Company also faces intense competition characterised by rapid technological change, aggressive pricing and frequent product introductions."
+        },
+        {
+          "item": "3",
+          "title": "Legal Proceedings",
+          "body": "The Company is subject to various legal proceedings and claims arising in the ordinary course of business, including intellectual property disputes and regulatory inquiries. Management does not currently expect the resolution of these matters to have a material adverse effect on the Company's financial position, results of operations or cash flows. The Company is subject to various legal proceedings and claims arising in the ordinary course of business, including intellectual property disputes and regulatory inquiries. Management does not currently expect the resolution of these matters to have a material adverse effect on the Company's financial position, results of operations or cash flows. The Company is subject to various legal proceedings and claims arising in the ordinary course of business, including intellectual property disputes and regulatory inquiries. Management does not currently expect the resolution of these matters to have a material adverse effect on the Company's financial position, results of operations or cash flows."
+        },
+        {
+          "item": "7",
+          "title": "Management's Discussion and Analysis",
+          "body": "Total net sales | 383,285 | 383,285\nNet income | 96,995\nResearch and development | 29,915\nTotal assets | 352,583\nNet sales for fiscal 2023 were $383,285 million. Net income was $96,995 million. Research and development expense was $29,915 million, reflecting continued investment in new products. Total assets stood at $352,583 million at year end. Total net sales | 383,285 | 383,285\nNet income | 96,995\nResearch and development | 29,915\nTotal assets | 352,583\nNet sales for fiscal 2023 were $383,285 million. Net income was $96,995 million. Research and development expense was $29,915 million, reflecting continued investment in new products. Total assets stood at $352,583 million at year end. Total net sales | 383,285 | 383,285\nNet income | 96,995\nResearch and development | 29,915\nTotal assets | 352,583\nNet sales for fiscal 2023 were $383,285 million. Net income was $96,995 million. Research and development expense was $29,915 million, reflecting continued investment in new products. Total assets stood at $352,583 million at year end."
+        },
+        {
+          "item": "7A",
+          "title": "Quantitative and Qualitative Disclosures About Market Risk",
+          "body": "The Company's results are affected by movements in foreign currency exchange rates. A substantial portion of revenue and operating costs is denominated in currencies other than the US dollar. The Company uses derivative instruments, principally forward contracts, to hedge a portion of this exposure. Hedging reduces but does not eliminate the effect of currency movements on reported results. The Company's results are affected by movements in foreign currency exchange rates. A substantial portion of revenue and operating costs is denominated in currencies other than the US dollar. The Company uses derivative instruments, principally forward contracts, to hedge a portion of this exposure. Hedging reduces but does not eliminate the effect of currency movements on reported results. The Company's results are affected by movements in foreign currency exchange rates. A substantial portion of revenue and operating costs is denominated in currencies other than the US dollar. The Company uses derivative instruments, principally forward contracts, to hedge a portion of this exposure. Hedging reduces but does not eliminate the effect of currency movements on reported results."
+        }
+      ]
+    },
+    {
+      "cik": "0000000001",
+      "accession": "0000000001-22-000001",
+      "form": "10-K",
+      "filing_date": "2023-02-15",
+      "period_end": "2022-12-31",
+      "primary_doc": "form10k.htm",
+      "source_url": "https://www.sec.gov/Archives/edgar/data/1/0000000001-22-000001.htm",
+      "sections": [
+        {
+          "item": "1A",
+          "title": "Risk Factors",
+          "body": "The Company depends on a limited number of suppliers for critical components, and certain components are available only from single sources. Disruption at any such supplier could materially affect the Company's ability to meet customer demand. The Company also faces intense competition characterised by rapid technological change, aggressive pricing and frequent product introductions. The Company depends on a limited number of suppliers for critical components, and certain components are available only from single sources. Disruption at any such supplier could materially affect the Company's ability to meet customer demand. The Company also faces intense competition characterised by rapid technological change, aggressive pricing and frequent product introductions. The Company depends on a limited number of suppliers for critical components, and certain components are available only from single sources. Disruption at any such supplier could materially affect the Company's ability to meet customer demand. The Company also faces intense competition characterised by rapid technological change, aggressive pricing and frequent product introductions. The Company depends on a limited number of suppliers for critical components, and certain components are available only from single sources. Disruption at any such supplier could materially affect the Company's ability to meet customer demand. The Company also faces intense competition characterised by rapid technological change, aggressive pricing and frequent product introductions."
+        },
+        {
+          "item": "3",
+          "title": "Legal Proceedings",
+          "body": "The Company is subject to various legal proceedings and claims arising in the ordinary course of business, including intellectual property disputes and regulatory inquiries. Management does not currently expect the resolution of these matters to have a material adverse effect on the Company's financial position, results of operations or cash flows. The Company is subject to various legal proceedings and claims arising in the ordinary course of business, including intellectual property disputes and regulatory inquiries. Management does not currently expect the resolution of these matters to have a material adverse effect on the Company's financial position, results of operations or cash flows. The Company is subject to various legal proceedings and claims arising in the ordinary course of business, including intellectual property disputes and regulatory inquiries. Management does not currently expect the resolution of these matters to have a material adverse effect on the Company's financial position, results of operations or cash flows."
+        },
+        {
+          "item": "7",
+          "title": "Management's Discussion and Analysis",
+          "body": "Total net sales | 394,328 | 394,328\nNet income | 99,803\nResearch and development | 26,251\nTotal assets | 352,755\nNet sales for fiscal 2022 were $394,328 million. Net income was $99,803 million. Research and development expense was $26,251 million, reflecting continued investment in new products. Total assets stood at $352,755 million at year end. Total net sales | 394,328 | 394,328\nNet income | 99,803\nResearch and development | 26,251\nTotal assets | 352,755\nNet sales for fiscal 2022 were $394,328 million. Net income was $99,803 million. Research and development expense was $26,251 million, reflecting continued investment in new products. Total assets stood at $352,755 million at year end. Total net sales | 394,328 | 394,328\nNet income | 99,803\nResearch and development | 26,251\nTotal assets | 352,755\nNet sales for fiscal 2022 were $394,328 million. Net income was $99,803 million. Research and development expense was $26,251 million, reflecting continued investment in new products. Total assets stood at $352,755 million at year end."
+        },
+        {
+          "item": "7A",
+          "title": "Quantitative and Qualitative Disclosures About Market Risk",
+          "body": "The Company's results are affected by movements in foreign currency exchange rates. A substantial portion of revenue and operating costs is denominated in currencies other than the US dollar. The Company uses derivative instruments, principally forward contracts, to hedge a portion of this exposure. Hedging reduces but does not eliminate the effect of currency movements on reported results. The Company's results are affected by movements in foreign currency exchange rates. A substantial portion of revenue and operating costs is denominated in currencies other than the US dollar. The Company uses derivative instruments, principally forward contracts, to hedge a portion of this exposure. Hedging reduces but does not eliminate the effect of currency movements on reported results. The Company's results are affected by movements in foreign currency exchange rates. A substantial portion of revenue and operating costs is denominated in currencies other than the US dollar. The Company uses derivative instruments, principally forward contracts, to hedge a portion of this exposure. Hedging reduces but does not eliminate the effect of currency movements on reported results."
+        }
+      ]
+    },
+    {
+      "cik": "0000000002",
+      "accession": "0000000002-23-000001",
+      "form": "10-K",
+      "filing_date": "2024-02-15",
+      "period_end": "2023-12-31",
+      "primary_doc": "form10k.htm",
+      "source_url": "https://www.sec.gov/Archives/edgar/data/2/0000000002-23-000001.htm",
+      "sections": [
+        {
+          "item": "1A",
+          "title": "Risk Factors",
+          "body": "The Company depends on a limited number of suppliers for critical components, and certain components are available only from single sources. Disruption at any such supplier could materially affect the Company's ability to meet customer demand. The Company also faces intense competition characterised by rapid technological change, aggressive pricing and frequent product introductions. The Company depends on a limited number of suppliers for critical components, and certain components are available only from single sources. Disruption at any such supplier could materially affect the Company's ability to meet customer demand. The Company also faces intense competition characterised by rapid technological change, aggressive pricing and frequent product introductions. The Company depends on a limited number of suppliers for critical components, and certain components are available only from single sources. Disruption at any such supplier could materially affect the Company's ability to meet customer demand. The Company also faces intense competition characterised by rapid technological change, aggressive pricing and frequent product introductions. The Company depends on a limited number of suppliers for critical components, and certain components are available only from single sources. Disruption at any such supplier could materially affect the Company's ability to meet customer demand. The Company also faces intense competition characterised by rapid technological change, aggressive pricing and frequent product introductions."
+        },
+        {
+          "item": "3",
+          "title": "Legal Proceedings",
+          "body": "The Company is subject to various legal proceedings and claims arising in the ordinary course of business, including intellectual property disputes and regulatory inquiries. Management does not currently expect the resolution of these matters to have a material adverse effect on the Company's financial position, results of operations or cash flows. The Company is subject to various legal proceedings and claims arising in the ordinary course of business, including intellectual property disputes and regulatory inquiries. Management does not currently expect the resolution of these matters to have a material adverse effect on the Company's financial position, results of operations or cash flows. The Company is subject to various legal proceedings and claims arising in the ordinary course of business, including intellectual property disputes and regulatory inquiries. Management does not currently expect the resolution of these matters to have a material adverse effect on the Company's financial position, results of operations or cash flows."
+        },
+        {
+          "item": "7",
+          "title": "Management's Discussion and Analysis",
+          "body": "Total net sales | 211,915 | 211,915\nNet income | 72,361\nResearch and development | 27,195\nTotal assets | 411,976\nNet sales for fiscal 2023 were $211,915 million. Net income was $72,361 million. Research and development expense was $27,195 million, reflecting continued investment in new products. Total assets stood at $411,976 million at year end. Total net sales | 211,915 | 211,915\nNet income | 72,361\nResearch and development | 27,195\nTotal assets | 411,976\nNet sales for fiscal 2023 were $211,915 million. Net income was $72,361 million. Research and development expense was $27,195 million, reflecting continued investment in new products. Total assets stood at $411,976 million at year end. Total net sales | 211,915 | 211,915\nNet income | 72,361\nResearch and development | 27,195\nTotal assets | 411,976\nNet sales for fiscal 2023 were $211,915 million. Net income was $72,361 million. Research and development expense was $27,195 million, reflecting continued investment in new products. Total assets stood at $411,976 million at year end."
+        },
+        {
+          "item": "7A",
+          "title": "Quantitative and Qualitative Disclosures About Market Risk",
+          "body": "The Company's results are affected by movements in foreign currency exchange rates. A substantial portion of revenue and operating costs is denominated in currencies other than the US dollar. The Company uses derivative instruments, principally forward contracts, to hedge a portion of this exposure. Hedging reduces but does not eliminate the effect of currency movements on reported results. The Company's results are affected by movements in foreign currency exchange rates. A substantial portion of revenue and operating costs is denominated in currencies other than the US dollar. The Company uses derivative instruments, principally forward contracts, to hedge a portion of this exposure. Hedging reduces but does not eliminate the effect of currency movements on reported results. The Company's results are affected by movements in foreign currency exchange rates. A substantial portion of revenue and operating costs is denominated in currencies other than the US dollar. The Company uses derivative instruments, principally forward contracts, to hedge a portion of this exposure. Hedging reduces but does not eliminate the effect of currency movements on reported results."
+        }
+      ]
+    },
+    {
+      "cik": "0000000002",
+      "accession": "0000000002-22-000001",
+      "form": "10-K",
+      "filing_date": "2023-02-15",
+      "period_end": "2022-12-31",
+      "primary_doc": "form10k.htm",
+      "source_url": "https://www.sec.gov/Archives/edgar/data/2/0000000002-22-000001.htm",
+      "sections": [
+        {
+          "item": "1A",
+          "title": "Risk Factors",
+          "body": "The Company depends on a limited number of suppliers for critical components, and certain components are available only from single sources. Disruption at any such supplier could materially affect the Company's ability to meet customer demand. The Company also faces intense competition characterised by rapid technological change, aggressive pricing and frequent product introductions. The Company depends on a limited number of suppliers for critical components, and certain components are available only from single sources. Disruption at any such supplier could materially affect the Company's ability to meet customer demand. The Company also faces intense competition characterised by rapid technological change, aggressive pricing and frequent product introductions. The Company depends on a limited number of suppliers for critical components, and certain components are available only from single sources. Disruption at any such supplier could materially affect the Company's ability to meet customer demand. The Company also faces intense competition characterised by rapid technological change, aggressive pricing and frequent product introductions. The Company depends on a limited number of suppliers for critical components, and certain components are available only from single sources. Disruption at any such supplier could materially affect the Company's ability to meet customer demand. The Company also faces intense competition characterised by rapid technological change, aggressive pricing and frequent product introductions."
+        },
+        {
+          "item": "3",
+          "title": "Legal Proceedings",
+          "body": "The Company is subject to various legal proceedings and claims arising in the ordinary course of business, including intellectual property disputes and regulatory inquiries. Management does not currently expect the resolution of these matters to have a material adverse effect on the Company's financial position, results of operations or cash flows. The Company is subject to various legal proceedings and claims arising in the ordinary course of business, including intellectual property disputes and regulatory inquiries. Management does not currently expect the resolution of these matters to have a material adverse effect on the Company's financial position, results of operations or cash flows. The Company is subject to various legal proceedings and claims arising in the ordinary course of business, including intellectual property disputes and regulatory inquiries. Management does not currently expect the resolution of these matters to have a material adverse effect on the Company's financial position, results of operations or cash flows."
+        },
+        {
+          "item": "7",
+          "title": "Management's Discussion and Analysis",
+          "body": "Total net sales | 198,270 | 198,270\nNet income | 72,738\nResearch and development | 24,512\nTotal assets | 364,840\nNet sales for fiscal 2022 were $198,270 million. Net income was $72,738 million. Research and development expense was $24,512 million, reflecting continued investment in new products. Total assets stood at $364,840 million at year end. Total net sales | 198,270 | 198,270\nNet income | 72,738\nResearch and development | 24,512\nTotal assets | 364,840\nNet sales for fiscal 2022 were $198,270 million. Net income was $72,738 million. Research and development expense was $24,512 million, reflecting continued investment in new products. Total assets stood at $364,840 million at year end. Total net sales | 198,270 | 198,270\nNet income | 72,738\nResearch and development | 24,512\nTotal assets | 364,840\nNet sales for fiscal 2022 were $198,270 million. Net income was $72,738 million. Research and development expense was $24,512 million, reflecting continued investment in new products. Total assets stood at $364,840 million at year end."
+        },
+        {
+          "item": "7A",
+          "title": "Quantitative and Qualitative Disclosures About Market Risk",
+          "body": "The Company's results are affected by movements in foreign currency exchange rates. A substantial portion of revenue and operating costs is denominated in currencies other than the US dollar. The Company uses derivative instruments, principally forward contracts, to hedge a portion of this exposure. Hedging reduces but does not eliminate the effect of currency movements on reported results. The Company's results are affected by movements in foreign currency exchange rates. A substantial portion of revenue and operating costs is denominated in currencies other than the US dollar. The Company uses derivative instruments, principally forward contracts, to hedge a portion of this exposure. Hedging reduces but does not eliminate the effect of currency movements on reported results. The Company's results are affected by movements in foreign currency exchange rates. A substantial portion of revenue and operating costs is denominated in currencies other than the US dollar. The Company uses derivative instruments, principally forward contracts, to hedge a portion of this exposure. Hedging reduces but does not eliminate the effect of currency movements on reported results."
+        }
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "cik": "0000000001",
+      "taxonomy": "us-gaap",
+      "tag": "RevenueFromContractWithCustomerExcludingAssessedTax",
+      "unit": "USD",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "period_start": "2023-01-01",
+      "period_end": "2023-12-31",
+      "value": 383285000000,
+      "accession": "0000000001-23-000001",
+      "form": "10-K"
+    },
+    {
+      "cik": "0000000001",
+      "taxonomy": "us-gaap",
+      "tag": "NetIncomeLoss",
+      "unit": "USD",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "period_start": "2023-01-01",
+      "period_end": "2023-12-31",
+      "value": 96995000000,
+      "accession": "0000000001-23-000001",
+      "form": "10-K"
+    },
+    {
+      "cik": "0000000001",
+      "taxonomy": "us-gaap",
+      "tag": "ResearchAndDevelopmentExpense",
+      "unit": "USD",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "period_start": "2023-01-01",
+      "period_end": "2023-12-31",
+      "value": 29915000000,
+      "accession": "0000000001-23-000001",
+      "form": "10-K"
+    },
+    {
+      "cik": "0000000001",
+      "taxonomy": "us-gaap",
+      "tag": "Assets",
+      "unit": "USD",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "period_start": "2023-01-01",
+      "period_end": "2023-12-31",
+      "value": 352583000000,
+      "accession": "0000000001-23-000001",
+      "form": "10-K"
+    },
+    {
+      "cik": "0000000001",
+      "taxonomy": "us-gaap",
+      "tag": "RevenueFromContractWithCustomerExcludingAssessedTax",
+      "unit": "USD",
+      "fiscal_year": 2022,
+      "fiscal_period": "FY",
+      "period_start": "2022-01-01",
+      "period_end": "2022-12-31",
+      "value": 394328000000,
+      "accession": "0000000001-22-000001",
+      "form": "10-K"
+    },
+    {
+      "cik": "0000000001",
+      "taxonomy": "us-gaap",
+      "tag": "NetIncomeLoss",
+      "unit": "USD",
+      "fiscal_year": 2022,
+      "fiscal_period": "FY",
+      "period_start": "2022-01-01",
+      "period_end": "2022-12-31",
+      "value": 99803000000,
+      "accession": "0000000001-22-000001",
+      "form": "10-K"
+    },
+    {
+      "cik": "0000000001",
+      "taxonomy": "us-gaap",
+      "tag": "ResearchAndDevelopmentExpense",
+      "unit": "USD",
+      "fiscal_year": 2022,
+      "fiscal_period": "FY",
+      "period_start": "2022-01-01",
+      "period_end": "2022-12-31",
+      "value": 26251000000,
+      "accession": "0000000001-22-000001",
+      "form": "10-K"
+    },
+    {
+      "cik": "0000000001",
+      "taxonomy": "us-gaap",
+      "tag": "Assets",
+      "unit": "USD",
+      "fiscal_year": 2022,
+      "fiscal_period": "FY",
+      "period_start": "2022-01-01",
+      "period_end": "2022-12-31",
+      "value": 352755000000,
+      "accession": "0000000001-22-000001",
+      "form": "10-K"
+    },
+    {
+      "cik": "0000000002",
+      "taxonomy": "us-gaap",
+      "tag": "RevenueFromContractWithCustomerExcludingAssessedTax",
+      "unit": "USD",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "period_start": "2023-01-01",
+      "period_end": "2023-12-31",
+      "value": 211915000000,
+      "accession": "0000000002-23-000001",
+      "form": "10-K"
+    },
+    {
+      "cik": "0000000002",
+      "taxonomy": "us-gaap",
+      "tag": "NetIncomeLoss",
+      "unit": "USD",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "period_start": "2023-01-01",
+      "period_end": "2023-12-31",
+      "value": 72361000000,
+      "accession": "0000000002-23-000001",
+      "form": "10-K"
+    },
+    {
+      "cik": "0000000002",
+      "taxonomy": "us-gaap",
+      "tag": "ResearchAndDevelopmentExpense",
+      "unit": "USD",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "period_start": "2023-01-01",
+      "period_end": "2023-12-31",
+      "value": 27195000000,
+      "accession": "0000000002-23-000001",
+      "form": "10-K"
+    },
+    {
+      "cik": "0000000002",
+      "taxonomy": "us-gaap",
+      "tag": "Assets",
+      "unit": "USD",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "period_start": "2023-01-01",
+      "period_end": "2023-12-31",
+      "value": 411976000000,
+      "accession": "0000000002-23-000001",
+      "form": "10-K"
+    },
+    {
+      "cik": "0000000002",
+      "taxonomy": "us-gaap",
+      "tag": "RevenueFromContractWithCustomerExcludingAssessedTax",
+      "unit": "USD",
+      "fiscal_year": 2022,
+      "fiscal_period": "FY",
+      "period_start": "2022-01-01",
+      "period_end": "2022-12-31",
+      "value": 198270000000,
+      "accession": "0000000002-22-000001",
+      "form": "10-K"
+    },
+    {
+      "cik": "0000000002",
+      "taxonomy": "us-gaap",
+      "tag": "NetIncomeLoss",
+      "unit": "USD",
+      "fiscal_year": 2022,
+      "fiscal_period": "FY",
+      "period_start": "2022-01-01",
+      "period_end": "2022-12-31",
+      "value": 72738000000,
+      "accession": "0000000002-22-000001",
+      "form": "10-K"
+    },
+    {
+      "cik": "0000000002",
+      "taxonomy": "us-gaap",
+      "tag": "ResearchAndDevelopmentExpense",
+      "unit": "USD",
+      "fiscal_year": 2022,
+      "fiscal_period": "FY",
+      "period_start": "2022-01-01",
+      "period_end": "2022-12-31",
+      "value": 24512000000,
+      "accession": "0000000002-22-000001",
+      "form": "10-K"
+    },
+    {
+      "cik": "0000000002",
+      "taxonomy": "us-gaap",
+      "tag": "Assets",
+      "unit": "USD",
+      "fiscal_year": 2022,
+      "fiscal_period": "FY",
+      "period_start": "2022-01-01",
+      "period_end": "2022-12-31",
+      "value": 364840000000,
+      "accession": "0000000002-22-000001",
+      "form": "10-K"
+    }
+  ]
+}

@@ -7,6 +7,7 @@ statement -- expressing those through an ORM costs clarity and buys nothing.
 
 from __future__ import annotations
 
+import atexit
 import json
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -32,6 +33,11 @@ def get_pool() -> ConnectionPool:
             kwargs={"row_factory": dict_row},
             open=True,
         )
+        # Python 3.14 raises PythonFinalizationError if the pool's worker
+        # threads are still joinable when the interpreter tears down, which
+        # prints an alarming traceback after an otherwise successful command.
+        # Closing at exit is tidier than letting __del__ race finalization.
+        atexit.register(close_pool)
     return _pool
 
 

@@ -28,6 +28,7 @@ a change to `lexical_search` and nothing else.
 
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -35,6 +36,47 @@ from typing import Any
 from .. import db
 from ..config import get_settings
 from ..providers import get_embedder, get_reranker
+
+_WORD = re.compile(r"[A-Za-z0-9]+")
+
+
+def to_or_tsquery(query: str, max_terms: int = 24) -> str:
+    """Build an OR-ed tsquery from a natural-language question.
+
+    This exists because of a Postgres behaviour that fails silently and cost
+    this project its entire lexical retriever.
+
+    `websearch_to_tsquery` joins unquoted words with AND. So the question
+
+        "What was Caterpillar's total revenue for fiscal year 2024?"
+
+    becomes 'caterpillar' & 'total' & 'revenu' & 'fiscal' & 'year' & '2024' --
+    every lexeme required in a single chunk. No chunk satisfies that, so the
+    query returns zero rows. Not an error, not a warning: an empty result, on
+    every query, which made the hybrid retriever silently dense-only and the
+    RRF fusion a no-op. A retrieval sweep is what surfaced it.
+
+    OR-ing the terms is the right shape for retrieval. Recall comes from the
+    match, precision comes from `ts_rank_cd`, which scores by how many query
+    lexemes a document contains and how densely they cluster. Matching broadly
+    and ranking well is the whole idea behind a lexical retriever; requiring
+    every term is a filter, not a search.
+
+    Stopwords need no special handling -- the 'english' configuration strips
+    them from both the tsvector and the tsquery.
+    """
+    seen: set[str] = set()
+    terms: list[str] = []
+    for raw in _WORD.findall(query):
+        term = raw.lower()
+        # Single characters carry no signal and bloat the query.
+        if len(term) < 2 or term in seen:
+            continue
+        seen.add(term)
+        terms.append(term)
+        if len(terms) >= max_terms:
+            break
+    return " | ".join(terms)
 
 
 @dataclass(slots=True)
@@ -162,14 +204,19 @@ def lexical_search(
     k = k or s.retrieve_k
     where, params = _filters(ticker, fiscal_year, item)
 
+    tsquery = to_or_tsquery(query)
+    if not tsquery:
+        # Nothing lexically searchable (punctuation or stopwords only).
+        return []
+
     sql = f"""
         {_BASE_SELECT}
          WHERE c.strategy = %s
-           AND c.body_tsv @@ websearch_to_tsquery('english', %s){where}
-         ORDER BY ts_rank_cd(c.body_tsv, websearch_to_tsquery('english', %s)) DESC
+           AND c.body_tsv @@ to_tsquery('english', %s){where}
+         ORDER BY ts_rank_cd(c.body_tsv, to_tsquery('english', %s)) DESC
          LIMIT %s
     """
-    rows = db.query(sql, [strategy, query, *params, query, k])
+    rows = db.query(sql, [strategy, tsquery, *params, tsquery, k])
     return [
         Hit(
             chunk_id=r["chunk_id"],

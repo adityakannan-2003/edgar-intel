@@ -200,3 +200,59 @@ class TestHitRateVersusRecall:
         assert out["recall@3"] == pytest.approx(1 / 3, abs=1e-4)
         assert out["hit@3"] == 1.0
         assert out["n_relevant"] == 3.0
+
+
+class TestLexicalQueryConstruction:
+    """The bug that silently disabled the entire lexical retriever.
+
+    `websearch_to_tsquery` joins unquoted words with AND, so a natural-language
+    question required every lexeme in one chunk. It matched zero rows on every
+    query -- no error, no warning -- which made "hybrid" retrieval dense-only
+    and RRF fusion a no-op. A retrieval sweep showed lexical-only scoring 0.000
+    across every metric, which is what surfaced it.
+    """
+
+    def test_terms_are_ored_not_anded(self):
+        from edgar_intel.retrieval.search import to_or_tsquery
+
+        q = to_or_tsquery("What was Caterpillar's total revenue for fiscal year 2024?")
+        assert "&" not in q
+        assert "|" in q
+        assert "caterpillar" in q
+        assert "2024" in q
+
+    def test_digits_survive(self):
+        """Fiscal years and figures are exactly what lexical search is for."""
+        from edgar_intel.retrieval.search import to_or_tsquery
+
+        assert "2024" in to_or_tsquery("revenue in FY2024")
+
+    def test_deduplicates(self):
+        from edgar_intel.retrieval.search import to_or_tsquery
+
+        q = to_or_tsquery("revenue revenue revenue")
+        assert q.count("revenue") == 1
+
+    def test_drops_single_characters(self):
+        from edgar_intel.retrieval.search import to_or_tsquery
+
+        assert "a" not in to_or_tsquery("a revenue").split(" | ")
+
+    def test_caps_term_count(self):
+        from edgar_intel.retrieval.search import to_or_tsquery
+
+        q = to_or_tsquery(" ".join(f"term{i}" for i in range(100)), max_terms=5)
+        assert len(q.split(" | ")) == 5
+
+    def test_empty_input_returns_empty_string(self):
+        """to_tsquery() raises on an empty string, so the caller must skip."""
+        from edgar_intel.retrieval.search import to_or_tsquery
+
+        assert to_or_tsquery("?? !! ,") == ""
+        assert to_or_tsquery("") == ""
+
+    def test_punctuation_and_possessives_are_stripped(self):
+        from edgar_intel.retrieval.search import to_or_tsquery
+
+        terms = to_or_tsquery("Caterpillar's R&D, FY2024.").split(" | ")
+        assert all("'" not in t and "," not in t and "." not in t for t in terms)

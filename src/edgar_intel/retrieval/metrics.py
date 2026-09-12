@@ -94,7 +94,25 @@ def ndcg_at_k(
 
 
 def hit_rate(ranked: Sequence[str], relevant: set[str], k: int) -> float:
-    """1.0 if any relevant doc is in the top k. Blunt, but easy to explain."""
+    """1.0 if any relevant doc is in the top k.
+
+    Blunt, and for a large part of this evaluation it is the *correct* metric
+    while recall@k is not.
+
+    The distinction matters. A numeric case is labelled with every chunk that
+    contains the answer -- often five of them, because a figure repeats across
+    a table, the MD&A prose and a footnote. The system only has to surface
+    *one* to answer the question. recall@5 divides by five and so reports 0.2
+    for a retrieval that did its job perfectly; it is measuring redundancy, not
+    success.
+
+    Neither replaces the other. recall@k is the honest metric when the task
+    genuinely needs all the evidence (a multi-hop comparison across two
+    filings). hit@k is the honest metric when any one passage suffices. Both
+    are reported so the reader can tell which question is being answered, and
+    quoting only the flattering one would be exactly the sort of thing this
+    repo exists to avoid.
+    """
     if not relevant:
         return 0.0
     return 1.0 if set(ranked[:k]) & relevant else 0.0
@@ -111,8 +129,12 @@ def summarise(
         out[f"recall@{k}"] = round(recall_at_k(ranked, relevant, k), 4)
         out[f"precision@{k}"] = round(precision_at_k(ranked, relevant, k), 4)
         out[f"ndcg@{k}"] = round(ndcg_at_k(ranked, relevant, k), 4)
+        # Reported alongside recall because for most cases here the two ask
+        # different questions and only one of them is the task. See below.
+        out[f"hit@{k}"] = round(hit_rate(ranked, relevant, k), 4)
     out["mrr"] = round(reciprocal_rank(ranked, relevant), 4)
     out["first_hit_rank"] = _first_hit_rank(ranked, relevant)
+    out["n_relevant"] = float(len(relevant))
     return out
 
 

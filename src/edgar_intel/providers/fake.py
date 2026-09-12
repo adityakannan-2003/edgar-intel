@@ -22,6 +22,9 @@ from typing import Any
 from .base import Completion
 
 _NUM = re.compile(r"-?\$?\d[\d,]*\.?\d*")
+# "[3]" citation markers and "FY2024" labels are structural, not answers.
+_PASSAGE_MARKER = re.compile(r"\[\d+\]")
+_FY_LABEL = re.compile(r"\bFY\d{4}\b")
 _TOKEN = re.compile(r"[a-z0-9]+")
 
 
@@ -103,15 +106,37 @@ class FakeLLM:
         return len(a & b) / len(b) >= 0.5
 
     def _extract_answer(self, prompt: str) -> str:
-        """Pull the first number out of the supplied context, else echo a span.
+        """Pull the most plausible figure out of the supplied context.
 
-        Crude by design: the point is that the answer depends on whether
-        retrieval actually put the right passage in front of it.
+        The naive version took the first number it saw, which on real context
+        is the passage marker: `build_context` prefixes every passage with
+        "[1] AAPL FY2023 Item 7", so every answer came back as "1" and the CI
+        eval gate scored 0% on every numeric case regardless of whether
+        retrieval worked. A gate that always fails measures nothing.
+
+        So: strip the passage markers and the fiscal-year labels, then take the
+        largest remaining figure. Filings state material amounts in thousands
+        or millions, so the biggest number in a retrieved passage is very often
+        the one being asked about -- crude, but it depends on retrieval having
+        put the right passage in front of it, which is exactly the property the
+        gate needs to be sensitive to.
         """
         context = _section(prompt, "CONTEXT") or prompt
-        nums = _NUM.findall(context)
-        if nums:
-            return nums[0].replace("$", "").replace(",", "")
+        context = _PASSAGE_MARKER.sub(" ", context)
+        context = _FY_LABEL.sub(" ", context)
+
+        best: float | None = None
+        best_raw = ""
+        for raw in _NUM.findall(context):
+            cleaned = raw.replace("$", "").replace(",", "")
+            try:
+                value = float(cleaned)
+            except ValueError:
+                continue
+            if best is None or value > best:
+                best, best_raw = value, cleaned
+        if best_raw:
+            return best_raw
         return context.strip()[:200]
 
 

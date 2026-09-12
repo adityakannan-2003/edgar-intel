@@ -158,3 +158,45 @@ class TestCohensKappa:
 
     def test_empty(self):
         assert cohens_kappa([], []) == 0.0
+
+
+class TestHitRateVersusRecall:
+    """Why both are reported.
+
+    On the first real baseline run, 112 of 232 cases carried five evidence
+    chunks each, because a figure repeats across a table, the MD&A prose and a
+    footnote. recall@5 divides by five and reported 0.26 for retrieval that was
+    finding the answer; the system only ever needed one of those passages.
+    """
+
+    def test_recall_penalises_redundant_evidence(self):
+        from edgar_intel.retrieval.metrics import hit_rate, recall_at_k
+
+        # The answer appears in five chunks; retrieval surfaced one of them.
+        relevant = {"a", "b", "c", "d", "e"}
+        ranked = ["a", "x", "y", "z", "w"]
+        assert recall_at_k(ranked, relevant, 5) == 0.2   # looks like failure
+        assert hit_rate(ranked, relevant, 5) == 1.0      # the question was answered
+
+    def test_hit_rate_is_honest_about_a_real_miss(self):
+        from edgar_intel.retrieval.metrics import hit_rate
+
+        assert hit_rate(["x", "y"], {"a"}, 2) == 0.0
+
+    def test_recall_is_right_when_all_evidence_is_needed(self):
+        """Not a replacement: a multi-hop case genuinely needs every passage."""
+        from edgar_intel.retrieval.metrics import hit_rate, recall_at_k
+
+        relevant = {"fy2023", "fy2024"}
+        ranked = ["fy2023", "noise"]
+        assert hit_rate(ranked, relevant, 2) == 1.0      # too generous here
+        assert recall_at_k(ranked, relevant, 2) == 0.5   # correctly partial
+
+    def test_summarise_reports_both_and_the_evidence_count(self):
+        from edgar_intel.retrieval.metrics import summarise
+
+        out = summarise(["a", "x", "y"], {"a", "b", "c"})
+        # summarise() rounds to 4dp, so compare at that resolution.
+        assert out["recall@3"] == pytest.approx(1 / 3, abs=1e-4)
+        assert out["hit@3"] == 1.0
+        assert out["n_relevant"] == 3.0

@@ -290,3 +290,39 @@ class TestNoteFormatting:
         from edgar_intel.evals.goldenset import _fmt
 
         assert _fmt(-2500) == "-2,500"
+
+
+class TestFakeLLMAnswersFromContext:
+    """The fake provider is what makes the CI eval gate meaningful.
+
+    It previously took the first number in the context, which is the passage
+    marker `build_context` prefixes each passage with -- so every numeric answer
+    came back as "1" and the gate scored 0% whether or not retrieval worked. A
+    gate that always fails measures nothing.
+    """
+
+    def test_ignores_the_citation_marker(self):
+        from edgar_intel.providers.fake import FakeLLM
+
+        context = "CONTEXT:\n[1] AAPL FY2023 Item 7\nTotal net sales | 383,285 | 394,328\n"
+        answer = FakeLLM().complete(context + "\nQUESTION:\nWhat were net sales?").text
+        assert answer != "1"
+        assert "383285" in answer.replace(",", "") or "394328" in answer.replace(",", "")
+
+    def test_ignores_fiscal_year_labels(self):
+        from edgar_intel.providers.fake import FakeLLM
+
+        context = "CONTEXT:\n[2] MSFT FY2024 Item 7\nResearch and development | 29,510\n"
+        answer = FakeLLM().complete(context + "\nQUESTION:\nWhat was R&D?").text
+        assert "2024" not in answer
+        assert "29510" in answer.replace(",", "")
+
+    def test_grades_correct_against_the_real_expected_value(self):
+        """End to end: the gate must be able to score a numeric case as passing."""
+        from edgar_intel.evals.judge import grade_numeric
+        from edgar_intel.providers.fake import FakeLLM
+
+        context = "CONTEXT:\n[1] CAT FY2025 Item 7\nCash and cash equivalents | 6,889\n"
+        answer = FakeLLM().complete(context + "\nQUESTION:\nHow much cash?").text
+        passed, _, why = grade_numeric(numeric_case(6_889_000_000), answer)
+        assert passed, why

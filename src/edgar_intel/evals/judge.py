@@ -39,21 +39,78 @@ _SCALES = {
     "k": 1_000,
 }
 
+# Every way a question's own fiscal year leaks into the answer text. These are
+# stripped before parsing, because the year is the *subject* of the question and
+# never the answer to it.
+_YEAR_LABEL = re.compile(
+    r"\b(?:FY\s?|fiscal\s+(?:year\s+)?|calendar\s+year\s+|in\s+|for\s+|ended?\s+"
+    r"(?:\w+\s+\d{1,2},?\s+)?)(19|20)\d{2}\b",
+    re.I,
+)
+_DATE_LIKE = re.compile(r"\b(19|20)\d{2}[-/]\d{1,2}[-/]\d{1,2}\b|\b\d{1,2}[-/]\d{1,2}[-/](19|20)\d{2}\b")
+
+
+def _looks_like_a_bare_year(raw: str) -> bool:
+    """A four-digit integer in year range, carrying no numeric signal at all.
+
+    "$2,025 million" is a figure. "2025" on its own, in a sentence about fiscal
+    2025, is the question repeating itself.
+    """
+    if "$" in raw or "%" in raw or "," in raw or "." in raw:
+        return False
+    if any(w in raw.lower() for w in _SCALES):
+        return False
+    digits = raw.strip().lstrip("-")
+    return digits.isdigit() and len(digits) == 4 and 1900 <= int(digits) <= 2100
+
+
+def _score_candidate(raw: str) -> int:
+    """How much this looks like a reported figure rather than incidental digits."""
+    lowered = raw.lower()
+    if any(w in lowered for w in _SCALES) or "%" in raw:
+        return 3
+    if "$" in raw:
+        return 2
+    if "," in raw or "." in raw:
+        return 1
+    return 0
+
 
 def parse_number(text: str) -> float | None:
-    """Pull the first number out of free text, honouring magnitude words.
+    """Pull the reported figure out of free text, honouring magnitude words.
 
     "$383.29 billion", "383,285" (in millions, as filings print it) and
     "383285000000" all have to reduce to the same value or numeric grading
     produces false negatives that look like model failures.
-    """
-    match = _NUM_IN_TEXT.search(text)
-    if not match:
-        return None
-    raw = match.group(0).strip()
-    is_pct = raw.endswith("%")
-    cleaned = raw.replace("$", "").replace(",", "").replace("%", "").strip()
 
+    Taking the *first* number is the trap, and it cost this project a whole
+    baseline run. "The R&D expense for Caterpillar in FY2025 was $2,148 million"
+    parses to 2025 -- the fiscal year in the question, echoed back in the
+    answer. Fifteen of twenty graded cases failed that way, every one of them
+    reported as a wrong figure rather than as a broken parser.
+
+    So: strip year labels, discard bare four-digit years, and prefer the
+    candidate carrying an actual numeric signal -- a currency symbol, a scale
+    word, a separator -- over incidental digits. Ties go to the first match.
+    """
+    cleaned_text = _DATE_LIKE.sub(" ", _YEAR_LABEL.sub(" ", text))
+
+    best: tuple[int, float] | None = None
+    for match in _NUM_IN_TEXT.finditer(cleaned_text):
+        raw = match.group(0).strip()
+        if _looks_like_a_bare_year(raw):
+            continue
+        value = _to_float(raw)
+        if value is None:
+            continue
+        score = _score_candidate(raw)
+        if best is None or score > best[0]:
+            best = (score, value)
+    return best[1] if best else None
+
+
+def _to_float(raw: str) -> float | None:
+    cleaned = raw.replace("$", "").replace(",", "").replace("%", "").strip()
     scale = 1
     for word, mult in _SCALES.items():
         if cleaned.lower().endswith(word):
@@ -61,10 +118,42 @@ def parse_number(text: str) -> float | None:
             scale = mult
             break
     try:
-        value = float(cleaned) * scale
+        return float(cleaned) * scale
     except ValueError:
         return None
-    return value if not is_pct else value
+
+
+# An answer that declines to answer. The system prompt explicitly asks for this
+# when the context lacks the evidence, so it is the behaviour we designed for --
+# and it must never be scored as if the model invented a figure.
+_ABSTENTION = re.compile(
+    r"\b(?:does not (?:provide|contain|include|specify|mention)"
+    r"|do not (?:provide|contain|include|specify|mention)"
+    r"|is not (?:provided|available|specified|mentioned|included)"
+    r"|no (?:information|data|figure|mention)"
+    r"|not (?:stated|disclosed|available|specified) in the (?:context|passages?|filing)"
+    r"|cannot (?:be )?(?:determine|determined|answer|be answered)"
+    r"|unable to (?:determine|answer))\b",
+    re.I,
+)
+
+
+def is_abstention(answer: str) -> bool:
+    """Did the model decline rather than guess?
+
+    Worth separating from a wrong answer, because the two have opposite fixes
+    and opposite meanings. A wrong figure is a generation failure -- the model
+    had evidence and misread it, or invented one. An abstention is a *retrieval*
+    failure surfacing correctly: the model was handed passages that did not
+    contain the answer and said so, which is exactly what the system prompt
+    asks for.
+
+    Collapsing them into one "incorrect" bucket is how a project reports 25%
+    accuracy and draws the wrong conclusion from it. Of the first twenty graded
+    cases, eight failures were abstentions. The generator was behaving; the
+    retriever was not finding the number.
+    """
+    return bool(_ABSTENTION.search(answer))
 
 
 _DECREASE = re.compile(r"\b(decreas|declin|fell|fall|drop|down|lower|reduc|contract)", re.I)
@@ -104,6 +193,9 @@ def grade_numeric(
 
     if case.expected_value is None:
         return False, 0.0, "case has no expected_value; cannot grade numerically"
+
+    if is_abstention(answer):
+        return False, 0.0, "ABSTAINED: the model said the context lacked the answer"
 
     got = parse_number(answer)
     if got is None:
@@ -320,6 +412,7 @@ def build_result(case: EvalCase, answer: str, retrieval: dict, latency_ms: int,
                  prompt_tokens: int, completion_tokens: int) -> CaseResult:
     s = get_settings()
     passed, score, rationale, verdict = grade(case, answer)
+    abstained = case.kind == "numeric" and is_abstention(answer)
     p_tok = prompt_tokens + (verdict.prompt_tokens if verdict else 0)
     c_tok = completion_tokens + (verdict.completion_tokens if verdict else 0)
     return CaseResult(
@@ -335,4 +428,5 @@ def build_result(case: EvalCase, answer: str, retrieval: dict, latency_ms: int,
         completion_tokens=c_tok,
         cost_usd=s.cost_usd(p_tok, c_tok),
         judge_rationale=rationale,
+        abstained=abstained,
     )

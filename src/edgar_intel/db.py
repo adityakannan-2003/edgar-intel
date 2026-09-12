@@ -99,11 +99,32 @@ def execute_many(sql: str, rows: Sequence[Sequence[Any]]) -> int:
         return cur.rowcount
 
 
-def apply_schema(path: str = "sql/001_schema.sql") -> None:
-    with open(path, encoding="utf-8") as fh:
-        ddl = fh.read()
-    with connection() as conn, conn.cursor() as cur:
-        cur.execute(ddl)
+def apply_schema(path: str = "sql") -> list[str]:
+    """Apply every .sql file in a directory, in filename order.
+
+    Numbered files rather than a migration framework: the whole schema is one
+    person's, the ordering is visible, and each file is safe to re-run. A path
+    to a single file still works so existing callers and tests are unaffected.
+    """
+    import os
+
+    if os.path.isdir(path):
+        paths = sorted(
+            os.path.join(path, name)
+            for name in os.listdir(path)
+            if name.endswith(".sql")
+        )
+    else:
+        paths = [path]
+
+    applied: list[str] = []
+    for p in paths:
+        with open(p, encoding="utf-8") as fh:
+            ddl = fh.read()
+        with connection() as conn, conn.cursor() as cur:
+            cur.execute(ddl)
+        applied.append(p)
+    return applied
 
 
 def jsonb(value: Any) -> str:

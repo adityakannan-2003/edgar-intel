@@ -61,10 +61,10 @@ def _fmt(value: Any) -> str:
 
 # --------------------------------------------------------------------- init
 @app.command("init")
-def init_db(schema: str = "sql/001_schema.sql") -> None:
-    """Apply the database schema."""
-    db.apply_schema(schema)
-    console.print("[green]schema applied[/green]")
+def init_db(schema: str = "sql") -> None:
+    """Apply the database schema (every sql/*.sql file, in order)."""
+    for path in db.apply_schema(schema):
+        console.print(f"[green]applied[/green] {path}")
 
 
 @app.command("status")
@@ -164,6 +164,68 @@ def ingest_doctor(
         raise typer.Exit(1)
 
 
+@ingest_app.command("verify-facts")
+def ingest_verify_facts() -> None:
+    """Check the XBRL ground truth against the filing index.
+
+    Run this after every `ingest run`. The golden set's expected answers come
+    straight from `xbrl_facts`, so a wrong fiscal year there is not a bug that
+    shows up as an error — it shows up as the model being marked wrong, at
+    whatever rate the corruption happens to reach, and every hour spent tuning
+    retrieval afterwards is wasted.
+
+    Two independent checks. First, no fiscal year may hold two different values
+    for the same tag; that is impossible if the fiscal year was derived from the
+    fact's own period and inevitable if it was read from the report's `fy`.
+    Second, each fact's period end must match the period end that the filing
+    index — a completely separate SEC endpoint — records for that fiscal year.
+    Agreement between the two is what makes the derivation rule evidence rather
+    than an assumption.
+    """
+    rows = db.query(
+        """
+        SELECT co.ticker, f.tag, f.fiscal_year, COUNT(DISTINCT f.value) AS values,
+               array_agg(DISTINCT f.value::float8) AS vals
+          FROM xbrl_facts f JOIN companies co ON co.cik = f.cik
+         WHERE f.fiscal_period = 'FY'
+         GROUP BY 1, 2, 3
+        HAVING COUNT(DISTINCT f.value) > 1
+         ORDER BY 1, 2, 3
+        """
+    )
+    if rows:
+        console.print(f"[red]{len(rows)} (ticker, tag, year) groups hold conflicting values[/red]")
+        _table("conflicting facts", [dict(r) for r in rows][:20])
+    else:
+        console.print("[green]no fiscal year holds two values for the same tag[/green]")
+
+    drift = db.query(
+        """
+        SELECT co.ticker, x.fiscal_year, x.tag, x.period_end AS fact_end,
+               fl.period_end AS filing_end
+          FROM xbrl_facts x
+          JOIN companies co ON co.cik = x.cik
+          JOIN filings fl ON fl.cik = x.cik AND fl.fiscal_year = x.fiscal_year
+         WHERE x.fiscal_period = 'FY'
+           AND fl.period_end IS NOT NULL
+           AND ABS(x.period_end - fl.period_end) > 7
+         ORDER BY 1, 2
+         LIMIT 20
+        """
+    )
+    if drift:
+        console.print(
+            f"[red]{len(drift)} facts are dated more than a week from the filing's "
+            "own period end — the fiscal-year rule does not hold for this filer[/red]"
+        )
+        _table("period drift", [dict(r) for r in drift])
+    else:
+        console.print("[green]every fact's period end agrees with the filing index[/green]")
+
+    if rows or drift:
+        raise typer.Exit(1)
+
+
 # -------------------------------------------------------------------- index
 @index_app.command("build")
 def index_build(
@@ -233,22 +295,28 @@ def eval_run(
     git_sha: str = typer.Option(""),
 ) -> None:
     from .evals.goldenset import load
-    from .evals.runner import run_suite
+    from .evals.runner import RunAborted, run_suite
 
     cases = load(path)
     if limit:
         cases = cases[:limit]
 
     def progress(i: int, total: int, result) -> None:
-        mark = "." if result.passed else "F"
+        mark = "." if result.passed else ("~" if result.abstained else "F")
         console.print(mark, end="")
         if i % 50 == 0 or i == total:
             console.print(f" {i}/{total}")
 
-    _, summary = run_suite(
-        cases, label=label, strategy=strategy or None, mode=mode,
-        use_rerank=rerank, sha=git_sha, progress=progress,
-    )
+    try:
+        _, summary = run_suite(
+            cases, label=label, strategy=strategy or None, mode=mode,
+            use_rerank=rerank, sha=git_sha, progress=progress,
+        )
+    except RunAborted as exc:
+        console.print()
+        console.print(f"[red]run aborted[/red] {exc}")
+        raise typer.Exit(2) from exc
+
     console.print()
     console.print_json(json.dumps(summary.as_dict(), indent=2))
 

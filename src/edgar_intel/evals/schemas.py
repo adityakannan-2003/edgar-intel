@@ -50,6 +50,9 @@ class CaseResult:
     cost_usd: float = 0.0
     judge_rationale: str = ""
     error: str = ""
+    # The model declined to answer rather than guessing. Not a pass, but a
+    # different failure from a wrong figure -- see judge.is_abstention.
+    abstained: bool = False
 
     @property
     def answer_hash(self) -> str:
@@ -75,6 +78,12 @@ class RunSummary:
     total_cost_usd: float
     cost_per_1k_usd: float
     config: dict[str, Any]
+    # Where the numeric failures went. Accuracy alone cannot distinguish "the
+    # model is wrong" from "retrieval never found the number", and those have
+    # opposite fixes; these two split the failures so the run says which.
+    # numeric_accuracy + abstention_rate + hallucination_rate == 1.
+    abstention_rate: float = 0.0
+    hallucination_rate: float = 0.0
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)

@@ -109,7 +109,7 @@ def upsert_facts(facts: list[Any]) -> int:
         INSERT INTO xbrl_facts (cik, taxonomy, tag, unit, fiscal_year, fiscal_period,
                                 period_start, period_end, value, accession, form)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (cik, taxonomy, tag, unit, fiscal_year, fiscal_period, period_end)
+        ON CONFLICT (cik, taxonomy, tag, unit, fiscal_year, fiscal_period)
         DO NOTHING
         """,
         rows,
@@ -245,7 +245,7 @@ def load_fixture(path: str) -> IngestStats:
             INSERT INTO xbrl_facts (cik, taxonomy, tag, unit, fiscal_year, fiscal_period,
                                     period_start, period_end, value, accession, form)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (cik, taxonomy, tag, unit, fiscal_year, fiscal_period, period_end)
+            ON CONFLICT (cik, taxonomy, tag, unit, fiscal_year, fiscal_period)
             DO NOTHING
             """,
             fact_rows,

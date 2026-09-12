@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import statistics
 import subprocess
 import time
@@ -42,6 +43,30 @@ QUESTION:
 Answer using only the context above. Return JSON:
 {{"answer": "...", "citations": [1, 2], "confidence": 0.0-1.0}}
 """
+
+
+# Errors that mean the harness never reached the model. A run made entirely of
+# these is not a score of zero -- it is an absence of a score, and recording it
+# as 0.0 puts a number in the metrics table that describes a missing API key.
+_INFRA_ERROR = re.compile(
+    r"401 Unauthorized|403 Forbidden|429 Too Many Requests|invalid[_ ]api[_ ]key"
+    r"|authentication|insufficient_quota|Connection (?:refused|error|reset)"
+    r"|Timeout|Name or service not known|SSL",
+    re.I,
+)
+
+# Above this share of infrastructure errors the run is void. Not zero-tolerance:
+# a handful of rate-limit retries exhausting on a long run is normal and the
+# rest of the cases are still meaningful.
+INFRA_FAILURE_ABORT_RATE = 0.25
+
+
+class RunAborted(RuntimeError):
+    """Raised when a run failed for reasons that say nothing about quality."""
+
+
+def is_infra_error(message: str) -> bool:
+    return bool(message and _INFRA_ERROR.search(message))
 
 
 def git_sha() -> str:
@@ -147,6 +172,7 @@ def run_suite(
     run_id = row["id"]
 
     results: list[CaseResult] = []
+    infra_errors = 0
     for i, case in enumerate(cases, start=1):
         try:
             answer, retrieval, latency, p_tok, c_tok = answer_question(
@@ -154,6 +180,9 @@ def run_suite(
             )
             result = build_result(case, answer, retrieval, latency, p_tok, c_tok)
         except Exception as exc:
+            message = str(exc)[:500]
+            if is_infra_error(message):
+                infra_errors += 1
             result = CaseResult(
                 case_id=case.case_id,
                 kind=case.kind,
@@ -161,10 +190,25 @@ def run_suite(
                 score=0.0,
                 answer="",
                 expected=case.expected,
-                error=str(exc)[:500],
+                error=message,
             )
         results.append(result)
         _persist_result(run_id, result)
+
+        # Fail fast rather than burning 230 more cases against a dead endpoint.
+        # Checked only after a sample large enough to distinguish a bad key from
+        # one unlucky timeout.
+        if i >= 8 and infra_errors / i > INFRA_FAILURE_ABORT_RATE:
+            db.execute(
+                "UPDATE eval_runs SET finished_at = now(), summary = %s WHERE id = %s",
+                (db.jsonb({"aborted": "infrastructure", "infra_errors": infra_errors}), run_id),
+            )
+            raise RunAborted(
+                f"{infra_errors} of the first {i} cases failed before reaching the "
+                f"model ({results[-1].error}). This run is void, not a score of "
+                "zero -- no result was recorded. Fix the endpoint or credentials "
+                "and re-run."
+            )
         if progress:
             progress(i, len(cases), result)
 
@@ -230,6 +274,16 @@ def summarise_run(
     numeric_acc = _mean([1.0 if r.passed else 0.0 for r in numeric])
     narrative_rate = _mean([1.0 if r.passed else 0.0 for r in narrative])
 
+    # Split the numeric failures. A model that abstains when the context lacks
+    # the figure is doing what it was asked; a model that returns the wrong
+    # figure is not. Cases that errored out are excluded from both -- they
+    # measure the harness, not the system.
+    graded = [r for r in numeric if not r.error]
+    abstained = _mean([1.0 if r.abstained else 0.0 for r in graded])
+    hallucinated = _mean(
+        [1.0 if (not r.passed and not r.abstained) else 0.0 for r in graded]
+    )
+
     retrieval_dicts = [
         {k: v for k, v in r.retrieval.items() if isinstance(v, (int, float))}
         for r in results
@@ -261,6 +315,8 @@ def summarise_run(
         total_cost_usd=round(total_cost, 6),
         cost_per_1k_usd=round(total_cost / max(1, len(results)) * 1000, 4),
         config=config,
+        abstention_rate=round(abstained, 4),
+        hallucination_rate=round(hallucinated, 4),
     )
 
 

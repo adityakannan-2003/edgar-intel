@@ -285,6 +285,33 @@ def eval_compare(
     _table("strategy comparison", compare_runs([s.run_key for s in summaries]))
 
 
+@eval_app.command("retrieval")
+def eval_retrieval(
+    path: str = typer.Option("evalset/golden.json"),
+    limit: int = typer.Option(0, help="Use only the first N cases."),
+    out: str = typer.Option("reports/retrieval_sweep.json"),
+) -> None:
+    """Sweep retrieval configurations and attribute where the evidence is lost.
+
+    Calls no LLM, so it is free and fast. Run it before tuning anything: the
+    difference between "the evidence was never retrieved" and "the reranker
+    buried it" decides whether you touch chunking or ranking, and the two fixes
+    have nothing in common.
+    """
+    from .evals.goldenset import load
+    from .evals.retrieval_eval import sweep
+
+    cases = load(path)
+    if limit:
+        cases = cases[:limit]
+
+    payload = sweep(cases, out_path=out, progress=lambda msg: console.log(msg))
+    _table(f"retrieval sweep ({payload['n_cases']} gradeable cases)", payload["rows"])
+    console.print()
+    console.print(f"[bold]{payload['diagnosis']}[/bold]")
+    console.print(f"[dim]full report: {out}[/dim]")
+
+
 @eval_app.command("failures")
 def eval_failures(run_key: str = typer.Argument(...)) -> None:
     """Split failures into retrieval misses versus generation misses."""

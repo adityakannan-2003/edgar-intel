@@ -19,6 +19,7 @@ from .judge import (
     sample_for_labelling,
 )
 from .report import GateResult, compare_runs, failure_breakdown, gate, latest_run
+from .retrieval_eval import SweepConfig, SweepResult, default_sweep, diagnose, sweep
 from .runner import answer_question, compare_strategies, run_suite, summarise_run
 from .schemas import CaseResult, EvalCase, RunSummary
 
@@ -28,10 +29,14 @@ __all__ = [
     "EvalCase",
     "GateResult",
     "RunSummary",
+    "SweepConfig",
+    "SweepResult",
     "answer_question",
     "build",
     "calibration_pairs",
     "compare_runs",
+    "default_sweep",
+    "diagnose",
     "compare_strategies",
     "compute_kappa",
     "failure_breakdown",
@@ -51,4 +56,5 @@ __all__ = [
     "sample_for_labelling",
     "save",
     "summarise_run",
+    "sweep",
 ]

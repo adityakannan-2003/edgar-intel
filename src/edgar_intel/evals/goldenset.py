@@ -31,6 +31,19 @@ from .. import db
 from ..ingest.xbrl import CORE_TAGS, format_value
 from .schemas import EvalCase
 
+
+def _fmt(value: float) -> str:
+    """Render a fact for the human-readable note.
+
+    Adaptive precision because the same code path handles both 383,285,000,000
+    and 1.43: a fixed '%,.0f' turns every per-share figure into "1" and makes
+    the note actively misleading.
+    """
+    if abs(value) >= 1000:
+        return f"{value:,.0f}"
+    return f"{value:,.2f}"
+
+
 QUESTION_TEMPLATES: dict[str, list[str]] = {
     "single": [
         "What was {company}'s {label} for fiscal year {year}?",
@@ -52,6 +65,34 @@ def _companies() -> dict[str, dict[str, Any]]:
     return {r["cik"]: r for r in rows}
 
 
+def _covered_periods() -> set[tuple[str, int]]:
+    """(cik, fiscal_year) pairs that have an ingested filing.
+
+    This is the constraint that makes the generated questions valid.
+    `companyfacts` returns a company's entire XBRL history -- fifteen years for
+    a mature filer -- while ingestion fetches only the most recent few filings.
+    Generating a question for FY2011 when no FY2011 filing was ever ingested
+    produces a case the retrieval pipeline cannot answer no matter how good it
+    is, and a set full of those makes recall look broken when it is not.
+
+    The facts themselves are still worth keeping for every year: the agent's
+    `get_fact` and `compare_fact` tools read XBRL directly and can answer about
+    years whose filing text is absent. It is only the *retrieval* evaluation
+    that needs the filing present.
+    """
+    rows = db.query(
+        "SELECT DISTINCT cik, fiscal_year FROM filings WHERE fiscal_year IS NOT NULL"
+    )
+    return {(r["cik"], int(r["fiscal_year"])) for r in rows}
+
+
+def filter_to_covered(
+    facts: list[dict[str, Any]], covered: set[tuple[str, int]]
+) -> list[dict[str, Any]]:
+    """Keep only facts whose (cik, fiscal_year) has an ingested filing."""
+    return [f for f in facts if (f["cik"], int(f["fiscal_year"])) in covered]
+
+
 def _facts(cik: str | None = None) -> list[dict[str, Any]]:
     sql = """
         SELECT cik, tag, unit, fiscal_year, fiscal_period, value
@@ -69,7 +110,8 @@ def _facts(cik: str | None = None) -> list[dict[str, Any]]:
 def generate_numeric_cases(limit_per_company: int = 20, seed: int = 7) -> list[EvalCase]:
     rng = random.Random(seed)
     companies = _companies()
-    facts = _facts()
+    covered = _covered_periods()
+    facts = filter_to_covered(_facts(), covered)
 
     by_company: dict[str, list[dict[str, Any]]] = {}
     for f in facts:
@@ -109,7 +151,7 @@ def generate_numeric_cases(limit_per_company: int = 20, seed: int = 7) -> list[E
             taken += 1
 
         # ---- year-over-year comparatives
-        cases.extend(_yoy_cases(rows, name, ticker, cik, rng, max_cases=6))
+        cases.extend(_yoy_cases(rows, name, ticker, cik, rng, 6, covered))
 
     return cases
 
@@ -121,6 +163,7 @@ def _yoy_cases(
     cik: str,
     rng: random.Random,
     max_cases: int = 6,
+    covered: set[tuple[str, int]] | None = None,
 ) -> list[EvalCase]:
     by_tag: dict[str, dict[int, float]] = {}
     for r in rows:
@@ -137,6 +180,12 @@ def _yoy_cases(
         years = sorted(by_tag[tag])
         for prev, cur in zip(years, years[1:], strict=False):
             if cur - prev != 1:
+                continue
+            # Both sides must be in the corpus: a comparison against a year
+            # whose filing is absent is half-unanswerable.
+            if covered is not None and (
+                (cik, prev) not in covered or (cik, cur) not in covered
+            ):
                 continue
             a, b = by_tag[tag][prev], by_tag[tag][cur]
             if a == 0:
@@ -159,7 +208,7 @@ def _yoy_cases(
                     fiscal_year=cur,
                     tag=tag,
                     difficulty="comparative",
-                    notes=f"FY{prev}={a:,.0f}, FY{cur}={b:,.0f}",
+                    notes=f"FY{prev}={_fmt(a)}, FY{cur}={_fmt(b)}",
                 )
             )
             break
@@ -274,8 +323,8 @@ def link_evidence(cases: list[EvalCase], strategy: str, k: int = 5) -> list[Eval
                   JOIN filings f ON f.id = c.filing_id
                   JOIN companies co ON co.cik = f.cik
                  WHERE c.strategy = %s
-                   AND (%s IS NULL OR co.ticker = %s)
-                   AND (%s IS NULL OR f.fiscal_year = %s)
+                   AND (%s::text IS NULL OR co.ticker = %s::text)
+                   AND (%s::integer IS NULL OR f.fiscal_year = %s::integer)
                    AND c.body ILIKE %s
                  LIMIT %s
                 """,

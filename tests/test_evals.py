@@ -223,3 +223,70 @@ class TestFakeProviders:
         out = FakeLLM().complete("a fairly long prompt " * 20)
         assert out.prompt_tokens > 0
         assert out.total_tokens == out.prompt_tokens + out.completion_tokens
+
+
+class TestGoldenSetValidity:
+    """The generated set must only ask questions the corpus can answer.
+
+    `companyfacts` returns a company's entire XBRL history; ingestion fetches
+    only the most recent filings. Generating a question for a year whose filing
+    was never ingested produces a case retrieval cannot answer at any quality
+    level -- and on the first real run that was 185 of 208 numeric cases, every
+    one of them scoring zero for reasons that had nothing to do with retrieval.
+    """
+
+    def test_keeps_only_covered_periods(self):
+        from edgar_intel.evals.goldenset import filter_to_covered
+
+        facts = [
+            {"cik": "0001", "fiscal_year": 2024, "tag": "Revenues"},
+            {"cik": "0001", "fiscal_year": 2011, "tag": "Revenues"},
+            {"cik": "0002", "fiscal_year": 2024, "tag": "Revenues"},
+        ]
+        covered = {("0001", 2024)}
+        kept = filter_to_covered(facts, covered)
+        assert len(kept) == 1
+        assert kept[0]["fiscal_year"] == 2024
+        assert kept[0]["cik"] == "0001"
+
+    def test_coverage_is_per_company_not_global(self):
+        """FY2024 being ingested for one company says nothing about another."""
+        from edgar_intel.evals.goldenset import filter_to_covered
+
+        facts = [
+            {"cik": "0001", "fiscal_year": 2024},
+            {"cik": "0002", "fiscal_year": 2024},
+        ]
+        kept = filter_to_covered(facts, {("0001", 2024)})
+        assert [f["cik"] for f in kept] == ["0001"]
+
+    def test_empty_coverage_yields_nothing(self):
+        from edgar_intel.evals.goldenset import filter_to_covered
+
+        assert filter_to_covered([{"cik": "0001", "fiscal_year": 2024}], set()) == []
+
+    def test_fiscal_year_type_mismatch_is_tolerated(self):
+        """Postgres may hand back the year as a str depending on the driver."""
+        from edgar_intel.evals.goldenset import filter_to_covered
+
+        assert len(filter_to_covered([{"cik": "0001", "fiscal_year": "2024"}], {("0001", 2024)})) == 1
+
+
+class TestNoteFormatting:
+    def test_large_values_lose_the_decimals(self):
+        from edgar_intel.evals.goldenset import _fmt
+
+        assert _fmt(383_285_000_000) == "383,285,000,000"
+
+    def test_per_share_values_keep_them(self):
+        """A fixed '%,.0f' rendered EPS of 1.43 as "1", so a note read
+        "FY2009=1, FY2010=1" next to "decreased 55.2%" -- visibly nonsense."""
+        from edgar_intel.evals.goldenset import _fmt
+
+        assert _fmt(1.43) == "1.43"
+        assert _fmt(6.11) == "6.11"
+
+    def test_negative_values(self):
+        from edgar_intel.evals.goldenset import _fmt
+
+        assert _fmt(-2500) == "-2,500"

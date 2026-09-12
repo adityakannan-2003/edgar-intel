@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     embed_dim: int = 384
     embed_batch: int = 64
     rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    # The cross-encoder's own limit. ms-marco-MiniLM-L-6-v2 is 512 tokens for
+    # query AND passage together, so a long chunk is silently truncated and the
+    # model scores a passage it has only partly read.
+    rerank_max_length: int = 512
 
     # ------------------------------------------------------------- retrieval
     default_strategy: str = "section_aware"

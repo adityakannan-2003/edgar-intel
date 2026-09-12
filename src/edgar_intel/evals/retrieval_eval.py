@@ -231,9 +231,24 @@ def diagnose(results: list[SweepResult], metric: str = "hit@5") -> str:
         lx = max(lexical.metrics.get(f"hit@{k}", 0.0) for k in (1, 3, 5, 10, 20))
         lines.append(f"dense-only={d:.3f}, lexical-only={lx:.3f}, hybrid={ceiling_v:.3f}.")
         if ceiling_v <= max(d, lx) + 0.01:
-            weaker = "lexical" if d > lx else "dense"
-            lines.append(
-                f"Fusion is adding nothing over the better single retriever -- the "
-                f"{weaker} side is not contributing. Check it returns results at all."
-            )
+            weaker, stronger = ("lexical", "dense") if d > lx else ("dense", "lexical")
+            gap = abs(d - lx)
+            if min(d, lx) < 0.05:
+                lines.append(
+                    f"Fusion adds nothing because the {weaker} retriever returns "
+                    "essentially nothing. Check it runs at all before tuning weights."
+                )
+            elif gap > 0.08:
+                lines.append(
+                    f"Fusion adds nothing over {stronger} alone. Both retrievers "
+                    f"work, but {weaker} is {gap:.3f} weaker and RRF weights them "
+                    "equally, so fusing dilutes the stronger list. Weight them by "
+                    "measured strength, or drop the weaker one and say why."
+                )
+            else:
+                lines.append(
+                    f"Fusion adds nothing over {stronger} alone even though both "
+                    "retrievers are comparable -- they are probably returning the "
+                    "same documents. Check the overlap before keeping both."
+                )
     return " ".join(lines)

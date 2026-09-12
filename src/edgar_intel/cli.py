@@ -312,6 +312,95 @@ def eval_retrieval(
     console.print(f"[dim]full report: {out}[/dim]")
 
 
+@eval_app.command("rerank-check")
+def eval_rerank_check(
+    path: str = typer.Option("evalset/golden.json"),
+    sample: int = typer.Option(30, help="Queries to sample."),
+) -> None:
+    """Measure how much of each passage the cross-encoder actually reads.
+
+    Run this when the sweep shows reranking making results worse rather than
+    better. A cross-encoder that ranks correct passages down is usually not a
+    bad model -- it is a model shown only the first part of the passage, with
+    the answer past its token limit.
+    """
+    import statistics
+
+    from .evals.goldenset import load
+    from .providers import get_reranker
+    from .retrieval.search import search
+
+    reranker = get_reranker()
+    if not hasattr(reranker, "truncation_report"):
+        console.print("[yellow]Active reranker has no tokenizer to inspect "
+                      "(EDGAR_EMBED_PROVIDER=fake?). Set it to 'local'.[/yellow]")
+        raise typer.Exit(1)
+
+    cases = [c for c in load(path) if c.relevant_chunk_ids][:sample]
+    rows, seen_pcts, trunc_pcts = [], [], []
+
+    with console.status("scoring sampled queries..."):
+        for case in cases:
+            result = search(
+                case.question, use_rerank=False, top_n=50,
+                ticker=case.ticker, fiscal_year=case.fiscal_year,
+            )
+            if not result.hits:
+                continue
+            rep = reranker.truncation_report(case.question, [h.body for h in result.hits])
+            rows.append(rep)
+            seen_pcts.append(rep["median_seen_pct"])
+            trunc_pcts.append(rep["truncated_pct"])
+
+    if not rows:
+        console.print("[red]no passages retrieved; cannot assess[/red]")
+        raise typer.Exit(1)
+
+    median_seen = statistics.median(seen_pcts)
+    median_trunc = statistics.median(trunc_pcts)
+    budget = statistics.median(r["passage_budget_tokens"] for r in rows)
+    med_tokens = statistics.median(r["median_passage_tokens"] for r in rows)
+    max_tokens = max(r["max_passage_tokens"] for r in rows)
+
+    _table("cross-encoder input budget", [{
+        "queries sampled": len(rows),
+        "passage budget (tokens)": int(budget),
+        "median passage (tokens)": int(med_tokens),
+        "longest passage (tokens)": int(max_tokens),
+        "passages truncated %": round(median_trunc, 1),
+        "median passage seen %": round(median_seen, 1),
+    }])
+
+    console.print()
+    if median_trunc >= 50:
+        console.print(
+            f"[bold red]CONFIRMED: {median_trunc:.0f}% of passages are truncated; "
+            f"the model reads about {median_seen:.0f}% of a typical chunk.[/bold red]\n"
+            "It is scoring passages it has only partly read, so a figure in the tail "
+            "of a chunk is invisible and the correct passage gets ranked down.\n"
+            "Fix by making chunks fit the scorer, not by changing the model: lower "
+            "--target-tokens on `index build` (the 4-chars-per-token estimate badly "
+            "overshoots on financial text), or rerank a centred window rather than "
+            "the whole chunk."
+        )
+    elif median_trunc >= 15:
+        console.print(
+            f"[bold yellow]PARTIAL: {median_trunc:.0f}% of passages are truncated.[/bold yellow]\n"
+            "Enough to hurt the long chunks but not enough to explain a large drop "
+            "on its own. Worth fixing, but keep looking."
+        )
+    else:
+        console.print(
+            f"[bold]NOT the cause: only {median_trunc:.0f}% of passages are "
+            f"truncated.[/bold]\n"
+            "The cross-encoder is reading essentially the whole passage, so poor "
+            "reranking is a domain-fit problem -- ms-marco is trained on web "
+            "prose, and filing chunks are pipe-separated numeric tables. Drop it "
+            "and report the measurement, or try a reranker trained on tabular or "
+            "financial text."
+        )
+
+
 @eval_app.command("failures")
 def eval_failures(run_key: str = typer.Argument(...)) -> None:
     """Split failures into retrieval misses versus generation misses."""

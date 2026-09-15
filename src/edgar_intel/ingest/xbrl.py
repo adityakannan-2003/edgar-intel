@@ -28,6 +28,7 @@ CORE_TAGS: dict[str, str] = {
     "NetIncomeLoss": "net income",
     "OperatingIncomeLoss": "operating income",
     "ResearchAndDevelopmentExpense": "research and development expense",
+    "ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost": "research and development expense",
     "Assets": "total assets",
     "Liabilities": "total liabilities",
     "StockholdersEquity": "total stockholders' equity",
@@ -240,6 +241,30 @@ def pick_revenue(facts: list[Fact], fiscal_year: int) -> Fact | None:
         for f in facts:
             if f.tag == tag and f.fiscal_year == fiscal_year and f.fiscal_period == "FY":
                 return f
+    return None
+
+def pick_research_and_development(
+    facts: list[Fact], fiscal_year: int
+) -> Fact | None:
+    """R&D may be reported under different XBRL tags depending on the filer.
+
+    Prefer the broader operating R&D line that excludes acquired in-process
+    R&D when available, then fall back to the standard R&D tag.
+    """
+    preferred = [
+        "ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost",
+        "ResearchAndDevelopmentExpense",
+    ]
+
+    for tag in preferred:
+        for f in facts:
+            if (
+                f.tag == tag
+                and f.fiscal_year == fiscal_year
+                and f.fiscal_period == "FY"
+            ):
+                return f
+
     return None
 
 

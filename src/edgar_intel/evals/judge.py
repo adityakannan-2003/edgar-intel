@@ -108,6 +108,26 @@ def parse_number(text: str) -> float | None:
             best = (score, value)
     return best[1] if best else None
 
+def parse_percent(text: str) -> float | None:
+    """Extract only a percentage-bearing value from free text.
+
+    Comparative answers often contain both the underlying dollar figures and
+    the calculated percentage change. Generic numeric parsing prefers the
+    currency figures because they carry stronger numeric signals, so percent
+    cases need their own extraction path.
+    """
+    cleaned_text = _DATE_LIKE.sub(" ", _YEAR_LABEL.sub(" ", text))
+
+    for match in _NUM_IN_TEXT.finditer(cleaned_text):
+        raw = match.group(0).strip()
+        if "%" not in raw:
+            continue
+        value = _to_float(raw)
+        if value is not None:
+            return value
+
+    return None
+
 
 def _to_float(raw: str) -> float | None:
     cleaned = raw.replace("$", "").replace(",", "").replace("%", "").strip()
@@ -176,6 +196,22 @@ def _apply_direction(magnitude: float, answer: str, expected: float) -> float:
         return abs(magnitude)
     return magnitude
 
+def parse_percent(text: str) -> float | None:
+    """Extract only a percentage-bearing value from free text."""
+    cleaned_text = _DATE_LIKE.sub(" ", _YEAR_LABEL.sub(" ", text))
+
+    for match in _NUM_IN_TEXT.finditer(cleaned_text):
+        raw = match.group(0).strip()
+
+        if "%" not in raw:
+            continue
+
+        value = _to_float(raw)
+
+        if value is not None:
+            return value
+
+    return None
 
 def grade_numeric(
     case: EvalCase, answer: str, tolerance: float | None = None
@@ -212,13 +248,23 @@ def grade_numeric(
     # correct answer wrong -- and worse, would mark "increased 2.8%" correct
     # when it is the opposite of the truth.
     if case.unit == "percent":
+        got = parse_percent(answer)
+
+        if got is None:
+            return False, 0.0, "no percentage found in the answer"
+
         signed = _apply_direction(got, answer, expected)
         ok = abs(signed - expected) <= 0.5
+
         return (
             ok,
             1.0 if ok else 0.0,
             f"expected {expected:+.2f}%, read {signed:+.2f}% from the answer",
         )
+    got = parse_number(answer)
+
+    if got is None:
+        return False, 0.0, "no number found in the answer"
 
     for scale, note in ((1, "exact"), (1_000, "thousands"), (1_000_000, "millions")):
         candidate = got * scale

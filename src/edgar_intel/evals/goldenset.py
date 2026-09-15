@@ -106,6 +106,55 @@ def _facts(cik: str | None = None) -> list[dict[str, Any]]:
     sql += " ORDER BY cik, tag, fiscal_year"
     return db.query(sql, params)
 
+PREFERRED_TAG_FAMILIES: dict[str, list[str]] = {
+    "revenue": [
+        "RevenueFromContractWithCustomerExcludingAssessedTax",
+        "Revenues",
+    ],
+    "research_and_development": [
+        "ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost",
+        "ResearchAndDevelopmentExpense",
+    ],
+}
+
+
+def _canonicalize_fact_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Choose one preferred XBRL tag for equivalent financial concepts.
+
+    Some filers report the same economic concept under different XBRL tags.
+    Without canonicalization, the golden set can generate duplicate questions
+    for the same company/year with conflicting expected values.
+    """
+    family_by_tag = {
+        tag: family
+        for family, tags in PREFERRED_TAG_FAMILIES.items()
+        for tag in tags
+    }
+
+    preference = {
+        tag: rank
+        for tags in PREFERRED_TAG_FAMILIES.values()
+        for rank, tag in enumerate(tags)
+    }
+
+    selected: dict[tuple[str, int], dict[str, Any]] = {}
+    untouched: list[dict[str, Any]] = []
+
+    for row in rows:
+        tag = row["tag"]
+        family = family_by_tag.get(tag)
+
+        if family is None:
+            untouched.append(row)
+            continue
+
+        key = (family, int(row["fiscal_year"]))
+        current = selected.get(key)
+
+        if current is None or preference[tag] < preference[current["tag"]]:
+            selected[key] = row
+
+    return untouched + list(selected.values())
 
 def generate_numeric_cases(limit_per_company: int = 20, seed: int = 7) -> list[EvalCase]:
     rng = random.Random(seed)
@@ -119,6 +168,7 @@ def generate_numeric_cases(limit_per_company: int = 20, seed: int = 7) -> list[E
 
     cases: list[EvalCase] = []
     for cik, rows in by_company.items():
+        rows = _canonicalize_fact_rows(rows)
         company = companies.get(cik, {})
         name = company.get("name") or cik
         ticker = company.get("ticker")

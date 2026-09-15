@@ -100,6 +100,20 @@ class TestNumericGrading:
         assert not passed
         assert "expected_value" in why
 
+    def test_percent_grading_ignores_underlying_currency_figures(self):
+        """Regression: dollar values must not win over the YoY percentage."""
+    case = numeric_case(-3.36, unit="percent")
+    answer = (
+        "Revenue fell from $67,060 million to $64,809 million, "
+        "a decline of 3.4%."
+    )
+
+    passed, score, why = grade_numeric(case, answer)
+
+    assert passed
+    assert score == 1.0
+    assert "read -3.40%" in why
+
 
 class TestKappaGating:
     def test_too_few_labels_returns_none(self):

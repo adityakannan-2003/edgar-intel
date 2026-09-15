@@ -19,6 +19,8 @@ from edgar_intel.ingest.xbrl import (
     covers_full_year,
     extract_facts,
     fiscal_year_of,
+    pick_research_and_development,
+    Fact
 )
 
 
@@ -125,6 +127,41 @@ class TestComparativesAreFiledUnderTheirOwnYear:
         assert len(facts) == 1
         assert facts[0].value == 67_060_000_000
 
+def test_preferred_r_and_d_tag_wins():
+    facts = [
+        Fact(
+            cik="0000200406",
+            taxonomy="us-gaap",
+            tag="ResearchAndDevelopmentExpense",
+            unit="USD",
+            fiscal_year=2025,
+            fiscal_period="FY",
+            period_start=None,
+            period_end=None,
+            value=109_000_000,
+            accession=None,
+            form="10-K",
+            ),
+        Fact(
+            cik="0000200406",
+            taxonomy="us-gaap",
+            tag="ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost",
+            unit="USD",
+            fiscal_year=2025,
+            fiscal_period="FY",
+            period_start=None,
+            period_end=None,
+            value=17_000_000_000,
+            accession=None,
+            form="10-K",
+        ),
+    ]
+
+    picked = pick_research_and_development(facts, 2025)
+
+    assert picked is not None
+    assert picked.tag == "ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost"
+    assert picked.value == 17_000_000_000
 
 class TestNonAnnualFactsAreExcluded:
     def test_a_quarterly_duration_is_dropped(self):

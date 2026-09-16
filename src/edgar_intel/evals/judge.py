@@ -22,6 +22,7 @@ from ..config import get_settings
 from ..providers import get_llm
 from ..providers.openai_compat import parse_json_strict
 from ..retrieval.metrics import cohens_kappa
+from .judge_contracts import get_contract
 from .schemas import JUDGE_SCHEMA, CaseResult, EvalCase
 
 # Below this, the judge is not tracking human judgement well enough for its
@@ -278,26 +279,11 @@ def grade_numeric(
     return False, 0.0, f"expected {expected:,.2f}, got {got:,.2f} (no scale matched)"
 
 
-JUDGE_SYSTEM = (
-    "You grade answers about SEC filings. You are strict about facts and "
-    "indifferent to style. An answer is correct only if every factual claim in "
-    "it is consistent with the reference and it actually addresses the "
-    "question. Extra correct detail is fine. A hedge that avoids answering is "
-    "not correct. Reply with JSON only."
-)
-
-JUDGE_TEMPLATE = """QUESTION:
-{question}
-
-REFERENCE:
-{reference}
-
-CANDIDATE:
-{candidate}
-
-Decide whether the candidate answer is factually consistent with the reference
-and answers the question. Return {{"verdict": true|false, "rationale": "..."}}.
-"""
+# The contracts live in judge_contracts.py so the rubric is a named, versioned
+# variable rather than an anonymous constant. These aliases keep existing
+# imports working and always point at the shipped contract.
+JUDGE_SYSTEM = get_contract().system
+JUDGE_TEMPLATE = get_contract().template
 
 
 @dataclass(slots=True)
@@ -309,16 +295,33 @@ class JudgeVerdict:
     latency_ms: int = 0
 
 
-def judge_narrative(case: EvalCase, answer: str) -> JudgeVerdict:
+def judge_narrative(
+    case: EvalCase,
+    answer: str,
+    contract: str | None = None,
+    source_context: str = "",
+    model: str | None = None,
+) -> JudgeVerdict:
+    """Grade one narrative answer.
+
+    `contract` and `model` are separate parameters on purpose. Changing both at
+    once is how a prompt effect and a model effect get attributed to each other:
+    if v1+mini fails and v2+gpt-4o passes, the experiment has proved nothing.
+    Hold one fixed per comparison.
+    """
     s = get_settings()
     llm = get_llm()
-    prompt = JUDGE_TEMPLATE.format(
-        question=case.question, reference=case.expected, candidate=answer
+    spec = get_contract(contract)
+    prompt = spec.render(
+        question=case.question,
+        reference=case.expected,
+        candidate=answer,
+        source_context=source_context,
     )
     completion = llm.complete(
         prompt,
-        system=JUDGE_SYSTEM,
-        model=s.judge_model,
+        system=spec.system,
+        model=model or s.judge_model,
         temperature=0.0,
         max_tokens=300,
         json_schema=JUDGE_SCHEMA,

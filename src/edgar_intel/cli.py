@@ -539,6 +539,82 @@ def eval_autopsy(
     console.print(f"[dim]full report: {out}[/dim]")
 
 
+@eval_app.command("judge-ab")
+def eval_judge_ab(
+    pairs_path: str = typer.Option("", help="Frozen pairs JSON. Empty = build from --from-autopsy."),
+    from_autopsy: str = typer.Option("", help="Autopsy report to freeze a pair from."),
+    contracts: str = typer.Option("v1,v2", help="Judge contracts to compare."),
+    models: str = typer.Option("", help="Judge models. Empty = the configured one only."),
+    repeats: int = typer.Option(5),
+    controls: bool = typer.Option(True, help="Add negative controls derived from each good answer."),
+    save_pairs_to: str = typer.Option("evalset/judge_pairs.json"),
+    out: str = typer.Option("reports/judge_ab.json"),
+) -> None:
+    """Grade frozen pairs across judge contracts and models, one variable per comparison.
+
+    Retrieval and generation are held out entirely: every replay grades identical
+    bytes, so the only things that move are the rubric and the model.
+
+    Changing both at once proves nothing -- if v1+mini fails and v2+gpt-4o
+    passes, the experiment has not said which caused it. Only cells differing in
+    exactly one dimension are reported as conclusions.
+
+    Negative controls are not optional. Replaying one known-good answer until it
+    passes measures whether a rubric is permissive, not whether it is correct, so
+    each good answer is mutated into a contradiction, an omission, a hedge and a
+    fabrication. A contract has to pass the good answer AND fail those.
+    """
+    from .evals import judge_lab as lab
+
+    if pairs_path:
+        pairs = lab.load_pairs(pairs_path)
+    elif from_autopsy:
+        pairs = [lab.freeze_from_autopsy(from_autopsy)]
+    else:
+        console.print("[red]pass --pairs-path or --from-autopsy[/red]")
+        raise typer.Exit(1)
+
+    if controls:
+        expanded: list = []
+        for pair in pairs:
+            expanded.extend(lab.build_controls(pair) if pair.label == "good" else [pair])
+        pairs = expanded
+
+    lab.save_pairs(pairs, save_pairs_to)
+    console.print(f"[dim]{len(pairs)} frozen pairs -> {save_pairs_to}[/dim]")
+    for p in pairs:
+        console.print(
+            f"  {p.pair_id[:52]:52} expect={'PASS' if p.expected_verdict else 'FAIL'}  {p.label}"
+        )
+
+    contract_list = tuple(c.strip() for c in contracts.split(",") if c.strip())
+    model_list = tuple(m.strip() for m in models.split(",") if m.strip())
+
+    def progress(run) -> None:
+        if run.error:
+            console.print(f"  [red]{run.contract}/{run.model} {run.pair_id[:40]}: {run.error[:70]}[/red]")
+
+    with console.status("judging..."):
+        runs = lab.run_grid(
+            pairs,
+            contracts=contract_list,
+            models=model_list,
+            repeats=repeats,
+            progress=progress,
+        )
+
+    cells = lab.summarise(runs)
+    payload = lab.save_runs(runs, cells, out)
+    console.print()
+    _table("judge cells", [c.row() for c in cells])
+    if payload["single_variable_comparisons"]:
+        _table("single-variable comparisons", payload["single_variable_comparisons"])
+    else:
+        console.print("[yellow]no single-variable comparison available in this grid[/yellow]")
+    console.print(f"\n[bold]{payload['verdict']}[/bold]")
+    console.print(f"[dim]full report: {out}[/dim]")
+
+
 @eval_app.command("retrieval")
 def eval_retrieval(
     path: str = typer.Option("evalset/golden.json"),

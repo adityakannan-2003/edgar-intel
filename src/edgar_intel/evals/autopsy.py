@@ -361,6 +361,25 @@ def autopsy(
 
     if out_path:
         save(report, out_path)
+        # A frozen pair drops out of every autopsy, so judge experiments never
+        # have to re-run retrieval or generation to get one.
+        from .judge_lab import FrozenPair, save_pairs
+
+        save_pairs(
+            [
+                FrozenPair(
+                    pair_id=report.case_id,
+                    question=report.question,
+                    reference=report.reference,
+                    answer=report.answer,
+                    source_context=report.context_text,
+                    expected_verdict=True,
+                    label="good",
+                    provenance=f"{out_path} @ {report.git_sha}",
+                )
+            ],
+            out_path.replace(".json", "_pair.json"),
+        )
     return report
 
 

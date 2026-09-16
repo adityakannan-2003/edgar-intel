@@ -106,13 +106,37 @@ class Hit:
 
 @dataclass(slots=True)
 class RetrievalResult:
+    """What retrieval produced, before and after `top_n` truncation.
+
+    `candidates` carries the full ordering the ranker produced; `hits` is that
+    list cut to `top_n`. Both come from **one** `search()` call, which is the
+    point: a probe that ran retrieval twice -- once for diagnostics, once for
+    generation -- silently measured two different configurations. The item boost
+    reached the diagnostic call and not the generating one, so the reported
+    pre-truncation ranks improved to [3, 4, 11, 13, 15] while the answer was
+    still being produced from the unboosted [9, 11, 13, 21, 29]. Every arm of
+    that experiment was void.
+
+    One call, two views. It is not possible to configure them differently.
+    """
+
     hits: list[Hit]
     latency_ms: int
     stage_latency_ms: dict[str, int] = field(default_factory=dict)
+    candidates: list[Hit] = field(default_factory=list)
 
     @property
     def ids(self) -> list[str]:
         return [h.chunk_id for h in self.hits]
+
+    @property
+    def candidate_ids(self) -> list[str]:
+        return [h.chunk_id for h in self.candidates]
+
+    def ranks_of(self, chunk_ids: set[str], *, pre_truncation: bool = False) -> list[int]:
+        """1-indexed positions of the given chunks, in either view."""
+        source = self.candidates if pre_truncation else self.hits
+        return [i for i, h in enumerate(source, start=1) if h.chunk_id in chunk_ids]
 
 
 _BASE_SELECT = """
@@ -347,15 +371,19 @@ def item_ranking(hits: list[Hit], items: list[str]) -> list[Hit]:
     return [h for _, _, h in scoped]
 
 
-def rerank(query: str, hits: list[Hit], top_n: int | None = None) -> list[Hit]:
-    """Cross-encoder rerank of the fused candidates.
+def rerank(query: str, hits: list[Hit]) -> list[Hit]:
+    """Cross-encoder rerank of the fused candidates. Returns the FULL ordering.
 
     This is the expensive stage -- one forward pass per (query, passage) pair --
     which is precisely why it runs over ~50 candidates and not the corpus. Time
     it separately from retrieval so the latency budget stays legible.
+
+    Truncation used to happen here, which put two cuts in the pipeline: this one
+    and the `top_n` slice in `search()`. Two places that shorten a list are two
+    places to look when something vanishes. Ranking happens here, cutting
+    happens in `search()`, and the uncut ordering survives on
+    `RetrievalResult.candidates` so a probe can see what was thrown away.
     """
-    s = get_settings()
-    top_n = top_n or s.rerank_top_n
     if not hits:
         return []
     scores = get_reranker().score(query, [h.body for h in hits])
@@ -365,7 +393,7 @@ def rerank(query: str, hits: list[Hit], top_n: int | None = None) -> list[Hit]:
     ordered = sorted(hits, key=lambda h: h.score, reverse=True)
     for rank, hit in enumerate(ordered, start=1):
         hit.ranks["reranked"] = rank
-    return ordered[:top_n]
+    return ordered
 
 
 def search(
@@ -415,34 +443,154 @@ def search(
 
     if use_rerank and candidates:
         t1 = time.perf_counter()
-        candidates = rerank(query, candidates, top_n)
+        candidates = rerank(query, candidates)
         stage["rerank_ms"] = int((time.perf_counter() - t1) * 1000)
-    else:
-        candidates = candidates[: (top_n or s.rerank_top_n)]
 
+    # The single truncation point in the pipeline.
+    cut = top_n or s.rerank_top_n
     return RetrievalResult(
-        hits=candidates,
+        hits=candidates[:cut],
         latency_ms=int((time.perf_counter() - started) * 1000),
         stage_latency_ms=stage,
+        candidates=candidates,
     )
 
 
-def build_context(hits: list[Hit], max_chars: int = 12000) -> str:
-    """Assemble retrieved passages into a labelled context block.
+DEFAULT_CONTEXT_MAX_CHARS = 12000
+
+
+@dataclass(slots=True)
+class ContextReport:
+    """What actually reached the prompt, as opposed to what retrieval selected.
+
+    `result.hits` is not the context the model saw. Between the two sits a
+    character cap that can drop passages silently, and conflating them is how a
+    `top_n` experiment produces four arms with identical prompt-token counts and
+    nobody notices for a day.
+    """
+
+    text: str
+    selected_ids: list[str] = field(default_factory=list)
+    included_ids: list[str] = field(default_factory=list)
+    dropped_ids: list[str] = field(default_factory=list)
+    chars_before_cap: int = 0
+    chars_after_cap: int = 0
+    max_chars: int = DEFAULT_CONTEXT_MAX_CHARS
+    first_excluded_id: str | None = None
+    first_excluded_rank: int | None = None
+    first_excluded_chars: int = 0
+    packing: str = "greedy-stop"
+    would_fit_with_skip: int = 0
+
+    @property
+    def n_selected(self) -> int:
+        return len(self.selected_ids)
+
+    @property
+    def n_included(self) -> int:
+        return len(self.included_ids)
+
+    @property
+    def cap_binding(self) -> bool:
+        return bool(self.dropped_ids)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "n_selected": self.n_selected,
+            "n_included": self.n_included,
+            "included_ids": self.included_ids,
+            "dropped_ids": self.dropped_ids,
+            "chars_before_cap": self.chars_before_cap,
+            "chars_after_cap": self.chars_after_cap,
+            "max_chars": self.max_chars,
+            "cap_binding": self.cap_binding,
+            "first_excluded_id": self.first_excluded_id,
+            "first_excluded_rank": self.first_excluded_rank,
+            "first_excluded_chars": self.first_excluded_chars,
+            "packing": self.packing,
+            "would_fit_with_skip": self.would_fit_with_skip,
+        }
+
+
+def build_context_report(
+    hits: list[Hit],
+    max_chars: int = DEFAULT_CONTEXT_MAX_CHARS,
+    packing: str = "greedy-stop",
+) -> ContextReport:
+    """Assemble the context block and account for every passage that did not make it.
 
     Every passage is tagged with its source so the generated answer can cite,
     and so a wrong answer can be traced to the passage that caused it. An
-    untraceable answer is an undebuggable one.
+    untraceable answer is an undebuggable one -- and a passage that vanished
+    without being counted is worse still.
+
+    Two packing policies, because the shipped one has a sharp edge:
+
+    `greedy-stop` (the shipped behaviour, kept as the default) stops at the
+    first passage that does not fit. One long passage at rank 4 therefore
+    discards ranks 5 through `top_n` **even when they would have fit**. That is
+    not a cap, it is a cliff, and it is the reason prompt tokens sat flat near
+    3,000 whether `top_n` was 8 or 20: the loop was ending in the same place
+    every time, so raising `top_n` bought nothing at all.
+
+    `skip-oversized` keeps going and takes later passages that still fit.
+
+    The default is unchanged on purpose. Changing what the model reads while
+    also measuring `top_n` would confound the experiment; `would_fit_with_skip`
+    reports what the other policy would have admitted, so the choice can be made
+    from a number rather than from taste.
     """
-    parts: list[str] = []
-    used = 0
+    blocks: list[tuple[Hit, str]] = []
     for i, hit in enumerate(hits, start=1):
         tag = f"[{i}] {hit.ticker or hit.cik} FY{hit.fiscal_year or '?'}"
         if hit.item:
             tag += f" Item {hit.item}"
-        block = f"{tag}\n{hit.body}"
-        if used + len(block) > max_chars:
-            break
+        blocks.append((hit, f"{tag}\n{hit.body}"))
+
+    report = ContextReport(
+        text="",
+        selected_ids=[h.chunk_id for h in hits],
+        chars_before_cap=sum(len(b) for _, b in blocks),
+        max_chars=max_chars,
+        packing=packing,
+    )
+
+    parts: list[str] = []
+    used = 0
+    stopped = False
+    for rank, (hit, block) in enumerate(blocks, start=1):
+        fits = used + len(block) <= max_chars
+        if stopped or not fits:
+            if report.first_excluded_id is None:
+                report.first_excluded_id = hit.chunk_id
+                report.first_excluded_rank = rank
+                report.first_excluded_chars = len(block)
+            if packing == "greedy-stop":
+                stopped = True
+            report.dropped_ids.append(hit.chunk_id)
+            continue
         parts.append(block)
+        report.included_ids.append(hit.chunk_id)
         used += len(block)
-    return "\n\n".join(parts)
+
+    report.text = "\n\n".join(parts)
+    report.chars_after_cap = used
+
+    # What a skip-oversized policy would have admitted, measured without
+    # changing what this call returns.
+    skip_used, skip_n = 0, 0
+    for _, block in blocks:
+        if skip_used + len(block) <= max_chars:
+            skip_used += len(block)
+            skip_n += 1
+    report.would_fit_with_skip = skip_n
+    return report
+
+
+def build_context(
+    hits: list[Hit],
+    max_chars: int = DEFAULT_CONTEXT_MAX_CHARS,
+    packing: str = "greedy-stop",
+) -> str:
+    """The context string alone, for callers that do not need the accounting."""
+    return build_context_report(hits, max_chars, packing).text

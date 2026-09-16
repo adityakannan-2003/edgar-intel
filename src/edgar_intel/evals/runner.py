@@ -22,7 +22,7 @@ from ..config import get_settings
 from ..providers import get_llm
 from ..providers.openai_compat import parse_json_strict
 from ..retrieval import metrics as m
-from ..retrieval.search import build_context, search
+from ..retrieval.search import DEFAULT_CONTEXT_MAX_CHARS, build_context_report, search
 from .judge import build_result, calibration_pairs, compute_kappa, kappa_verdict
 from .schemas import ANSWER_SCHEMA, CaseResult, EvalCase, RunSummary
 
@@ -87,16 +87,24 @@ def answer_question(
     use_rerank: bool = True,
     k: int | None = None,
     top_n: int | None = None,
-) -> tuple[str, dict[str, Any], int, int, int, Any]:
+    item_boost: float | None = None,
+    context_max_chars: int | None = None,
+    context_packing: str = "greedy-stop",
+) -> tuple[str, dict[str, Any], int, int, int, Any, Any]:
     """Retrieve, then answer.
 
-    Returns (answer, retrieval_metrics, latency, p_tok, c_tok, retrieval_result).
+    Returns (answer, retrieval_metrics, latency, p_tok, c_tok, retrieval_result,
+    context_report).
 
-    The final element is the raw `RetrievalResult`. It exists so a debugging
-    harness can inspect exactly which passages reached the model **through this
-    same function** rather than re-implementing the pipeline beside it. A probe
-    that duplicates the production path can drift from it, and an experiment
-    measuring a path nobody ships is worse than no experiment.
+    The last two elements are the raw `RetrievalResult` and the `ContextReport`.
+    They exist so a debugging harness can see what reached the model **through
+    this same function** rather than re-implementing the pipeline beside it.
+
+    Every retrieval knob a harness might vary is a parameter here, and that is
+    the whole point. When `item_boost` was missing from this signature, the
+    probe passed it to its own separate diagnostic call, this call silently
+    used the process default of 0.0, and an entire experiment compared boosted
+    ranks against unboosted answers.
     """
     started = time.perf_counter()
 
@@ -109,6 +117,7 @@ def answer_question(
         top_n=top_n,
         ticker=case.ticker,
         fiscal_year=case.fiscal_year,
+        item_boost=item_boost,
     )
 
     retrieval: dict[str, Any] = {}
@@ -118,9 +127,13 @@ def answer_question(
     retrieval["rerank_ms"] = result.stage_latency_ms.get("rerank_ms", 0)
     retrieval["n_candidates"] = len(result.hits)
 
-    context = build_context(result.hits)
+    context_report = build_context_report(
+        result.hits,
+        max_chars=context_max_chars or DEFAULT_CONTEXT_MAX_CHARS,
+        packing=context_packing,
+    )
     completion = get_llm().complete(
-        ANSWER_TEMPLATE.format(context=context, question=case.question),
+        ANSWER_TEMPLATE.format(context=context_report.text, question=case.question),
         system=ANSWER_SYSTEM,
         temperature=0.0,
         max_tokens=600,
@@ -144,6 +157,7 @@ def answer_question(
         completion.prompt_tokens,
         completion.completion_tokens,
         result,
+        context_report,
     )
 
 
@@ -175,6 +189,11 @@ def run_suite(
         "llm_provider": s.llm_provider,
         "rrf_k": s.rrf_k,
         "numeric_tolerance": s.eval_numeric_tolerance,
+        # Recorded even at their defaults. A knob absent from the config is a
+        # knob nobody can rule out when two runs disagree.
+        "item_boost_weight": s.item_boost_weight,
+        "context_max_chars": DEFAULT_CONTEXT_MAX_CHARS,
+        "context_packing": "greedy-stop",
     }
 
     row = db.query_one(
@@ -191,7 +210,7 @@ def run_suite(
     infra_errors = 0
     for i, case in enumerate(cases, start=1):
         try:
-            answer, retrieval, latency, p_tok, c_tok, _hits = answer_question(
+            answer, retrieval, latency, p_tok, c_tok, _hits, _ctx = answer_question(
                 case, strategy, mode, use_rerank, k, top_n
             )
             result = build_result(case, answer, retrieval, latency, p_tok, c_tok)

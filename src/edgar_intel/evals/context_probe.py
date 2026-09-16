@@ -43,7 +43,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from ..config import get_settings
-from ..retrieval.search import infer_expected_items, search
+from ..retrieval.search import DEFAULT_CONTEXT_MAX_CHARS, infer_expected_items
 from .judge import grade
 from .runner import answer_question, git_sha
 from .schemas import EvalCase
@@ -68,12 +68,36 @@ class ProbeArm:
     judge_rationale: str = ""
     answer: str = ""
 
+    context_max_chars: int = DEFAULT_CONTEXT_MAX_CHARS
+    context_packing: str = "greedy-stop"
+
     n_relevant: int = 0
-    relevant_in_context: int = 0
-    relevant_final_ranks: list[int] = field(default_factory=list)
-    relevant_pre_truncation_ranks: list[int] = field(default_factory=list)
-    context_items: list[str] = field(default_factory=list)
     inferred_items: list[str] = field(default_factory=list)
+
+    # --- stage 1: what the ranker produced, uncut
+    candidate_ids: list[str] = field(default_factory=list)
+    relevant_pre_truncation_ranks: list[int] = field(default_factory=list)
+
+    # --- stage 2: what survived top_n
+    selected_ids: list[str] = field(default_factory=list)
+    relevant_final_ranks: list[int] = field(default_factory=list)
+    relevant_in_context: int = 0
+    context_items: list[str] = field(default_factory=list)
+
+    # --- stage 3: what build_context actually put in the prompt
+    included_ids: list[str] = field(default_factory=list)
+    dropped_ids: list[str] = field(default_factory=list)
+    n_included: int = 0
+    context_chars_before_cap: int = 0
+    context_chars_after_cap: int = 0
+    cap_binding: bool = False
+    first_excluded_id: str | None = None
+    first_excluded_rank: int | None = None
+    first_excluded_chars: int = 0
+    would_fit_with_skip: int = 0
+    relevant_in_prompt: int = 0
+    relevant_ids_in_prompt: list[str] = field(default_factory=list)
+    relevant_ids_lost_to_cap: list[str] = field(default_factory=list)
 
     retrieve_ms: int = 0
     rerank_ms: int = 0
@@ -87,46 +111,18 @@ class ProbeArm:
         return {
             "top_n": self.top_n,
             "rerank": self.use_rerank,
+            "boost": self.item_boost,
             "pass": self.passed,
-            "relevant_in_context": f"{self.relevant_in_context}/{self.n_relevant}",
-            "final_ranks": self.relevant_final_ranks,
             "pre_trunc_ranks": self.relevant_pre_truncation_ranks,
-            "retrieve_ms": self.retrieve_ms,
-            "rerank_ms": self.rerank_ms,
+            "after_top_n": f"{self.relevant_in_context}/{self.n_relevant}",
+            "in_prompt": f"{self.relevant_in_prompt}/{self.n_relevant}",
+            "hits_incl": f"{self.n_included}/{len(self.selected_ids)}",
+            "ctx_chars": f"{self.context_chars_after_cap}/{self.context_chars_before_cap}",
+            "cap": "BINDING" if self.cap_binding else "-",
             "total_ms": self.total_ms,
             "p_tok": self.prompt_tokens,
-            "c_tok": self.completion_tokens,
             "cost_usd": round(self.cost_usd, 6),
         }
-
-
-def candidate_ranks(
-    case: EvalCase,
-    strategy: str,
-    mode: str,
-    use_rerank: bool,
-    k: int,
-    item_boost: float,
-) -> list[int]:
-    """Where the relevant chunks sit before `top_n` truncation.
-
-    Run with `top_n=k`, so nothing is cut. The gap between these ranks and the
-    final ones is the loss attributable to truncation alone -- the number the
-    whole exercise is trying to isolate.
-    """
-    result = search(
-        case.question,
-        strategy=strategy,
-        mode=mode,
-        use_rerank=use_rerank,
-        k=k,
-        top_n=k,
-        ticker=case.ticker,
-        fiscal_year=case.fiscal_year,
-        item_boost=item_boost,
-    )
-    relevant = set(case.relevant_chunk_ids)
-    return [i for i, cid in enumerate(result.ids, start=1) if cid in relevant]
 
 
 def run_arm(
@@ -138,7 +134,18 @@ def run_arm(
     k: int,
     item_boost: float,
     sha: str,
+    context_max_chars: int = DEFAULT_CONTEXT_MAX_CHARS,
+    context_packing: str = "greedy-stop",
 ) -> ProbeArm:
+    """One arm, one retrieval call.
+
+    The previous version made two: a diagnostic `search()` for the
+    pre-truncation ranks and `answer_question()` for the answer. They were
+    configured separately, `item_boost` reached only the first, and the probe
+    reported boosted ranks beside an answer generated from unboosted retrieval.
+    Both views now come from the same `RetrievalResult`, so they cannot
+    disagree.
+    """
     arm = ProbeArm(
         case_id=case.case_id,
         top_n=top_n,
@@ -148,17 +155,24 @@ def run_arm(
         mode=mode,
         k=k,
         item_boost=item_boost,
+        context_max_chars=context_max_chars,
+        context_packing=context_packing,
         n_relevant=len(case.relevant_chunk_ids),
         inferred_items=infer_expected_items(case.question),
     )
 
     started = time.perf_counter()
     try:
-        arm.relevant_pre_truncation_ranks = candidate_ranks(
-            case, strategy, mode, use_rerank, k, item_boost
-        )
-        answer, retrieval, latency, p_tok, c_tok, result = answer_question(
-            case, strategy, mode, use_rerank, k, top_n
+        answer, retrieval, latency, p_tok, c_tok, result, ctx = answer_question(
+            case,
+            strategy,
+            mode,
+            use_rerank,
+            k,
+            top_n,
+            item_boost=item_boost,
+            context_max_chars=context_max_chars,
+            context_packing=context_packing,
         )
     except Exception as exc:  # noqa: BLE001 - the message is the finding
         arm.error = str(exc)[:600]
@@ -167,11 +181,32 @@ def run_arm(
 
     relevant = set(case.relevant_chunk_ids)
     arm.answer = answer
-    arm.relevant_final_ranks = [
-        i for i, hit in enumerate(result.hits, start=1) if hit.chunk_id in relevant
-    ]
+
+    # Stage 1 -- the uncut ordering, from the same call that produced the answer.
+    arm.candidate_ids = result.candidate_ids[:50]
+    arm.relevant_pre_truncation_ranks = result.ranks_of(relevant, pre_truncation=True)
+
+    # Stage 2 -- after top_n.
+    arm.selected_ids = result.ids
+    arm.relevant_final_ranks = result.ranks_of(relevant)
     arm.relevant_in_context = len(arm.relevant_final_ranks)
     arm.context_items = [hit.item or "?" for hit in result.hits]
+
+    # Stage 3 -- what build_context actually put in front of the model.
+    arm.included_ids = ctx.included_ids
+    arm.dropped_ids = ctx.dropped_ids
+    arm.n_included = ctx.n_included
+    arm.context_chars_before_cap = ctx.chars_before_cap
+    arm.context_chars_after_cap = ctx.chars_after_cap
+    arm.cap_binding = ctx.cap_binding
+    arm.first_excluded_id = ctx.first_excluded_id
+    arm.first_excluded_rank = ctx.first_excluded_rank
+    arm.first_excluded_chars = ctx.first_excluded_chars
+    arm.would_fit_with_skip = ctx.would_fit_with_skip
+    arm.relevant_ids_in_prompt = [cid for cid in ctx.included_ids if cid in relevant]
+    arm.relevant_in_prompt = len(arm.relevant_ids_in_prompt)
+    arm.relevant_ids_lost_to_cap = [cid for cid in ctx.dropped_ids if cid in relevant]
+
     arm.retrieve_ms = int(retrieval.get("retrieve_ms", 0))
     arm.rerank_ms = int(retrieval.get("rerank_ms", 0))
     arm.total_ms = latency
@@ -197,6 +232,8 @@ def probe(
     mode: str = "hybrid",
     k: int | None = None,
     item_boost: float | None = None,
+    context_max_chars: int = DEFAULT_CONTEXT_MAX_CHARS,
+    context_packing: str = "greedy-stop",
     out_path: str = "reports/context_probe.json",
     progress=None,
 ) -> dict[str, Any]:
@@ -219,7 +256,11 @@ def probe(
         for use_rerank in rerank_settings:
             for top_n in top_n_grid:
                 for _ in range(repeats):
-                    arm = run_arm(case, top_n, use_rerank, strategy, mode, k, boost, sha)
+                    arm = run_arm(
+                        case, top_n, use_rerank, strategy, mode, k, boost, sha,
+                        context_max_chars=context_max_chars,
+                        context_packing=context_packing,
+                    )
                     arms.append(arm)
                     if progress:
                         progress(arm)
@@ -231,6 +272,8 @@ def probe(
             "mode": mode,
             "k": k,
             "item_boost_weight": boost,
+            "context_max_chars": context_max_chars,
+            "context_packing": context_packing,
             "llm_model": s.llm_model,
             "judge_model": s.judge_model,
             "embed_model": s.embed_model,
@@ -273,28 +316,66 @@ def recommend(arms: list[ProbeArm]) -> str:
         )
 
     # Was the evidence ever in the candidate set at all? If yes, this is a
-    # ranking/truncation problem and no amount of re-embedding will help.
+    # ranking/selection problem and no amount of re-embedding will help.
     ever_found = max((len(a.relevant_pre_truncation_ranks) for a in arms), default=0)
-    best_final = max((a.relevant_in_context for a in arms), default=0)
-    if ever_found and best_final < ever_found:
-        worst = min(
+    best_in_prompt = max((a.relevant_in_prompt for a in arms), default=0)
+    if ever_found and best_in_prompt < ever_found:
+        best_ranked = min(
             (a for a in arms if a.relevant_pre_truncation_ranks),
             key=lambda a: min(a.relevant_pre_truncation_ranks),
         )
         lines.append(
             f"Evidence IS in the candidate set (best pre-truncation ranks "
-            f"{worst.relevant_pre_truncation_ranks}) but only {best_final} of "
-            f"{ever_found} reach the model at the grid's widest setting. The "
-            "bottleneck is ranking and context selection, not candidate generation."
+            f"{best_ranked.relevant_pre_truncation_ranks}) but only "
+            f"{best_in_prompt} of {ever_found} reach the prompt at the grid's "
+            "widest setting. The bottleneck is ranking and context selection, "
+            "not candidate generation."
+        )
+
+    # Distinguish the two ways a passage disappears. They have different fixes
+    # and, before this was instrumented, looked identical from the outside.
+    lost_to_cap = [a for a in arms if a.relevant_ids_lost_to_cap]
+    if lost_to_cap:
+        worst = max(lost_to_cap, key=lambda a: len(a.relevant_ids_lost_to_cap))
+        lines.append(
+            f"RELEVANT EVIDENCE IS BEING DISCARDED BY THE CHARACTER CAP, not by "
+            f"top_n: {len(worst.relevant_ids_lost_to_cap)} relevant chunk(s) "
+            f"survived ranking, entered the top_n={worst.top_n} selection, and "
+            f"were then cut by max_chars={worst.context_max_chars}. Raising "
+            "top_n cannot fix this."
+        )
+
+    capped = [a for a in arms if a.cap_binding]
+    if capped:
+        widest = max(capped, key=lambda a: a.top_n)
+        flat = {a.n_included for a in capped}
+        lines.append(
+            f"The {widest.context_max_chars}-char cap binds: at top_n="
+            f"{widest.top_n} only {widest.n_included} of {len(widest.selected_ids)} "
+            f"selected passages reach the prompt "
+            f"({widest.context_chars_after_cap} of "
+            f"{widest.context_chars_before_cap} chars). "
+            + (
+                f"Included count is {flat.pop()} across every capped arm, so "
+                "raising top_n changes nothing downstream. "
+                if len(flat) == 1
+                else ""
+            )
+            + (
+                f"A skip-oversized packing policy would have admitted "
+                f"{widest.would_fit_with_skip} instead of {widest.n_included}."
+                if widest.would_fit_with_skip > widest.n_included
+                else ""
+            )
         )
 
     deep = [a for a in arms if a.relevant_pre_truncation_ranks
             and min(a.relevant_pre_truncation_ranks) > 5]
-    if deep:
+    if deep and len(deep) == len([a for a in arms if a.relevant_pre_truncation_ranks]):
         lines.append(
-            "The first relevant chunk never reaches the top 5, so raising top_n "
-            "buys the answer by paying for more context rather than by ranking "
-            "better. Treat a top_n increase as mitigation and keep the ranking "
-            "work open."
+            "The first relevant chunk never reaches the top 5 in any arm, so "
+            "raising top_n buys the answer by paying for more context rather "
+            "than by ranking better. Treat a top_n increase as mitigation and "
+            "keep the ranking work open."
         )
     return " ".join(lines)

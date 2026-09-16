@@ -362,6 +362,10 @@ def eval_context_probe(
     rerank: str = typer.Option("on,off", help="Which rerank settings to test."),
     repeats: int = typer.Option(1, help="Repeats per arm; >1 tests reliability, not just pass/fail."),
     item_boost: float = typer.Option(-1.0, help="Override item_boost_weight. -1 = use configured value."),
+    context_max_chars: int = typer.Option(12000, help="build_context character cap."),
+    context_packing: str = typer.Option(
+        "greedy-stop", help="greedy-stop (shipped) | skip-oversized"
+    ),
     out: str = typer.Option("reports/context_probe.json"),
 ) -> None:
     """Probe one case across a top_n x rerank grid and say where the evidence is lost.
@@ -395,7 +399,10 @@ def eval_context_probe(
         mark = "[green]PASS[/green]" if arm.passed else "[red]fail[/red]"
         console.print(
             f"  top_n={arm.top_n:<3} rerank={str(arm.use_rerank):<5} {mark}  "
-            f"relevant in context {arm.relevant_in_context}/{arm.n_relevant}  "
+            f"pre-trunc {arm.relevant_pre_truncation_ranks}  "
+            f"after top_n {arm.relevant_in_context}/{arm.n_relevant}  "
+            f"in prompt {arm.relevant_in_prompt}/{arm.n_relevant}  "
+            f"hits {arm.n_included}/{len(arm.selected_ids)}  "
             f"{arm.total_ms} ms" + (f"  [red]{arm.error[:70]}[/red]" if arm.error else "")
         )
 
@@ -406,6 +413,8 @@ def eval_context_probe(
             rerank_settings=rerank_settings,
             repeats=repeats,
             item_boost=None if item_boost < 0 else item_boost,
+            context_max_chars=context_max_chars,
+            context_packing=context_packing,
             out_path=out,
             progress=progress,
         )

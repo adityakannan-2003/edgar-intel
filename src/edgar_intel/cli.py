@@ -291,6 +291,7 @@ def eval_run(
     strategy: str = typer.Option(""),
     mode: str = typer.Option("hybrid"),
     rerank: bool = typer.Option(True),
+    top_n: int = typer.Option(0, help="Passages placed in the answering context. 0 = configured default."),
     limit: int = typer.Option(0, help="Run only the first N cases."),
     git_sha: str = typer.Option(""),
 ) -> None:
@@ -310,7 +311,7 @@ def eval_run(
     try:
         _, summary = run_suite(
             cases, label=label, strategy=strategy or None, mode=mode,
-            use_rerank=rerank, sha=git_sha, progress=progress,
+            use_rerank=rerank, top_n=top_n or None, sha=git_sha, progress=progress,
         )
     except RunAborted as exc:
         console.print()
@@ -351,6 +352,68 @@ def eval_compare(
         cases = cases[:limit]
     summaries = compare_strategies(cases, [s.strip() for s in strategies.split(",")])
     _table("strategy comparison", compare_runs([s.run_key for s in summaries]))
+
+
+@eval_app.command("context-probe")
+def eval_context_probe(
+    path: str = typer.Option("evalset/one_case.json", help="Case file to probe."),
+    case_id: str = typer.Option("", help="Probe only this case id."),
+    top_n: str = typer.Option("8,12,16,20", help="Comma-separated top_n grid."),
+    rerank: str = typer.Option("on,off", help="Which rerank settings to test."),
+    repeats: int = typer.Option(1, help="Repeats per arm; >1 tests reliability, not just pass/fail."),
+    item_boost: float = typer.Option(-1.0, help="Override item_boost_weight. -1 = use configured value."),
+    out: str = typer.Option("reports/context_probe.json"),
+) -> None:
+    """Probe one case across a top_n x rerank grid and say where the evidence is lost.
+
+    Built for the `nar-AAPL-legal` failure: all five relevant chunks sat inside
+    the hybrid top-50 at ranks 9, 11, 13, 21 and 29, and `top_n=8` discarded
+    every one before the model saw anything. The run reported a narrative
+    quality failure. It was a context-selection failure.
+
+    Changes nothing but `top_n` and the rerank flag between arms, records the
+    config and git SHA each arm ran under, and writes to a report file rather
+    than to `eval_runs` -- experiments do not belong in the baseline history.
+    """
+    from .evals.context_probe import probe
+    from .evals.goldenset import load
+
+    cases = load(path)
+    if case_id:
+        cases = [c for c in cases if c.case_id == case_id]
+    if not cases:
+        console.print(f"[red]no cases in {path}[/red]")
+        raise typer.Exit(1)
+
+    grid = tuple(int(x) for x in top_n.split(",") if x.strip())
+    settings_map = {"on": True, "off": False}
+    rerank_settings = tuple(
+        settings_map[x.strip().lower()] for x in rerank.split(",") if x.strip()
+    )
+
+    def progress(arm) -> None:
+        mark = "[green]PASS[/green]" if arm.passed else "[red]fail[/red]"
+        console.print(
+            f"  top_n={arm.top_n:<3} rerank={str(arm.use_rerank):<5} {mark}  "
+            f"relevant in context {arm.relevant_in_context}/{arm.n_relevant}  "
+            f"{arm.total_ms} ms" + (f"  [red]{arm.error[:70]}[/red]" if arm.error else "")
+        )
+
+    with console.status("probing..."):
+        payload = probe(
+            cases,
+            top_n_grid=grid,
+            rerank_settings=rerank_settings,
+            repeats=repeats,
+            item_boost=None if item_boost < 0 else item_boost,
+            out_path=out,
+            progress=progress,
+        )
+
+    console.print()
+    _table("context probe", payload["rows"])
+    console.print(f"[bold]{payload['recommendation']}[/bold]")
+    console.print(f"[dim]full report: {out}[/dim]")
 
 
 @eval_app.command("retrieval")

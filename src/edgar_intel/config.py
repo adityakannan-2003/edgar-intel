@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     rrf_k: int = 60
     dense_weight: float = 1.0
     lexical_weight: float = 1.0
+    # Weight of the item-aware RRF list (see retrieval/search.infer_expected_items).
+    # 0.0 = off, which is the shipped default until the sweep says otherwise.
+    # A ranking change that is on by default would silently contaminate every
+    # comparison against an earlier run.
+    item_boost_weight: float = 0.0
 
     # ----------------------------------------------------------------- agent
     agent_max_steps: int = 8

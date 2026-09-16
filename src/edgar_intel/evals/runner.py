@@ -87,8 +87,17 @@ def answer_question(
     use_rerank: bool = True,
     k: int | None = None,
     top_n: int | None = None,
-) -> tuple[str, dict[str, Any], int, int, int]:
-    """Retrieve, then answer. Returns (answer, retrieval_metrics, latency, p_tok, c_tok)."""
+) -> tuple[str, dict[str, Any], int, int, int, Any]:
+    """Retrieve, then answer.
+
+    Returns (answer, retrieval_metrics, latency, p_tok, c_tok, retrieval_result).
+
+    The final element is the raw `RetrievalResult`. It exists so a debugging
+    harness can inspect exactly which passages reached the model **through this
+    same function** rather than re-implementing the pipeline beside it. A probe
+    that duplicates the production path can drift from it, and an experiment
+    measuring a path nobody ships is worse than no experiment.
+    """
     started = time.perf_counter()
 
     result = search(
@@ -128,7 +137,14 @@ def answer_question(
         answer = completion.text.strip()
 
     latency_ms = int((time.perf_counter() - started) * 1000)
-    return answer, retrieval, latency_ms, completion.prompt_tokens, completion.completion_tokens
+    return (
+        answer,
+        retrieval,
+        latency_ms,
+        completion.prompt_tokens,
+        completion.completion_tokens,
+        result,
+    )
 
 
 def run_suite(
@@ -175,7 +191,7 @@ def run_suite(
     infra_errors = 0
     for i, case in enumerate(cases, start=1):
         try:
-            answer, retrieval, latency, p_tok, c_tok = answer_question(
+            answer, retrieval, latency, p_tok, c_tok, _hits = answer_question(
                 case, strategy, mode, use_rerank, k, top_n
             )
             result = build_result(case, answer, retrieval, latency, p_tok, c_tok)
@@ -324,6 +340,56 @@ def _mean(values: list[float]) -> float:
     return sum(values) / len(values) if values else 0.0
 
 
+FAILURE_SAMPLE_PER_KIND = 25
+
+
+def sample_failures_by_kind(
+    results: list[CaseResult], per_kind: int = FAILURE_SAMPLE_PER_KIND
+) -> list[dict[str, Any]]:
+    """Failures grouped by kind, with a quota each.
+
+    The previous version took the first 50 failures in result order. Numeric
+    cases are generated before narrative ones, so on a 232-case run the numeric
+    failures filled the quota and **all 24 narrative failures were truncated
+    away** -- every report showed `narrative_pass_rate: 0.0` and not one example
+    of why.
+
+    That hid a real defect for four runs. The narrative judge was returning HTTP
+    400 on every call; the report had room to show it and did not. A reporting
+    cap that can silently drop an entire case kind is not a display detail, it
+    is a hole in the instrumentation.
+
+    Quota per kind rather than a global cap, so a kind can never be crowded out
+    by a noisier one. Order within a kind is preserved.
+    """
+    by_kind: dict[str, list[dict[str, Any]]] = {}
+    for r in results:
+        if r.passed:
+            continue
+        rows = by_kind.setdefault(r.kind, [])
+        if len(rows) >= per_kind:
+            continue
+        rows.append(
+            {
+                "case_id": r.case_id,
+                "kind": r.kind,
+                "expected": r.expected[:400],
+                "answer": r.answer[:400],
+                "why": r.judge_rationale or r.error,
+            }
+        )
+    return [row for kind in sorted(by_kind) for row in by_kind[kind]]
+
+
+def failure_counts_by_kind(results: list[CaseResult]) -> dict[str, int]:
+    """Total failures per kind, so the sample never has to be mistaken for all of them."""
+    counts: dict[str, int] = {}
+    for r in results:
+        if not r.passed:
+            counts[r.kind] = counts.get(r.kind, 0) + 1
+    return counts
+
+
 def _write_report(summary: RunSummary, results: list[CaseResult], kappa: float | None) -> None:
     s = get_settings()
     os.makedirs(s.reports_dir, exist_ok=True)
@@ -331,17 +397,9 @@ def _write_report(summary: RunSummary, results: list[CaseResult], kappa: float |
     payload = {
         "summary": summary.as_dict(),
         "judge_calibration": kappa_verdict(kappa),
-        "failures": [
-            {
-                "case_id": r.case_id,
-                "kind": r.kind,
-                "expected": r.expected,
-                "answer": r.answer[:400],
-                "why": r.judge_rationale or r.error,
-            }
-            for r in results
-            if not r.passed
-        ][:50],
+        "failure_counts": failure_counts_by_kind(results),
+        "failure_sample_per_kind": FAILURE_SAMPLE_PER_KIND,
+        "failures": sample_failures_by_kind(results),
     }
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=2)

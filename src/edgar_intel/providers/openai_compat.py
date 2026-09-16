@@ -23,12 +23,49 @@ class RetryableHTTPError(Exception):
     pass
 
 
+def error_detail(resp: httpx.Response, limit: int = 600) -> str:
+    """The server's own explanation of a failure, as a single line.
+
+    `httpx`'s default message for a 4xx is "Client error '400 Bad Request' for
+    url '...'" and nothing else -- the response body, which is where the actual
+    reason lives, is discarded. That message is what ends up in
+    `eval_results.error`, so a run can fail all 232 cases and record no usable
+    information about why.
+
+    This cost a real diagnosis. Switching `EDGAR_JUDGE_MODEL` to a model that
+    rejects `max_tokens` produced HTTP 400 on every narrative case; every report
+    said only "Client error '400 Bad Request'", the narrative pass rate read
+    0.0, and the obvious reading was that the answers were bad. The body said
+    exactly which parameter was wrong.
+
+    OpenAI-compatible servers return `{"error": {"message": ..., "code": ...}}`;
+    anything else falls back to raw text.
+    """
+    try:
+        payload = resp.json()
+    except Exception:
+        return f"HTTP {resp.status_code}: {resp.text[:limit].strip()}"
+
+    err = payload.get("error") if isinstance(payload, dict) else None
+    if isinstance(err, dict):
+        parts = [str(err.get(key)) for key in ("message", "type", "code", "param") if err.get(key)]
+        if parts:
+            return f"HTTP {resp.status_code}: " + " | ".join(parts)[:limit]
+    return f"HTTP {resp.status_code}: {json.dumps(payload)[:limit]}"
+
+
 def _raise_for_retry(resp: httpx.Response) -> None:
     # 429 and 5xx are worth retrying; 4xx otherwise means the request is wrong
     # and retrying just burns the rate limit.
     if resp.status_code == 429 or resp.status_code >= 500:
-        raise RetryableHTTPError(f"{resp.status_code}: {resp.text[:300]}")
-    resp.raise_for_status()
+        raise RetryableHTTPError(error_detail(resp))
+    if resp.is_error:
+        # Raise httpx's own exception type so the structured-output fallback
+        # below (and any other caller matching on it) keeps working -- but carry
+        # the server's explanation in the message instead of losing it.
+        raise httpx.HTTPStatusError(
+            error_detail(resp), request=resp.request, response=resp
+        )
 
 
 class OpenAICompatLLM:
@@ -98,8 +135,22 @@ class OpenAICompatLLM:
             data = self._post("/chat/completions", payload)
         except httpx.HTTPStatusError as exc:
             if json_schema is not None and exc.response.status_code == 400:
+                # Unchanged fallback: servers that do not implement the schema
+                # variant of structured outputs accept plain json_object mode.
                 payload["response_format"] = {"type": "json_object"}
-                data = self._post("/chat/completions", payload)
+                try:
+                    data = self._post("/chat/completions", payload)
+                except httpx.HTTPStatusError as retry_exc:
+                    # Both attempts failed, so response_format was not the
+                    # problem. Say so, and carry both explanations -- otherwise
+                    # the fallback hides the real cause behind a second
+                    # identical-looking error.
+                    raise httpx.HTTPStatusError(
+                        f"{retry_exc} (json_schema retry as json_object also "
+                        f"failed; original: {exc})",
+                        request=retry_exc.request,
+                        response=retry_exc.response,
+                    ) from retry_exc
             else:
                 raise
         latency_ms = int((time.perf_counter() - started) * 1000)

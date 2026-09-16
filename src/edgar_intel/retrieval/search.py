@@ -271,6 +271,82 @@ def reciprocal_rank_fusion(
     return fused
 
 
+# Which 10-K Item answers which kind of question.
+#
+# This is a property of Form 10-K, not of any company: the SEC prescribes what
+# goes in each Item, so "what legal proceedings are disclosed" is answered in
+# Item 3 for every filer that has ever filed one. Nothing here names a company,
+# a year, or a case.
+#
+# Cues are matched against the question only. They are deliberately the words a
+# person would use, not the Item titles, because a question that already said
+# "Item 3" would not need this.
+ITEM_QUESTION_CUES: list[tuple[str, tuple[str, ...]]] = [
+    ("3", ("legal proceeding", "lawsuit", "litigation", "court", "antitrust",
+           "regulatory proceeding", "sued", "settlement")),
+    ("1A", ("risk factor", "risks", "risk", "supplier concentration", "dependence on",
+            "could adversely", "vulnerab", "competitive pressure", "competition")),
+    ("7A", ("market risk", "foreign currency", "exchange rate", "interest rate",
+            "hedg", "derivative", "commodity price")),
+    ("7", ("md&a", "management's discussion", "drivers of", "results of operations",
+           "revenue change", "gross margin", "liquidity", "cash flow")),
+    ("8", ("financial statement", "balance sheet", "income statement", "footnote",
+           "accounting polic")),
+    ("1", ("business", "products", "segments", "customers", "employees",
+           "supply chain", "manufactur", "distribution")),
+    ("2", ("propert", "facilities", "headquarters", "real estate")),
+    ("9A", ("internal control", "disclosure controls", "material weakness")),
+]
+
+
+ITEM_ORDER = {item: i for i, (item, _) in enumerate(ITEM_QUESTION_CUES)}
+
+
+def infer_expected_items(query: str) -> list[str]:
+    """Which 10-K Items a question is asking about, best first.
+
+    Returns an empty list when nothing matches, which is the common case for the
+    numeric questions -- a figure can legitimately appear in Item 7, Item 8 or a
+    footnote, so guessing would hurt.
+
+    Why a list and not one Item: `incorporation by reference` is routine. NVIDIA's
+    Item 8 is three sentences pointing at the financial statements; P&G's Item 7A
+    points into the MD&A. This project has already been bitten by treating a
+    short Item as a missing one, so the ranking signal must tolerate the content
+    living somewhere else.
+    """
+    lowered = query.lower()
+    matched: list[tuple[int, str]] = []
+    for item, cues in ITEM_QUESTION_CUES:
+        hits = sum(1 for cue in cues if cue in lowered)
+        if hits:
+            matched.append((hits, item))
+    matched.sort(key=lambda pair: (-pair[0], ITEM_ORDER.get(pair[1], 99)))
+    return [item for _, item in matched]
+
+
+def item_ranking(hits: list[Hit], items: list[str]) -> list[Hit]:
+    """The candidates that sit in an expected Item, in their existing order.
+
+    Fed into RRF as an additional ranked list rather than applied as a score
+    multiplier, so the signal stays rank-based and needs no calibration against
+    cosine distances or `ts_rank_cd` scores -- the same reason fusion is RRF in
+    the first place.
+
+    A *boost*, never a filter. Filtering to Item 3 would have scored well on the
+    Apple legal case and destroyed every question whose evidence is incorporated
+    by reference from another Item.
+    """
+    if not items:
+        return []
+    priority = {item: i for i, item in enumerate(items)}
+    scoped = [(priority[h.item], i, h) for i, h in enumerate(hits) if h.item in priority]
+    # Ties broken by the incoming fused order, so this list adds Item
+    # information and nothing else -- it never reorders within an Item.
+    scoped.sort(key=lambda triple: (triple[0], triple[1]))
+    return [h for _, _, h in scoped]
+
+
 def rerank(query: str, hits: list[Hit], top_n: int | None = None) -> list[Hit]:
     """Cross-encoder rerank of the fused candidates.
 
@@ -302,11 +378,19 @@ def search(
     ticker: str | None = None,
     fiscal_year: int | None = None,
     item: str | None = None,
+    item_boost: float | None = None,
 ) -> RetrievalResult:
-    """The retrieval entry point. `mode` is one of dense | lexical | hybrid."""
+    """The retrieval entry point. `mode` is one of dense | lexical | hybrid.
+
+    `item_boost` weights an additional RRF list of candidates that sit in the
+    10-K Item the question is about. 0.0 disables it, which is the default --
+    it must be measured before it ships, and a default-on ranking change would
+    contaminate every A/B comparison already in flight.
+    """
     s = get_settings()
     started = time.perf_counter()
     stage: dict[str, int] = {}
+    boost = s.item_boost_weight if item_boost is None else item_boost
 
     t0 = time.perf_counter()
     if mode == "dense":
@@ -316,9 +400,15 @@ def search(
     elif mode == "hybrid":
         dense = dense_search(query, strategy, k, ticker, fiscal_year, item)
         lexical = lexical_search(query, strategy, k, ticker, fiscal_year, item)
-        candidates = reciprocal_rank_fusion(
-            [dense, lexical], weights=[s.dense_weight, s.lexical_weight]
-        )
+        rankings = [dense, lexical]
+        weights = [s.dense_weight, s.lexical_weight]
+        if boost > 0:
+            fused_order = reciprocal_rank_fusion([dense, lexical], weights=weights)
+            scoped = item_ranking(fused_order, infer_expected_items(query))
+            if scoped:
+                rankings.append(scoped)
+                weights.append(boost)
+        candidates = reciprocal_rank_fusion(rankings, weights=weights)
     else:
         raise ValueError(f"unknown retrieval mode: {mode}")
     stage["retrieve_ms"] = int((time.perf_counter() - t0) * 1000)

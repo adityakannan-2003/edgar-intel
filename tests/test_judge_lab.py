@@ -46,10 +46,10 @@ PAIR = FrozenPair(
 
 
 class TestContractsAreVersioned:
-    def test_v1_is_still_the_shipped_default(self):
-        """A rubric change before it is measured makes every earlier run incomparable."""
-        assert DEFAULT_CONTRACT == "v1"
-        assert get_contract().name == "v1"
+    def test_v2_is_the_shipped_default_after_calibration(self):
+        """v2 became the shipped contract after controlled judge calibration."""
+        assert DEFAULT_CONTRACT == "v2"
+        assert get_contract().name == "v2"
 
     def test_v1_is_preserved_as_the_control_arm(self):
         v1 = CONTRACTS["v1"]

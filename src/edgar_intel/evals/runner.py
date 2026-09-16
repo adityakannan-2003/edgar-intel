@@ -24,6 +24,7 @@ from ..providers.openai_compat import parse_json_strict
 from ..retrieval import metrics as m
 from ..retrieval.search import DEFAULT_CONTEXT_MAX_CHARS, build_context_report, search
 from .judge import build_result, calibration_pairs, compute_kappa, kappa_verdict
+from .judge_contracts import get_contract
 from .schemas import ANSWER_SCHEMA, CaseResult, EvalCase, RunSummary
 
 ANSWER_SYSTEM = (
@@ -200,6 +201,7 @@ def run_suite(
         "top_n": top_n or s.rerank_top_n,
         "llm_model": s.llm_model,
         "judge_model": s.judge_model,
+        "judge_contract": get_contract().name,
         "embed_provider": s.embed_provider,
         "embed_model": s.embed_model,
         "llm_provider": s.llm_provider,

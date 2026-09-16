@@ -119,7 +119,7 @@ CONTRACTS: dict[str, JudgeContract] = {c.name: c for c in (V1, V2)}
 # The shipped contract. Still v1 until the A/B says otherwise -- a rubric change
 # applied before it is measured would make every run before it incomparable and
 # every run after it unexplained.
-DEFAULT_CONTRACT = "v1"
+DEFAULT_CONTRACT = "v2"
 
 
 def get_contract(name: str | None = None) -> JudgeContract:

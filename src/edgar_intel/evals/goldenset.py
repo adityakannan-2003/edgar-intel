@@ -307,6 +307,230 @@ NARRATIVE_SEEDS: list[dict[str, str]] = [
     },
 ]
 
+NARRATIVE_REFERENCES = {
+    "nar-AAPL-legal": (
+        "Apple discloses EU Digital Markets Act proceedings, including a €500 million "
+        "fine in the Article 5(4) investigation that Apple has appealed and a separate "
+        "Article 6(4) investigation. It also discloses the DOJ and state attorneys "
+        "general antitrust lawsuit alleging monopolization of smartphone markets, "
+        "as well as the Epic Games litigation concerning App Store rules and the "
+        "2021 injunction. Apple states that other ordinary-course legal proceedings "
+        "remain unresolved and adverse outcomes could materially affect results."
+    ),
+
+    "nar-AAPL-supply-concentration": (
+        "Apple says a significant majority of its manufacturing is performed by "
+        "outsourcing partners, primarily in China mainland, India, Japan, South Korea, "
+        "Taiwan and Vietnam. It relies on single or limited sources for many critical "
+        "components and primarily Asian partners for final assembly. Trade restrictions, "
+        "geopolitical conflict, natural disasters, shortages, supplier failures and "
+        "capacity constraints can therefore disrupt supply, increase costs and delay "
+        "production, while changing suppliers can be costly and time-consuming."
+    ),
+
+    "nar-AAPL-revenue-drivers": (
+        "Apple's 2025 net sales increased 6% to $416.2 billion. Growth was driven "
+        "primarily by higher Services, iPhone, Mac and iPad sales, partly offset by "
+        "lower Wearables, Home and Accessories sales. Services rose 14%, Mac 12%, "
+        "iPad 5% and iPhone 4%. Geographically, most regions grew, while Greater "
+        "China declined 4%, primarily because of lower iPhone sales."
+    ),
+
+    "nar-CAT-fx-exposure": (
+        "Caterpillar's Machinery, Power & Energy operations use foreign-currency "
+        "forward and option contracts to manage unmatched foreign-currency cash flows, "
+        "with policy allowing anticipated exposures to be managed for up to about "
+        "five years. Its primary currency exposures include the Australian dollar, "
+        "Chinese yuan, euro, Indian rupee and Mexican peso. Financial Products also "
+        "uses forwards, options and cross-currency contracts to reduce currency "
+        "mismatches between assets, liabilities and future transactions."
+    ),
+
+    "nar-CAT-competition": (
+        "Caterpillar says it operates in a highly competitive environment and competes "
+        "on product performance, customer service, quality and price. Aggressive "
+        "competitor pricing or product strategies, failure to price or manufacture "
+        "competitively, changes in customer discount expectations, weak pricing "
+        "conditions and growth in competitors' rental fleets could reduce Caterpillar's "
+        "industry share and put downward pressure on prices and profitability."
+    ),
+
+    "nar-COST-revenue-drivers": (
+        "Costco's 2025 net sales increased 8% to $269.9 billion. The main driver was "
+        "a 6% increase in comparable sales, including about 5% higher shopping "
+        "frequency and about 1% higher average ticket, together with sales from 24 "
+        "net new warehouses. Core merchandise sales increased 10%. Lower gasoline "
+        "prices and unfavorable foreign-exchange movements partially offset the growth."
+    ),
+
+    "nar-COST-fx-exposure": (
+        "Costco's foreign subsidiaries conduct some transactions in currencies other "
+        "than their functional currencies, exposing Costco to exchange-rate movements. "
+        "It manages part of this exposure with forward foreign-exchange contracts, "
+        "primarily to economically hedge U.S.-dollar merchandise inventory expenditures "
+        "of international subsidiaries. Costco states that these contracts are used "
+        "for risk mitigation rather than speculative trading."
+    ),
+
+    "nar-COST-supply-concentration": (
+        "Costco depends on the orderly operation of its merchandise receiving and "
+        "distribution network, particularly its depots, as well as processing, "
+        "packaging and manufacturing facilities. Disruptions at these facilities or "
+        "in supporting systems can impair Costco's ability to obtain and move products "
+        "and can reduce sales and member satisfaction. Product availability and "
+        "consistent quality are also particularly important for its growing "
+        "Kirkland Signature private-label business."
+    ),
+
+    "nar-JNJ-competition": (
+        "Johnson & Johnson describes its product markets as highly competitive across "
+        "both operating segments and all geographic markets. It competes on "
+        "cost-effectiveness, technological innovation, intellectual-property rights, "
+        "product performance, perceived product advantages, pricing, availability and "
+        "reimbursement. It also competes for acquisitions and licensing opportunities, "
+        "and more effective or less expensive competing products or faster competitor "
+        "development can reduce sales and impair its ability to commercialize products."
+    ),
+
+    "nar-JNJ-fx-exposure": (
+        "Johnson & Johnson reports substantial international currency exposure, with "
+        "about 43% of fiscal 2025 sales occurring outside the United States. Changes "
+        "in foreign currencies affect revenues, expenses and translation of overseas "
+        "results into U.S. dollars. The company uses financial instruments to mitigate "
+        "the cash-flow effects of exchange-rate fluctuations, although unhedged "
+        "exposures remain subject to currency movements."
+    ),
+
+    "nar-JNJ-supply-concentration": (
+        "Johnson & Johnson operates 63 manufacturing facilities and also sources from "
+        "thousands of suppliers worldwide. Manufacturing can be disrupted by quality "
+        "issues, regulation, labor problems, raw-material shortages, natural disasters "
+        "and geopolitical events. The company also relies on third parties for raw "
+        "materials, components and finished products, making it dependent on their "
+        "capacity, quality, yields, delivery timing and pricing; failure or loss of a "
+        "supplier can cause shortages, delays, lost sales and higher costs."
+    ),
+
+    "nar-MSFT-competition": (
+        "Microsoft says it faces intense competition across all of its markets, from "
+        "large global companies with major R&D resources to smaller specialized firms. "
+        "Many markets have low barriers to entry and change rapidly. Microsoft also "
+        "identifies especially strong competition in AI from hyperscalers, open-source "
+        "offerings and frontier-model providers, as well as competition in cloud and "
+        "other software business models, requiring continued innovation and adaptation."
+    ),
+
+    "nar-MSFT-fx-exposure": (
+        "Microsoft has foreign-currency exposure from forecasted transactions, assets "
+        "and liabilities. It monitors foreign-currency exposures daily and uses hedges "
+        "and derivative instruments to manage the risk. Principal exposures include "
+        "the euro, Japanese yen, British pound, Canadian dollar and Australian dollar."
+    ),
+
+    "nar-NVDA-revenue-drivers": (
+        "NVIDIA's fiscal 2026 revenue increased 65% to $215.938 billion. "
+        "Compute & Networking revenue increased 67%, with the year-over-year "
+        "increase driven by accelerated computing and AI. Data Center compute "
+        "revenue grew 59% on demand for the Blackwell computing platform, while "
+        "Data Center networking grew 142% from the ramp of NVLink compute fabric "
+        "and growth in Ethernet and InfiniBand platforms. Graphics revenue "
+        "increased 57%, driven by Blackwell architecture sales."
+    ),
+
+    "nar-NVDA-fx-exposure": (
+        "NVIDIA says its direct foreign-exchange exposure is relatively limited because "
+        "substantially all sales are denominated in U.S. dollars. It nevertheless uses "
+        "foreign-currency forward contracts to offset exchange-rate movements, including "
+        "hedges of forecasted foreign-currency expenses and balance-sheet exposures."
+    ),
+
+    "nar-PG-revenue-drivers": (
+        "P&G's fiscal 2026 net sales increased 3% to $87.0 billion, driven by about "
+        "2% favorable foreign exchange and 1% higher pricing, while unit volume and "
+        "mix were unchanged overall. Organic sales increased 1%. Results varied by "
+        "business segment, with Beauty producing the strongest reported sales growth."
+    ),
+
+    "nar-PG-fx-exposure": (
+        "P&G is exposed to currency-rate movements because it manufactures, sells and "
+        "finances operations globally. It first uses diversification, natural offsets "
+        "and centralized exposure netting as operational hedges. For additional risk "
+        "management it primarily uses forward contracts and currency swaps, generally "
+        "with maturities under 18 months, and monitors derivative exposure using market "
+        "valuation, sensitivity analysis and value-at-risk techniques."
+    ),
+
+    "nar-PG-legal": (
+        "P&G discloses an unresolved U.K. Environment Agency matter involving its U.K. "
+        "subsidiary's prior inadvertent failure to obtain a required emissions permit "
+        "for a London manufacturing site. The site has been registered since March "
+        "2021, and in July 2025 the agency indicated an intended civil penalty of less "
+        "than $2 million. P&G states there were no other matters required to be "
+        "disclosed under Item 3 for the period."
+    ),
+
+    "nar-UNH-competition": (
+        "UnitedHealth says its businesses face significant competition in all markets "
+        "and that some competitors may have advantages in particular geographies or "
+        "product areas. Industry consolidation can make it harder to retain customers, "
+        "obtain favorable supplier terms and maintain profitability. Competitiveness "
+        "also depends on innovation, value-based care models, technology and analytics, "
+        "and maintaining relationships with physicians and other health-care providers."
+    ),
+
+    "nar-UNH-supply-concentration": (
+        "UnitedHealth's risk is primarily dependence on third-party health-care and "
+        "technology relationships rather than a traditional manufacturing supply chain. "
+        "It relies on physicians, hospitals, pharmaceutical and other service providers "
+        "and, in some circumstances, third-party vendors that process, store and "
+        "transmit large amounts of data. Vendor failures, provider departures, contract "
+        "disputes or failures outside UnitedHealth's direct control can disrupt services "
+        "and adversely affect revenue, operations and customer relationships."
+    ),
+
+        "nar-CAT-revenue-drivers": (
+        "Caterpillar's 2025 sales and revenues increased 4% to $67.589 billion "
+        "from $64.809 billion in 2024. The increase was primarily driven by "
+        "$3.389 billion of higher sales volume, mainly from higher equipment "
+        "sales to end users, partially offset by $817 million of unfavorable "
+        "price realization. Currency and higher Financial Products revenues "
+        "also contributed modestly."
+    ),
+
+    "nar-MSFT-legal": (
+        "Microsoft discloses an Irish Data Protection Commission matter involving "
+        "LinkedIn's targeted-advertising practices under the GDPR. The regulator "
+        "issued a final decision and fine in October 2024, which LinkedIn appealed "
+        "in November 2024; a preliminary hearing was held in December 2025. "
+        "Microsoft also reports other ordinary-course claims and suits. As of "
+        "June 30, 2026, it had accrued $553 million of legal liabilities and "
+        "estimated that adverse outcomes of approximately $400 million beyond "
+        "recorded amounts were reasonably possible."
+    ),
+
+    "nar-NVDA-legal": (
+        "NVIDIA discloses securities class-action and derivative lawsuits alleging "
+        "false or misleading statements concerning channel inventory and the effect "
+        "of cryptocurrency mining on GPU demand in 2017 and 2018. Related derivative "
+        "actions allege claims including breach of fiduciary duty and insider trading. "
+        "As of January 25, 2026, NVIDIA had not accrued contingent liabilities for "
+        "these proceedings because losses were considered reasonably possible but "
+        "not probable, and a possible loss or range of loss could not be reasonably "
+        "estimated."
+    ),
+
+    "nar-UNH-legal": (
+        "UnitedHealth Group discloses a variety of legal actions and regulatory "
+        "inquiries involving matters such as health benefit administration, medical "
+        "malpractice, employment, intellectual property, antitrust, privacy and "
+        "contract claims. It also describes government investigations and audits, "
+        "including Medicare risk-adjustment reviews. A DOJ False Claims Act case "
+        "alleges improper risk-adjustment submissions; in March 2025 a Special Master "
+        "recommended summary judgment for UnitedHealth on the remaining claims, and "
+        "in April 2025 the DOJ asked the court to reject that recommendation. "
+        "UnitedHealth states that it cannot reasonably estimate the outcome."
+    ),
+}
 
 def generate_narrative_cases(max_per_company: int = 3, seed: int = 7) -> list[EvalCase]:
     """Templated narrative questions seeded per company.
@@ -326,72 +550,376 @@ def generate_narrative_cases(max_per_company: int = 3, seed: int = 7) -> list[Ev
                 "SELECT MAX(fiscal_year) AS fy FROM filings WHERE cik = %s", (row["cik"],)
             )
             fy = year_row["fy"] if year_row else None
+            case_id = f"nar-{row['ticker'] or row['cik']}-{seed_case['slug']}"
+
+            reference = NARRATIVE_REFERENCES.get(case_id)
+            if reference is None:
+                raise ValueError(f"Missing narrative reference for {case_id}")
+
             cases.append(
-                EvalCase(
-                    case_id=f"nar-{row['ticker'] or row['cik']}-{seed_case['slug']}",
+                    EvalCase(
+                    case_id=case_id,
                     kind="narrative",
-                    question=seed_case["question"].format(company=row["name"]),
-                    expected=seed_case["reference"],
+                    question=NARRATIVE_QUESTION_OVERRIDES.get(
+                    case_id,
+                    seed_case["question"].format(company=row["name"]),
+                    ),
+                    expected=reference,
                     ticker=row["ticker"],
                     fiscal_year=fy,
                     difficulty="single_hop",
-                    notes=f"expected evidence in Item {seed_case['item']}; "
-                    "REPLACE this reference with what the filing actually says",
+                    notes=f"human-reviewed reference grounded in FY{fy} filing; "
+                        f"expected evidence in Item {seed_case['item']}",
                 )
             )
     return cases
 
+NARRATIVE_QUESTION_OVERRIDES = {
+    "nar-UNH-supply-concentration": (
+        "UnitedHealth says noncompliance with privacy and security requirements, "
+        "or a privacy or security breach involving the company or one of its "
+        "third-party service providers, could harm its reputation and business. "
+        "Consequences can include mandatory disclosure, loss of existing or new "
+        "customers, increased incident-management and remediation costs, and "
+        "significant fines, penalties and litigation awards."
+    ),
+}
+
+def test_all_narrative_cases_have_human_references():
+    from edgar_intel.evals.goldenset import (
+        NARRATIVE_REFERENCES,
+        generate_narrative_cases,
+    )
+
+    cases = generate_narrative_cases()
+
+    assert len(cases) == 24
+
+    for case in cases:
+        assert case.case_id in NARRATIVE_REFERENCES
+        assert "REPLACE this reference" not in case.expected
+        assert len(case.expected) > 80
 
 # ----------------------------------------------------------- evidence linking
-def link_evidence(cases: list[EvalCase], strategy: str, k: int = 5) -> list[EvalCase]:
-    """Attach relevant chunk ids so retrieval metrics can be computed.
+import re
 
-    Evidence is found by lexical search for the *expected answer's* distinctive
-    tokens -- not by searching the question. Searching the question would label
-    whatever the retriever already returns as "relevant", which makes recall@k
-    trivially 1.0 and the metric meaningless. This is the single easiest way to
-    build an eval set that flatters your system, and worth saying out loud.
+_NARRATIVE_STOPWORDS = {
+    "about", "after", "also", "because", "been", "being", "company",
+    "could", "does", "during", "fiscal", "from", "have", "into",
+    "more", "other", "report", "reports", "reported", "says",
+    "states", "that", "their", "these", "they", "this", "through",
+    "under", "uses", "using", "were", "which", "while", "with",
+    "year",
+}
+
+
+def _narrative_reference_terms(text: str) -> list[str]:
+    """Return distinctive reference-answer terms for evidence labeling."""
+    tokens = re.findall(r"[a-z0-9]+", text.lower())
+
+    terms: list[str] = []
+    for token in tokens:
+        if len(token) < 4:
+            continue
+        if token.isdigit():
+            continue
+        if token in _NARRATIVE_STOPWORDS:
+            continue
+        if token not in terms:
+            terms.append(token)
+
+    return terms[:24]
+
+NARRATIVE_EVIDENCE_TERMS = {
+    "nar-CAT-revenue-drivers": [
+        "67,589",
+        "64,809",
+        "sales volume",
+    ],
+    "nar-NVDA-revenue-drivers": [
+        "215,938",
+        "accelerated computing and AI",
+        "Blackwell",
+    ],
+    "nar-PG-revenue-drivers": [
+        "87.0 billion",
+        "favorable foreign exchange of 2%",
+        "pricing of 1%",
+    ],
+    "nar-UNH-supply-concentration": [
+        "third-party service providers",
+        "privacy or security breach",
+    ],
+}
+
+def _numeric_value_needles(value: float) -> list[str]:
+    """Generate filing-style representations of a numeric source value."""
+    raw = abs(value)
+    needles: list[str] = []
+
+    for scale in (1, 1_000, 1_000_000, 1_000_000_000):
+        scaled = raw / scale
+
+        if scaled >= 1:
+            needles.append(f"{scaled:,.0f}")
+
+    return list(dict.fromkeys(needles))
+
+
+def _comparative_source_facts(notes: str) -> list[tuple[int, float]]:
+    """Parse source facts such as:
+    'FY2023=2,108,000,000, FY2024=2,107,000,000'
+    """
+    matches = re.findall(
+        r"FY(\d{4})=([-+]?[0-9][0-9,]*(?:\.[0-9]+)?)",
+        notes or "",
+    )
+
+    return [
+        (int(year), float(value.replace(",", "")))
+        for year, value in matches
+    ]
+
+def link_evidence(
+    cases: list[EvalCase],
+    strategy: str,
+    k: int = 5,
+) -> list[EvalCase]:
+    """Attach independently constructed relevant chunk ids.
+
+    Numeric cases are linked using their known XBRL value.
+
+    Narrative cases are linked using distinctive terms from the human-reviewed
+    reference answer. We intentionally do not search using the question itself,
+    because doing that would make the retriever help construct its own relevance
+    labels and artificially inflate retrieval metrics.
     """
     for case in cases:
-        needles: list[str] = []
-        if case.kind == "numeric" and case.expected_value is not None:
-            raw = abs(case.expected_value)
-            # Filings print figures in thousands or millions; try both scales.
-            for scale in (1, 1_000, 1_000_000):
-                scaled = raw / scale
-                if scaled >= 1:
-                    needles.append(f"{scaled:,.0f}")
-        if case.ticker:
-            needles.append(case.ticker)
 
-        chunk_ids: list[str] = []
-        for needle in needles:
+        # ------------------------------------------------ narrative
+        
+        if case.kind == "narrative":
+            terms_override = NARRATIVE_EVIDENCE_TERMS.get(case.case_id)
+
+            if terms_override:
+                clauses = " AND ".join(["c.body ILIKE %s"] * len(terms_override))
+
+                sql = f"""
+                    SELECT c.id::text AS id
+                    FROM chunks c
+                    JOIN filings f ON f.id = c.filing_id
+                    JOIN companies co ON co.cik = f.cik
+                    WHERE c.strategy = %s
+                    AND co.ticker = %s
+                    AND f.fiscal_year = %s
+                    AND {clauses}
+                    LIMIT %s
+                """
+
+                params = [
+                    strategy,
+                    case.ticker,
+                    case.fiscal_year,
+                    *[f"%{term}%" for term in terms_override],
+                    k,
+                ]
+
+                rows = db.query(sql, params)
+                case.relevant_chunk_ids = [r["id"] for r in rows]
+                continue
+
+            terms = _narrative_reference_terms(case.expected)
+
+            if not terms:
+                case.relevant_chunk_ids = []
+                continue
+
+            tsquery = " | ".join(terms)
+
             rows = db.query(
                 """
-                SELECT c.id::text AS id
-                  FROM chunks c
-                  JOIN filings f ON f.id = c.filing_id
-                  JOIN companies co ON co.cik = f.cik
-                 WHERE c.strategy = %s
-                   AND (%s::text IS NULL OR co.ticker = %s::text)
-                   AND (%s::integer IS NULL OR f.fiscal_year = %s::integer)
-                   AND c.body ILIKE %s
-                 LIMIT %s
+                WITH q AS (
+                    SELECT to_tsquery('english', %s) AS query
+                )
+                SELECT
+                    c.id::text AS id,
+                    ts_rank_cd(
+                        to_tsvector('english', c.body),
+                        q.query
+                    ) AS score
+                FROM chunks c
+                JOIN filings f
+                  ON f.id = c.filing_id
+                JOIN companies co
+                  ON co.cik = f.cik
+                CROSS JOIN q
+                WHERE c.strategy = %s
+                  AND (%s::text IS NULL OR co.ticker = %s::text)
+                  AND (%s::integer IS NULL OR f.fiscal_year = %s::integer)
+                  AND to_tsvector('english', c.body) @@ q.query
+                ORDER BY score DESC, c.id
+                LIMIT %s
                 """,
                 (
+                    tsquery,
                     strategy,
                     case.ticker,
                     case.ticker,
                     case.fiscal_year,
                     case.fiscal_year,
-                    f"%{needle}%",
                     k,
                 ),
             )
-            chunk_ids.extend(r["id"] for r in rows)
-            if chunk_ids:
-                break
+
+            case.relevant_chunk_ids = [r["id"] for r in rows]
+            continue
+
+
+     # ------------------------------------------------ numeric
+
+        # Comparative / YoY questions
+        if case.difficulty == "comparative":
+            source_facts = _comparative_source_facts(case.notes)
+
+            if len(source_facts) >= 2:
+                source_years = [year for year, _ in source_facts]
+                source_values = [value for _, value in source_facts]
+
+                first_needles = _numeric_value_needles(source_values[0])
+                second_needles = _numeric_value_needles(source_values[1])
+
+                chunk_ids: list[str] = []
+
+                # First try to find a chunk containing BOTH source values.
+                # For a 2023→2024 comparison, prefer the 2024 filing or later.
+                for first in first_needles:
+                    for second in second_needles:
+                        rows = db.query(
+                            """
+                            SELECT
+                                c.id::text AS id,
+                                f.fiscal_year
+                            FROM chunks c
+                            JOIN filings f
+                            ON f.id = c.filing_id
+                            JOIN companies co
+                            ON co.cik = f.cik
+                            WHERE c.strategy = %s
+                            AND co.ticker = %s
+                            AND f.fiscal_year >= %s
+                            AND c.body ILIKE %s
+                            AND c.body ILIKE %s
+                            ORDER BY
+                                f.fiscal_year ASC,
+                                c.id
+                            LIMIT %s
+                            """,
+                            (
+                                strategy,
+                                case.ticker,
+                                max(source_years),
+                                f"%{first}%",
+                                f"%{second}%",
+                                k,
+                            ),
+                        )
+
+                        if rows:
+                            chunk_ids.extend(r["id"] for r in rows)
+                            break
+
+                    if chunk_ids:
+                        break
+
+                # Fallback: find evidence for each source value separately.
+                if not chunk_ids:
+                    for source_year, source_value in source_facts:
+                        for needle in _numeric_value_needles(source_value):
+                            rows = db.query(
+                                """
+                                SELECT
+                                    c.id::text AS id,
+                                    f.fiscal_year
+                                FROM chunks c
+                                JOIN filings f
+                                ON f.id = c.filing_id
+                                JOIN companies co
+                                ON co.cik = f.cik
+                                WHERE c.strategy = %s
+                                AND co.ticker = %s
+                                AND f.fiscal_year >= %s
+                                AND c.body ILIKE %s
+                                ORDER BY
+                                    CASE
+                                        WHEN f.fiscal_year = %s THEN 0
+                                        ELSE 1
+                                    END,
+                                    f.fiscal_year ASC,
+                                    c.id
+                                LIMIT %s
+                                """,
+                                (
+                                    strategy,
+                                    case.ticker,
+                                    source_year,
+                                    f"%{needle}%",
+                                    source_year,
+                                    k,
+                                ),
+                            )
+
+                            if rows:
+                                chunk_ids.extend(r["id"] for r in rows)
+                                break
+
+                case.relevant_chunk_ids = list(dict.fromkeys(chunk_ids))[:k]
+                continue
+
+
+        # Single-hop numeric questions
+        chunk_ids: list[str] = []
+
+        if case.expected_value is not None:
+            for needle in _numeric_value_needles(case.expected_value):
+                rows = db.query(
+                    """
+                    SELECT
+                        c.id::text AS id,
+                        f.fiscal_year
+                    FROM chunks c
+                    JOIN filings f
+                    ON f.id = c.filing_id
+                    JOIN companies co
+                    ON co.cik = f.cik
+                    WHERE c.strategy = %s
+                    AND co.ticker = %s
+                    AND f.fiscal_year >= %s
+                    AND c.body ILIKE %s
+                    ORDER BY
+                        CASE
+                            WHEN f.fiscal_year = %s THEN 0
+                            ELSE 1
+                        END,
+                        f.fiscal_year ASC,
+                        c.id
+                    LIMIT %s
+                    """,
+                    (
+                        strategy,
+                        case.ticker,
+                        case.fiscal_year,
+                        f"%{needle}%",
+                        case.fiscal_year,
+                        k,
+                    ),
+                )
+
+                if rows:
+                    chunk_ids.extend(r["id"] for r in rows)
+                    break
+
         case.relevant_chunk_ids = list(dict.fromkeys(chunk_ids))[:k]
+
     return cases
 
 

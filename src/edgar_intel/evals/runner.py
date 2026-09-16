@@ -90,6 +90,7 @@ def answer_question(
     item_boost: float | None = None,
     context_max_chars: int | None = None,
     context_packing: str = "greedy-stop",
+    trace: dict[str, Any] | None = None,
 ) -> tuple[str, dict[str, Any], int, int, int, Any, Any]:
     """Retrieve, then answer.
 
@@ -132,8 +133,19 @@ def answer_question(
         max_chars=context_max_chars or DEFAULT_CONTEXT_MAX_CHARS,
         packing=context_packing,
     )
+    prompt = ANSWER_TEMPLATE.format(context=context_report.text, question=case.question)
+    if trace is not None:
+        # The literal bytes sent, captured here rather than re-rendered by the
+        # caller. A "reconstructed" prompt is a second implementation of the
+        # same formatting, and two implementations are one more than can be
+        # trusted when the question is what the model actually read.
+        trace["system"] = ANSWER_SYSTEM
+        trace["prompt"] = prompt
+        trace["context"] = context_report.text
+        trace["max_tokens"] = 600
+
     completion = get_llm().complete(
-        ANSWER_TEMPLATE.format(context=context_report.text, question=case.question),
+        prompt,
         system=ANSWER_SYSTEM,
         temperature=0.0,
         max_tokens=600,
@@ -148,6 +160,10 @@ def answer_question(
         # failing the case for a formatting slip would confound schema
         # adherence with factual accuracy, which are different problems.
         answer = completion.text.strip()
+
+    if trace is not None:
+        trace["raw_completion"] = completion.text
+        trace["model"] = completion.model
 
     latency_ms = int((time.perf_counter() - started) * 1000)
     return (

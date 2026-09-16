@@ -223,6 +223,32 @@ def run_arm(
     return arm
 
 
+def default_report_name(
+    context_max_chars: int,
+    item_boost: float,
+    use_rerank_settings: tuple[bool, ...],
+    packing: str,
+    prefix: str = "reports/context_probe",
+) -> str:
+    """A filename that encodes the arm, so two runs cannot collide.
+
+    The 20k and 24k runs were both written to `context_probe_16k.json` because
+    the name was typed by hand and `--out` carried over. The 20k evidence is
+    gone. A harness that silently overwrites the previous experiment is the same
+    defect as a report that silently truncates failures: the measurement is
+    fine, the record of it is not.
+    """
+    parts = [f"{context_max_chars // 1000}k"]
+    parts.append(f"boost{item_boost:g}".replace(".", "_"))
+    if use_rerank_settings == (True,):
+        parts.append("rerank")
+    elif use_rerank_settings == (False,):
+        parts.append("norerank")
+    if packing != "greedy-stop":
+        parts.append(packing)
+    return f"{prefix}_{'_'.join(parts)}.json"
+
+
 def probe(
     cases: list[EvalCase],
     top_n_grid: tuple[int, ...] = DEFAULT_TOP_N_GRID,
@@ -234,7 +260,8 @@ def probe(
     item_boost: float | None = None,
     context_max_chars: int = DEFAULT_CONTEXT_MAX_CHARS,
     context_packing: str = "greedy-stop",
-    out_path: str = "reports/context_probe.json",
+    out_path: str | None = None,
+    overwrite: bool = False,
     progress=None,
 ) -> dict[str, Any]:
     """Every (top_n, rerank) arm over every case, repeated `repeats` times.
@@ -250,6 +277,15 @@ def probe(
     k = k or s.retrieve_k
     boost = s.item_boost_weight if item_boost is None else item_boost
     sha = git_sha()
+
+    out_path = out_path or default_report_name(
+        context_max_chars, boost, rerank_settings, context_packing
+    )
+    if os.path.exists(out_path) and not overwrite:
+        raise FileExistsError(
+            f"{out_path} already exists. Experiment records are evidence; pass "
+            "--overwrite to replace it, or let the default name encode the arm."
+        )
 
     arms: list[ProbeArm] = []
     for case in cases:
@@ -280,6 +316,7 @@ def probe(
             "rerank_model": s.rerank_model,
             "repeats": repeats,
         },
+        "out_path": out_path,
         "cases": [c.case_id for c in cases],
         "arms": [asdict(a) for a in arms],
         "rows": [a.row() for a in arms],

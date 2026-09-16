@@ -366,7 +366,8 @@ def eval_context_probe(
     context_packing: str = typer.Option(
         "greedy-stop", help="greedy-stop (shipped) | skip-oversized"
     ),
-    out: str = typer.Option("reports/context_probe.json"),
+    out: str = typer.Option("", help="Report path. Empty = a name derived from the arm."),
+    overwrite: bool = typer.Option(False, help="Replace an existing report."),
 ) -> None:
     """Probe one case across a top_n x rerank grid and say where the evidence is lost.
 
@@ -406,22 +407,135 @@ def eval_context_probe(
             f"{arm.total_ms} ms" + (f"  [red]{arm.error[:70]}[/red]" if arm.error else "")
         )
 
-    with console.status("probing..."):
-        payload = probe(
-            cases,
-            top_n_grid=grid,
-            rerank_settings=rerank_settings,
-            repeats=repeats,
-            item_boost=None if item_boost < 0 else item_boost,
-            context_max_chars=context_max_chars,
-            context_packing=context_packing,
-            out_path=out,
-            progress=progress,
-        )
+    try:
+        with console.status("probing..."):
+            payload = probe(
+                cases,
+                top_n_grid=grid,
+                rerank_settings=rerank_settings,
+                repeats=repeats,
+                item_boost=None if item_boost < 0 else item_boost,
+                context_max_chars=context_max_chars,
+                context_packing=context_packing,
+                out_path=out or None,
+                overwrite=overwrite,
+                progress=progress,
+            )
+    except FileExistsError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from exc
 
     console.print()
     _table("context probe", payload["rows"])
     console.print(f"[bold]{payload['recommendation']}[/bold]")
+    console.print(f"[dim]full report: {payload['out_path']}[/dim]")
+
+
+@eval_app.command("autopsy")
+def eval_autopsy(
+    path: str = typer.Option("evalset/one_case.json"),
+    case_id: str = typer.Option("", help="Which case; defaults to the first in the file."),
+    top_n: int = typer.Option(16),
+    rerank: bool = typer.Option(False),
+    item_boost: float = typer.Option(2.0),
+    context_max_chars: int = typer.Option(24000),
+    context_packing: str = typer.Option("greedy-stop"),
+    facts: str = typer.Option("", help="label=regex; label=regex. Empty = derive from the reference."),
+    replay: int = typer.Option(0, help="Regenerate N times from the saved prompt, retrieval bypassed."),
+    judge_replay: int = typer.Option(0, help="Re-judge the saved answer N times."),
+    judge_model: str = typer.Option("", help="Override the judge for the replay only."),
+    show_context: bool = typer.Option(False, help="Print the exact context sent to the model."),
+    out: str = typer.Option("reports/autopsy.json"),
+) -> None:
+    """Dissect one case end to end: prompt in, answer out, verdict, and why.
+
+    Use when the context probe says the evidence reached the model and the case
+    fails anyway. Everything downstream of retrieval is separable only if you
+    can read the literal bytes at each boundary, so this prints them: the hits
+    in prompt order, the exact context, the exact answer, the exact judge
+    rationale, and a literal search of the prompt for every fact the reference
+    requires -- searched in the text, never inferred from the gold label.
+    """
+    from .evals import autopsy as ap
+    from .evals.goldenset import load
+
+    cases = load(path)
+    if case_id:
+        cases = [c for c in cases if c.case_id == case_id]
+    if not cases:
+        console.print(f"[red]no cases in {path}[/red]")
+        raise typer.Exit(1)
+    case = cases[0]
+
+    with console.status(f"dissecting {case.case_id}..."):
+        report = ap.autopsy(
+            case,
+            top_n=top_n,
+            use_rerank=rerank,
+            item_boost=item_boost,
+            context_max_chars=context_max_chars,
+            context_packing=context_packing,
+            facts=ap.parse_fact_spec(facts) if facts else None,
+            out_path=out,
+        )
+
+    if report.error:
+        console.print(f"[red]{report.error}[/red]")
+        raise typer.Exit(1)
+
+    console.print(f"\n[bold]HITS IN FINAL-PROMPT ORDER[/bold] (config: {json.dumps(report.config)})")
+    _table(
+        "selected hits",
+        [
+            {
+                "rank": h["prompt_rank"],
+                "chunk_id": h["chunk_id"],
+                "item": h["item"] or "-",
+                "gold": "YES" if h["relevant"] else "",
+                "in_prompt": "yes" if h["included_in_prompt"] else "CUT",
+                "chars": h["body_chars"],
+                "preview": h["body_preview"][:90].replace("\n", " "),
+            }
+            for h in report.hits
+        ],
+    )
+
+    console.print(
+        f"\n[bold]GOLD EVIDENCE[/bold]  included={report.gold_included}  "
+        f"cut by cap={report.gold_excluded_by_cap}  never retrieved={report.gold_never_retrieved}"
+    )
+    _table("gold link quality", report.gold_link_quality)
+
+    console.print("\n[bold]FACT COVERAGE[/bold] (literal search of the rendered prompt)")
+    _table("coverage", report.coverage_rows())
+
+    if show_context:
+        console.print("\n[bold]EXACT CONTEXT SENT TO THE MODEL[/bold]")
+        console.print(report.context_text)
+
+    console.print("\n[bold]REFERENCE[/bold]\n" + report.reference)
+    console.print("\n[bold]GENERATED ANSWER[/bold]\n" + report.answer)
+    console.print(
+        f"\n[bold]VERDICT[/bold] {'PASS' if report.passed else 'FAIL'}  "
+        f"(p_tok={report.prompt_tokens} c_tok={report.completion_tokens}"
+        f"/{report.max_completion_tokens})"
+    )
+    console.print("[bold]JUDGE RATIONALE[/bold]\n" + report.judge_rationale)
+
+    judge_runs = None
+    if replay:
+        console.print(f"\n[bold]GENERATION REPLAY[/bold] x{replay} (retrieval bypassed)")
+        for row in ap.replay_generation(report, replay):
+            console.print(json.dumps(row, indent=2)[:1400])
+    if judge_replay:
+        console.print(f"\n[bold]JUDGE REPLAY[/bold] x{judge_replay} (answer held fixed)")
+        judge_runs = ap.replay_judge(
+            report, repeats=judge_replay, judge_model=judge_model or None
+        )
+        for row in judge_runs:
+            console.print(json.dumps(row, indent=2)[:900])
+
+    console.print(f"\n[bold]{ap.diagnose(report, judge_runs)}[/bold]")
     console.print(f"[dim]full report: {out}[/dim]")
 
 

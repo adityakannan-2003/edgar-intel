@@ -472,6 +472,187 @@ def flips(
     return sorted(rows, key=lambda r: ("REGRESSION" not in r["effect"], r["pair_id"]))
 
 
+@dataclass(slots=True)
+class PairConfusion:
+    """Confusion counted once per labelled pair, not once per repeat.
+
+    The human labelled 24 answers. Counting three repeats of each as three
+    observations puts n at 72, which is not 72 independent samples of human
+    agreement -- it is 24 items measured three times. It inflates confidence
+    without adding information: v2 reads kappa 0.5556 with CI [0.37, 0.74] at
+    the repeat level and 0.4167 with CI [0.12, 0.74] per pair. The second is
+    the honest one.
+
+    Repeats still earn their cost: they measure whether the judge is stable on
+    an item, reported separately as `unstable_pairs`.
+    """
+
+    contract: str
+    model: str
+    tp: int = 0
+    fn: int = 0
+    fp: int = 0
+    tn: int = 0
+    unstable_pairs: list[str] = field(default_factory=list)
+
+    @property
+    def n(self) -> int:
+        return self.tp + self.fn + self.fp + self.tn
+
+    @property
+    def kappa(self) -> float:
+        cell = CellSummary(self.contract, self.model)
+        cell.tp, cell.fn, cell.fp, cell.tn = self.tp, self.fn, self.fp, self.tn
+        return cell.kappa
+
+    def kappa_ci(self, iterations: int = 2000) -> tuple[float, float]:
+        cell = CellSummary(self.contract, self.model)
+        cell.tp, cell.fn, cell.fp, cell.tn = self.tp, self.fn, self.fp, self.tn
+        return cell.kappa_ci(iterations)
+
+    def row(self) -> dict[str, Any]:
+        lo, hi = self.kappa_ci()
+        return {
+            "contract": self.contract,
+            "kappa": round(self.kappa, 4),
+            "kappa_95ci": f"[{lo:.2f}, {hi:.2f}]",
+            "agreement": f"{self.tp + self.tn}/{self.n}",
+            "FP": self.fp,
+            "FN": self.fn,
+            "unstable": len(self.unstable_pairs),
+        }
+
+
+def confusion_by_pair(runs: list[JudgeRun]) -> list[PairConfusion]:
+    """One verdict per pair by majority, then the confusion against human labels."""
+    human: dict[str, bool] = {}
+    for r in runs:
+        human.setdefault(r.pair_id, r.expected_verdict)
+
+    tallies: dict[tuple[str, str, str], list[int]] = {}
+    for r in runs:
+        if r.error or r.verdict is None:
+            continue
+        tallies.setdefault((r.contract, r.model, r.pair_id), [0, 0])[int(bool(r.verdict))] += 1
+
+    out: dict[tuple[str, str], PairConfusion] = {}
+    for (contract, model, pair_id), (fails, passes) in tallies.items():
+        cell = out.setdefault((contract, model), PairConfusion(contract, model))
+        decided = passes > fails
+        if fails and passes:
+            cell.unstable_pairs.append(pair_id)
+        expected = human.get(pair_id, True)
+        if expected and decided:
+            cell.tp += 1
+        elif expected and not decided:
+            cell.fn += 1
+        elif not expected and decided:
+            cell.fp += 1
+        else:
+            cell.tn += 1
+    return sorted(out.values(), key=lambda c: (c.contract, c.model))
+
+
+# --------------------------------------------------------- adoption criteria
+DEFAULT_CRITERIA: dict[str, Any] = {
+    "max_new_false_negatives": 0,
+    "max_false_positives": 4,
+    "min_kappa": 0.60,
+    "must_pass": ["nar-PG-fx-exposure", "nar-PG-legal"],
+    "must_fail": [
+        "nar-CAT-fx-exposure",
+        "nar-AAPL-supply-concentration",
+        "nar-COST-supply-concentration",
+    ],
+}
+
+
+def check_adoption(
+    runs: list[JudgeRun],
+    candidate: str,
+    baseline: str,
+    model: str | None = None,
+    criteria: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Score a candidate contract against a declared, named acceptance gate.
+
+    Declared before the run and checked mechanically, because an aggregate can
+    be satisfied by the wrong cases. v3 reached kappa 0.6667 -- above the
+    threshold -- by fixing three false positives and breaking two correct
+    answers. A kappa-only rule would have adopted it.
+
+    Every clause is reported, pass or fail, so a near-miss is legible rather
+    than hidden behind one boolean.
+    """
+    spec = {**DEFAULT_CRITERIA, **(criteria or {})}
+    model = model or next((r.model for r in runs), "")
+    decided = majority_verdicts(runs)
+    by_pair = {c.contract: c for c in confusion_by_pair(runs)}
+    cell = by_pair.get(candidate)
+    flip_rows = flips(runs, baseline, candidate, model)
+    new_fn = [r for r in flip_rows if "new false negative" in r["effect"]]
+
+    clauses: list[dict[str, Any]] = [
+        {
+            "clause": "new false negatives = 0",
+            "observed": len(new_fn),
+            "ok": len(new_fn) <= spec["max_new_false_negatives"],
+            "detail": ", ".join(r["pair_id"] for r in new_fn) or "-",
+        },
+        {
+            "clause": f"FP <= {spec['max_false_positives']}",
+            "observed": cell.fp if cell else "-",
+            "ok": bool(cell) and cell.fp <= spec["max_false_positives"],
+            "detail": "-",
+        },
+    ]
+    for pair_id in spec["must_pass"]:
+        got = decided.get((candidate, model, pair_id))
+        clauses.append(
+            {
+                "clause": f"{pair_id} = PASS",
+                "observed": "-" if got is None else ("PASS" if got else "FAIL"),
+                "ok": got is True,
+                "detail": "not graded" if got is None else "-",
+            }
+        )
+    for pair_id in spec["must_fail"]:
+        got = decided.get((candidate, model, pair_id))
+        clauses.append(
+            {
+                "clause": f"{pair_id} = FAIL",
+                "observed": "-" if got is None else ("PASS" if got else "FAIL"),
+                "ok": got is False,
+                "detail": "not graded" if got is None else "-",
+            }
+        )
+    kappa = cell.kappa if cell else 0.0
+    lo, hi = cell.kappa_ci() if cell else (0.0, 0.0)
+    clauses.append(
+        {
+            "clause": f"kappa >= {spec['min_kappa']}",
+            "observed": round(kappa, 4),
+            "ok": kappa >= spec["min_kappa"],
+            "detail": f"95% CI [{lo:.2f}, {hi:.2f}]",
+        }
+    )
+
+    adopted = all(c["ok"] for c in clauses)
+    failed = [c["clause"] for c in clauses if not c["ok"]]
+    return {
+        "candidate": candidate,
+        "baseline": baseline,
+        "adopted": adopted,
+        "clauses": clauses,
+        "failed_clauses": failed,
+        "summary": (
+            f"{candidate} MEETS every adoption clause."
+            if adopted
+            else f"{candidate} does NOT meet: {'; '.join(failed)}."
+        ),
+    }
+
+
 def regression_guard(flip_rows: list[dict[str, Any]]) -> tuple[bool, str]:
     """A new false negative is a stop, not a line item.
 

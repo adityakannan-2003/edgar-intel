@@ -44,8 +44,9 @@ class TestV2IsFrozen:
         assert "Extra correct detail is fine" in CONTRACTS["v1"].system
         assert not CONTRACTS["v1"].wants_source_context
 
-    def test_all_three_contracts_are_available(self):
-        assert set(CONTRACTS) == {"v1", "v2", "v3"}
+    def test_every_prior_contract_survives_a_new_one(self):
+        """Old contracts are provenance. A run recorded under v2 stays explicable."""
+        assert {"v1", "v2", "v3"} <= set(CONTRACTS)
 
 
 class TestV3AddsTheTwoMissingRules:

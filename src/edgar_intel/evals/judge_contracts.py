@@ -141,60 +141,126 @@ Return JSON only:
 )
 
 
+# v3's system prompt, as named blocks. Composing it this way is what lets v3_1
+# be provably "v3 plus exactly two insertions" rather than a retyped string that
+# has silently drifted -- the same reason contracts are versioned at all.
+_V3_OPENING = (
+    "You are evaluating whether a candidate answer correctly answers the "
+    "question, using the supplied reference answer and source context.\n\n"
+    "Judge the candidate on these dimensions:\n\n"
+    "1. Contradiction. Fail if the candidate makes a factual claim that "
+    "contradicts the reference or the supplied source context.\n\n"
+)
+
+_V3_MATERIAL_COMPLETENESS = (
+    "2. MATERIAL COMPLETENESS\n"
+    "A candidate must cover the central facts or categories necessary to "
+    "answer the question. An answer can be factually correct yet still FAIL "
+    "if it covers only one part of a multi-part disclosure while omitting "
+    "other material parts identified in the reference.\n\n"
+    "Do not treat every reference detail as mandatory. Distinguish supporting "
+    "detail from central answer content. But if removing an omitted fact "
+    "would materially change the reader's understanding of the company's "
+    "disclosure, the omission is material and the answer should FAIL.\n\n"
+)
+
+# The v3_1 delta, part one. v3 cleared kappa 0.60 and was blocked anyway: it
+# fixed three false positives and created two false negatives, failing P&G FX
+# and P&G legal -- correct answers whose references simply carried more
+# supporting detail. MATERIAL COMPLETENESS told the judge an incomplete answer
+# fails and never told it where completeness stops.
+_V3_1_MATERIALITY_BOUNDARY = (
+    "MATERIALITY BOUNDARY\n\n"
+    "Completeness does not mean exhaustiveness.\n\n"
+    "PASS an answer that states the central disclosure correctly even when it "
+    "omits supporting details, examples, dates, procedural history, monitoring "
+    "methods, secondary quantitative figures, or other facts that would merely "
+    "make the answer more complete.\n\n"
+    "An omission is material only when it removes a distinct central claim, "
+    "category, event, driver, exposure, or relationship needed to answer the "
+    "question, or when the omission changes the reader's understanding of the "
+    "company's disclosure.\n\n"
+    "Before failing for omission, ask:\n\n"
+    "\"If the omitted information were added, would it materially change what "
+    "the answer says, or would it only add supporting detail?\"\n\n"
+    "If it would only add supporting detail, do not fail the answer.\n\n"
+    "For references containing many details, do not require every reference "
+    "fact. Identify the smallest set of central claims necessary to answer the "
+    "question correctly and grade coverage against those claims.\n\n"
+)
+
+_V3_SCOPE_AND_SUPPORT = (
+    "3. SCOPE FIDELITY\n"
+    "The candidate must preserve the scope of the disclosed fact.\n\n"
+    "Company-wide results must not be replaced by segment-level results.\n"
+    "One business unit's exposure must not be presented as the company's "
+    "primary exposure unless the source supports that characterization.\n"
+    "Adjacent risks are not substitutes for the specific risk asked about.\n\n"
+    "A response containing true source-supported facts can still FAIL when "
+    "those facts answer a narrower, different, or adjacent question.\n\n"
+    "4. Unsupported material claims. Extra detail is allowed. Do not fail "
+    "merely because a detail is absent from the reference. Fail extra detail "
+    "only when it is contradicted by the supplied source context or cannot "
+    "reasonably be supported by it.\n\n"
+    "When comparing REFERENCE and CANDIDATE:\n"
+    "1. Identify the central claims required to answer the question.\n"
+    "2. Check whether the candidate covers those central claims.\n"
+    "3. Check whether company/segment, period, category, and causal scope "
+    "match.\n"
+    "4. Only then evaluate unsupported or contradictory details.\n\n"
+    "Important:\n"
+    "- The reference is a concise answer key, not an exhaustive list of every "
+    "permissible fact.\n"
+    "- \"Not mentioned in the reference\" does not mean \"incorrect.\"\n"
+    "- Paraphrases and equivalent terminology are acceptable.\n"
+    "- Do not require the candidate to reproduce every minor detail or exact "
+    "wording from the reference.\n"
+    "- A hedge that avoids answering the question is not correct.\n\n"
+    "Do not PASS merely because every sentence in the candidate is true.\n"
+    "The candidate must answer the question materially and at the correct "
+    "scope.\n\n"
+)
+
+# The v3_1 delta, part two: the counterweight to "Do not PASS merely because
+# every sentence is true". Without it that instruction has no opposing force and
+# the judge drifts strict, which is what the two P&G false negatives were.
+_V3_1_DO_NOT_FAIL = (
+    "Do not FAIL a substantively correct answer merely because the reference "
+    "is more detailed.\n\n"
+)
+
+_V3_CLOSING = "Reply with JSON only."
+
+
 V3 = JudgeContract(
     name="v3",
     system=(
-        "You are evaluating whether a candidate answer correctly answers the "
-        "question, using the supplied reference answer and source context.\n\n"
-        "Judge the candidate on these dimensions:\n\n"
-        "1. Contradiction. Fail if the candidate makes a factual claim that "
-        "contradicts the reference or the supplied source context.\n\n"
-        "2. MATERIAL COMPLETENESS\n"
-        "A candidate must cover the central facts or categories necessary to "
-        "answer the question. An answer can be factually correct yet still FAIL "
-        "if it covers only one part of a multi-part disclosure while omitting "
-        "other material parts identified in the reference.\n\n"
-        "Do not treat every reference detail as mandatory. Distinguish supporting "
-        "detail from central answer content. But if removing an omitted fact "
-        "would materially change the reader's understanding of the company's "
-        "disclosure, the omission is material and the answer should FAIL.\n\n"
-        "3. SCOPE FIDELITY\n"
-        "The candidate must preserve the scope of the disclosed fact.\n\n"
-        "Company-wide results must not be replaced by segment-level results.\n"
-        "One business unit's exposure must not be presented as the company's "
-        "primary exposure unless the source supports that characterization.\n"
-        "Adjacent risks are not substitutes for the specific risk asked about.\n\n"
-        "A response containing true source-supported facts can still FAIL when "
-        "those facts answer a narrower, different, or adjacent question.\n\n"
-        "4. Unsupported material claims. Extra detail is allowed. Do not fail "
-        "merely because a detail is absent from the reference. Fail extra detail "
-        "only when it is contradicted by the supplied source context or cannot "
-        "reasonably be supported by it.\n\n"
-        "When comparing REFERENCE and CANDIDATE:\n"
-        "1. Identify the central claims required to answer the question.\n"
-        "2. Check whether the candidate covers those central claims.\n"
-        "3. Check whether company/segment, period, category, and causal scope "
-        "match.\n"
-        "4. Only then evaluate unsupported or contradictory details.\n\n"
-        "Important:\n"
-        "- The reference is a concise answer key, not an exhaustive list of every "
-        "permissible fact.\n"
-        "- \"Not mentioned in the reference\" does not mean \"incorrect.\"\n"
-        "- Paraphrases and equivalent terminology are acceptable.\n"
-        "- Do not require the candidate to reproduce every minor detail or exact "
-        "wording from the reference.\n"
-        "- A hedge that avoids answering the question is not correct.\n\n"
-        "Do not PASS merely because every sentence in the candidate is true.\n"
-        "The candidate must answer the question materially and at the correct "
-        "scope.\n\n"
-        "Reply with JSON only."
+        _V3_OPENING
+        + _V3_MATERIAL_COMPLETENESS
+        + _V3_SCOPE_AND_SUPPORT
+        + _V3_CLOSING
     ),
     template=V2.template,
     wants_source_context=True,
 )
 
 
-CONTRACTS: dict[str, JudgeContract] = {c.name: c for c in (V1, V2, V3)}
+V3_1 = JudgeContract(
+    name="v3_1",
+    system=(
+        _V3_OPENING
+        + _V3_MATERIAL_COMPLETENESS
+        + _V3_1_MATERIALITY_BOUNDARY      # inserted directly after completeness
+        + _V3_SCOPE_AND_SUPPORT
+        + _V3_1_DO_NOT_FAIL               # inserted beside the verdict instruction
+        + _V3_CLOSING
+    ),
+    template=V2.template,
+    wants_source_context=True,
+)
+
+
+CONTRACTS: dict[str, JudgeContract] = {c.name: c for c in (V1, V2, V3, V3_1)}
 
 # The shipped contract. Still v1 until the A/B says otherwise -- a rubric change
 # applied before it is measured would make every run before it incomparable and

@@ -670,7 +670,20 @@ def eval_judge_kappa(
     cells = lab.summarise(runs)
     payload = lab.save_runs(runs, cells, out)
     console.print()
-    _table("kappa against human labels", [c.row() for c in cells])
+
+    # Headline kappa is per labelled pair, by majority over repeats. Counting
+    # each repeat separately treats 24 items measured 3 times as 72 independent
+    # observations and narrows the interval without adding information.
+    by_pair = lab.confusion_by_pair(runs)
+    _table("kappa against human labels (per pair, majority of repeats)",
+           [c.row() for c in by_pair])
+    unstable = {p for c in by_pair for p in c.unstable_pairs}
+    if unstable:
+        console.print(
+            f"[yellow]{len(unstable)} pair(s) where repeats disagreed: "
+            f"{', '.join(sorted(unstable))}[/yellow]"
+        )
+    payload["by_pair"] = [c.row() for c in by_pair]
 
     if len(contract_list) >= 2:
         model = model_list[0] if model_list else next((r.model for r in runs), "")
@@ -683,6 +696,18 @@ def eval_judge_kappa(
         console.print(f"[{'green' if ok else 'red'}]{message}[/{'green' if ok else 'red'}]")
         payload["flips"] = flip_rows
         payload["regression_guard"] = message
+
+        # The declared gate, checked clause by clause. An aggregate can be
+        # satisfied by the wrong cases: v3 reached kappa 0.6667 by fixing three
+        # false positives and breaking two correct answers.
+        adoption = lab.check_adoption(
+            runs, candidate=contract_list[-1], baseline=contract_list[0], model=model
+        )
+        _table(f"adoption criteria: {adoption['candidate']}", adoption["clauses"])
+        colour = "green" if adoption["adopted"] else "red"
+        console.print(f"[{colour}]{adoption['summary']}[/{colour}]")
+        payload["adoption"] = adoption
+
         with open(out, "w", encoding="utf-8") as fh:
             json.dump(payload, fh, indent=2)
 

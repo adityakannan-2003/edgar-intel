@@ -779,11 +779,10 @@ def pairs_from_labels(run_key: str) -> list[FrozenPair]:
     human labels test whether it catches *plausible* breakage. Only the second
     predicts behaviour in a run.
 
-    `source_context` is empty here: the answer text is stored in `eval_results`,
-    the passages are not. Contracts that want context will render "(not
-    supplied)" and that is visible in the prompt, but it means this set compares
-    contracts under a context-free judge. Pair with an autopsy-frozen set to
-    cover the with-context case.
+    New eval runs persist both the original question and the exact source
+    context shown to the production judge. That makes human-labelled answers
+    replayable under later judge contracts without changing the evidence the
+    judge sees.
     """
     from .. import db
 
@@ -795,7 +794,7 @@ def pairs_from_labels(run_key: str) -> list[FrozenPair]:
             question=row.get("question") or row["case_id"],
             reference=row["expected"] or "",
             answer=row["answer"] or "",
-            source_context="",
+            source_context=row.get("context_text") or "",
             expected_verdict=bool(row["human_label"]),
             label="human-pass" if row["human_label"] else "human-fail",
             provenance=f"human label on {run_key}",
@@ -821,7 +820,7 @@ def _labelled_rows(run_key: str) -> list[dict[str, Any]]:
     }
     rows = db.query(
         """
-        SELECT r.case_id, r.answer, r.expected
+        SELECT r.case_id, r.question, r.answer, r.expected, r.context_text
           FROM eval_results r
           JOIN eval_runs u ON u.id = r.run_id
          WHERE u.run_key = %s AND r.kind = 'narrative'

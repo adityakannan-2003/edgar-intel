@@ -134,6 +134,8 @@ CREATE TABLE IF NOT EXISTS eval_results (
     cost_usd       DOUBLE PRECISION,
     answer         TEXT,
     expected       TEXT,
+    question       TEXT,
+    context_text   TEXT,
     judge_rationale TEXT,
     UNIQUE (run_id, case_id)
 );

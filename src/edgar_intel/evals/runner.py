@@ -232,13 +232,15 @@ def run_suite(
     results: list[CaseResult] = []
     infra_errors = 0
     for i, case in enumerate(cases, start=1):
+        source_context = ""
         try:
             answer, retrieval, latency, p_tok, c_tok, _hits, _ctx = answer_question(
                 case, strategy, mode, use_rerank, k, top_n
             )
+            source_context = _ctx.text
             result = build_result(
                 case, answer, retrieval, latency, p_tok, c_tok,
-                source_context=_ctx.text,
+                source_context=source_context,
             )
         except Exception as exc:
             message = str(exc)[:500]
@@ -254,7 +256,12 @@ def run_suite(
                 error=message,
             )
         results.append(result)
-        _persist_result(run_id, result)
+        _persist_result(
+            run_id,
+            result,
+            question=case.question,
+            source_context=source_context,
+        )
 
         # Fail fast rather than burning 230 more cases against a dead endpoint.
         # Checked only after a sample large enough to distinguish a bad key from
@@ -294,15 +301,29 @@ def run_suite(
     return run_id, summary
 
 
-def _persist_result(run_id: int, result: CaseResult) -> None:
+def _persist_result(
+    run_id: int,
+    result: CaseResult,
+    question: str = "",
+    source_context: str = "",
+) -> None:
     db.execute(
         """
-        INSERT INTO eval_results (run_id, case_id, kind, passed, score, retrieval,
-                                  latency_ms, prompt_tokens, completion_tokens, cost_usd,
-                                  answer, expected, judge_rationale)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO eval_results (
+            run_id, case_id, kind, passed, score, retrieval,
+            latency_ms, prompt_tokens, completion_tokens, cost_usd,
+            answer, expected, judge_rationale, question, context_text
+        )
+        VALUES (
+            %s, %s, %s, %s, %s, %s,
+            %s, %s, %s, %s,
+            %s, %s, %s, %s, %s
+        )
         ON CONFLICT (run_id, case_id) DO UPDATE
-           SET passed = EXCLUDED.passed, score = EXCLUDED.score
+           SET passed = EXCLUDED.passed,
+               score = EXCLUDED.score,
+               question = EXCLUDED.question,
+               context_text = EXCLUDED.context_text
         """,
         (
             run_id,
@@ -318,6 +339,8 @@ def _persist_result(run_id: int, result: CaseResult) -> None:
             result.answer[:4000],
             result.expected[:2000],
             (result.judge_rationale or result.error)[:1000],
+            question,
+            source_context,
         ),
     )
 

@@ -448,19 +448,39 @@ def sample_for_labelling(run_id: int, n: int = 40) -> list[dict]:
     )
 
 
-def grade(case: EvalCase, answer: str) -> tuple[bool, float, str, JudgeVerdict | None]:
-    """Route a case to the right grader."""
+def grade(
+    case: EvalCase, answer: str, source_context: str = ""
+) -> tuple[bool, float, str, JudgeVerdict | None]:
+    """Route a case to the right grader.
+
+    `source_context` is the passages the answer was generated from. The v2
+    contract asks the judge to fail extra detail "only when it is contradicted
+    by the supplied source context or cannot reasonably be supported by it" --
+    a rule that needs the context to be supplied.
+
+    It was not. This function called `judge_narrative(case, answer)` with no
+    context, so `baseline-v4` graded all 24 narrative cases with the SOURCE
+    CONTEXT block rendered as "(not supplied)". The judge could only compare
+    extra detail against the reference, which is v1's failure mode wearing v2's
+    text, and `nar-COST-supply-concentration` failed for exactly that reason:
+    "includes additional risks such as labor disputes and climate change that
+    are not mentioned in the reference".
+
+    Same shape as the item_boost defect: a parameter that reached the
+    experiment harness and not the production path.
+    """
     if case.kind == "numeric":
         passed, score, rationale = grade_numeric(case, answer)
         return passed, score, rationale, None
-    verdict = judge_narrative(case, answer)
+    verdict = judge_narrative(case, answer, source_context=source_context)
     return verdict.verdict, 1.0 if verdict.verdict else 0.0, verdict.rationale, verdict
 
 
 def build_result(case: EvalCase, answer: str, retrieval: dict, latency_ms: int,
-                 prompt_tokens: int, completion_tokens: int) -> CaseResult:
+                 prompt_tokens: int, completion_tokens: int,
+                 source_context: str = "") -> CaseResult:
     s = get_settings()
-    passed, score, rationale, verdict = grade(case, answer)
+    passed, score, rationale, verdict = grade(case, answer, source_context)
     abstained = case.kind == "numeric" and is_abstention(answer)
     p_tok = prompt_tokens + (verdict.prompt_tokens if verdict else 0)
     c_tok = completion_tokens + (verdict.completion_tokens if verdict else 0)

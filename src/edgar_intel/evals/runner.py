@@ -202,6 +202,11 @@ def run_suite(
         "llm_model": s.llm_model,
         "judge_model": s.judge_model,
         "judge_contract": get_contract().name,
+        # Whether the judge was actually shown the passages it is asked to check
+        # against. A contract that wants context and did not get it is a third
+        # configuration nobody calibrated, and baseline-v4 ran in exactly that
+        # state without the config saying so.
+        "judge_sees_source_context": get_contract().wants_source_context,
         "embed_provider": s.embed_provider,
         "embed_model": s.embed_model,
         "llm_provider": s.llm_provider,
@@ -231,7 +236,10 @@ def run_suite(
             answer, retrieval, latency, p_tok, c_tok, _hits, _ctx = answer_question(
                 case, strategy, mode, use_rerank, k, top_n
             )
-            result = build_result(case, answer, retrieval, latency, p_tok, c_tok)
+            result = build_result(
+                case, answer, retrieval, latency, p_tok, c_tok,
+                source_context=_ctx.text,
+            )
         except Exception as exc:
             message = str(exc)[:500]
             if is_infra_error(message):

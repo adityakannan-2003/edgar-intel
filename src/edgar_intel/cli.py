@@ -615,6 +615,81 @@ def eval_judge_ab(
     console.print(f"[dim]full report: {out}[/dim]")
 
 
+@eval_app.command("judge-kappa")
+def eval_judge_kappa(
+    run_key: str = typer.Argument(..., help="Run whose human-labelled narrative answers to grade."),
+    contracts: str = typer.Option("v2,v3", help="Contracts to compare, baseline first."),
+    models: str = typer.Option("", help="Judge models. Empty = the configured one."),
+    repeats: int = typer.Option(3, help="Repeats per pair; verdicts taken by majority."),
+    out: str = typer.Option("reports/judge_kappa.json"),
+) -> None:
+    """Compare judge contracts against HUMAN labels, and report kappa per contract.
+
+    The human labels are the bar. Mutation controls measure whether a judge
+    catches breakage it can see; `reports/judge_v2_with_omission.json` scored
+    omission 8/8 while real omissions slipped past the same judge seven times on
+    the same run. Truncating an answer makes an obviously stunted one; a real
+    omission is fluent and covers part of a multi-part disclosure.
+
+    Reports kappa with a bootstrap interval, the confusion matrix, and the
+    per-case flips between contracts. On 24 labels a point estimate crossing
+    0.60 is not decisive on its own -- the false-positive count and which
+    specific cases changed are what distinguish a real fix from a lucky one.
+    """
+    from .evals import judge_lab as lab
+
+    pairs = lab.pairs_from_labels(run_key)
+    if not pairs:
+        console.print(f"[red]no human-labelled narrative answers for {run_key}[/red]")
+        console.print("[dim]run: edgar-intel eval label <run_key> --n 40[/dim]")
+        raise typer.Exit(1)
+
+    n_pass = sum(1 for p in pairs if p.expected_verdict)
+    console.print(
+        f"[dim]{len(pairs)} labelled pairs: {n_pass} human PASS, "
+        f"{len(pairs) - n_pass} human FAIL[/dim]"
+    )
+    if len(pairs) < 20:
+        console.print(
+            "[yellow]fewer than 20 labels: kappa is too noisy to act on[/yellow]"
+        )
+
+    contract_list = tuple(c.strip() for c in contracts.split(",") if c.strip())
+    model_list = tuple(m.strip() for m in models.split(",") if m.strip())
+
+    def progress(run) -> None:
+        if run.error:
+            console.print(f"  [red]{run.contract} {run.pair_id[:40]}: {run.error[:70]}[/red]")
+
+    with console.status("judging..."):
+        runs = lab.run_grid(
+            pairs, contracts=contract_list, models=model_list,
+            repeats=repeats, progress=progress,
+        )
+
+    cells = lab.summarise(runs)
+    payload = lab.save_runs(runs, cells, out)
+    console.print()
+    _table("kappa against human labels", [c.row() for c in cells])
+
+    if len(contract_list) >= 2:
+        model = model_list[0] if model_list else next((r.model for r in runs), "")
+        flip_rows = lab.flips(runs, contract_list[0], contract_list[-1], model)
+        _table(
+            f"per-case flips: {contract_list[0]} -> {contract_list[-1]}", flip_rows
+        ) if flip_rows else console.print("[yellow]no case changed verdict[/yellow]")
+
+        ok, message = lab.regression_guard(flip_rows)
+        console.print(f"[{'green' if ok else 'red'}]{message}[/{'green' if ok else 'red'}]")
+        payload["flips"] = flip_rows
+        payload["regression_guard"] = message
+        with open(out, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, indent=2)
+
+    console.print(f"\n[bold]{payload['verdict']}[/bold]")
+    console.print(f"[dim]full report: {out}[/dim]")
+
+
 @eval_app.command("retrieval")
 def eval_retrieval(
     path: str = typer.Option("evalset/golden.json"),
@@ -767,10 +842,25 @@ def eval_label(
         console.print(f"[bold]Expected:[/bold] {row['expected']}")
         console.print(f"[bold]Answer:[/bold]   {row['answer']}")
         console.print(f"[dim]judge said: {row['passed']} -- {row['judge_rationale']}[/dim]")
-        choice = typer.prompt("Correct? (y/n/s to skip)", default="s")
+        choice = typer.prompt("Is the judge's verdict correct? (y/n/s to skip)", default="s")
+
         if choice.lower().startswith("s"):
             continue
-        record_human_label(row["case_id"], row["answer"], choice.lower().startswith("y"))
+
+        judge_verdict = bool(row["passed"])
+        agrees_with_judge = choice.lower().startswith("y")
+
+        human_verdict = (
+            judge_verdict
+            if agrees_with_judge
+            else not judge_verdict
+        )
+
+        record_human_label(
+            row["case_id"],
+            row["answer"],
+            human_verdict,
+        )
 
     kappa = compute_kappa(calibration_pairs(run["id"]))
     console.print(kappa_verdict(kappa))

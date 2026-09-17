@@ -205,6 +205,77 @@ class CellSummary:
     bad_failed: int = 0
     errors: int = 0
     per_label: dict[str, str] = field(default_factory=dict)
+    # Confusion against the human label, which is what kappa is computed from.
+    # human PASS/judge PASS, human PASS/judge FAIL, human FAIL/judge PASS,
+    # human FAIL/judge FAIL.
+    tp: int = 0
+    fn: int = 0
+    fp: int = 0
+    tn: int = 0
+
+    @property
+    def kappa(self) -> float:
+        """Cohen's kappa against the human labels.
+
+        Reported instead of raw agreement because agreement flatters a skewed
+        judge. v2 agreed 17/24 = 70.8% with the human and scored kappa 0.4167:
+        it passed 79% of answers against a human pass rate of 50%, so chance
+        agreement was already 0.5 and the raw number was mostly luck.
+        """
+        n = self.tp + self.fn + self.fp + self.tn
+        if not n:
+            return 0.0
+        p_o = (self.tp + self.tn) / n
+        p_e = ((self.tp + self.fn) / n) * ((self.tp + self.fp) / n) + (
+            ((self.fp + self.tn) / n) * ((self.fn + self.tn) / n)
+        )
+        if p_e == 1.0:
+            return 1.0
+        return (p_o - p_e) / (1 - p_e)
+
+    @property
+    def agreement(self) -> float:
+        n = self.tp + self.fn + self.fp + self.tn
+        return (self.tp + self.tn) / n if n else 0.0
+
+    def kappa_ci(self, iterations: int = 2000, seed: int = 7) -> tuple[float, float]:
+        """Bootstrap 95% interval for kappa.
+
+        With 24 labels the interval is wide enough that crossing a 0.60
+        threshold can be sampling noise. `judge.compute_kappa` already refuses
+        fewer than 20 labels and its docstring says forty or more makes the
+        estimate reasonably stable; this reports the uncertainty rather than
+        leaving a single decimal to carry a decision.
+        """
+        import random
+
+        population = (
+            [(True, True)] * self.tp
+            + [(True, False)] * self.fn
+            + [(False, True)] * self.fp
+            + [(False, False)] * self.tn
+        )
+        if len(population) < 2:
+            return (0.0, 0.0)
+        rng = random.Random(seed)
+        draws: list[float] = []
+        for _ in range(iterations):
+            sample = [rng.choice(population) for _ in population]
+            cell = CellSummary(self.contract, self.model)
+            for human, judge in sample:
+                if human and judge:
+                    cell.tp += 1
+                elif human and not judge:
+                    cell.fn += 1
+                elif not human and judge:
+                    cell.fp += 1
+                else:
+                    cell.tn += 1
+            draws.append(cell.kappa)
+        draws.sort()
+        lo = draws[int(0.025 * len(draws))]
+        hi = draws[min(len(draws) - 1, int(0.975 * len(draws)))]
+        return (round(lo, 4), round(hi, 4))
 
     @property
     def good_pass_rate(self) -> float:
@@ -226,9 +297,15 @@ class CellSummary:
         return (self.good_pass_rate + self.bad_catch_rate) / 2
 
     def row(self) -> dict[str, Any]:
+        lo, hi = self.kappa_ci()
         return {
             "contract": self.contract,
             "model": self.model,
+            "kappa": round(self.kappa, 4),
+            "kappa_95ci": f"[{lo:.2f}, {hi:.2f}]",
+            "agreement": f"{self.tp + self.tn}/{self.tp + self.fn + self.fp + self.tn}",
+            "FP": self.fp,
+            "FN": self.fn,
             "good_pass": f"{self.good_passed}/{self.n_good}",
             "bad_caught": f"{self.bad_failed}/{self.n_bad}",
             "balanced_acc": round(self.balanced_accuracy, 3),
@@ -294,9 +371,17 @@ def summarise(runs: list[JudgeRun]) -> list[CellSummary]:
         if r.expected_verdict:
             cell.n_good += 1
             cell.good_passed += int(bool(r.verdict))
+            if r.verdict:
+                cell.tp += 1
+            else:
+                cell.fn += 1
         else:
             cell.n_bad += 1
             cell.bad_failed += int(not r.verdict)
+            if r.verdict:
+                cell.fp += 1
+            else:
+                cell.tn += 1
         bucket = label_totals.setdefault((r.contract, r.model, r.label), [0, 0])
         bucket[1] += 1
         bucket[0] += int(r.correct)
@@ -334,17 +419,117 @@ def single_variable_comparisons(cells: list[CellSummary]) -> list[dict[str, Any]
     return out
 
 
+def majority_verdicts(runs: list[JudgeRun]) -> dict[tuple[str, str, str], bool]:
+    """One verdict per (contract, model, pair), by majority over repeats."""
+    tally: dict[tuple[str, str, str], list[int]] = {}
+    for r in runs:
+        if r.error or r.verdict is None:
+            continue
+        bucket = tally.setdefault((r.contract, r.model, r.pair_id), [0, 0])
+        bucket[int(bool(r.verdict))] += 1
+    return {key: passes > fails for key, (fails, passes) in tally.items()}
+
+
+def flips(
+    runs: list[JudgeRun], baseline: str, candidate: str, model: str | None = None
+) -> list[dict[str, Any]]:
+    """Which individual cases changed verdict between two contracts.
+
+    With 7 false positives out of 24, the aggregate cannot tell a real fix from
+    a lucky one. A contract that flips the seven wrong cases is correct; one that
+    flips seven arbitrary cases lands on the same kappa and is not. Only the
+    per-case table distinguishes them.
+    """
+    human: dict[str, bool] = {}
+    for r in runs:
+        human.setdefault(r.pair_id, r.expected_verdict)
+
+    model = model or next((r.model for r in runs), "")
+    decided = majority_verdicts(runs)
+    rows: list[dict[str, Any]] = []
+    for pair_id, expected in human.items():
+        before = decided.get((baseline, model, pair_id))
+        after = decided.get((candidate, model, pair_id))
+        if before is None or after is None or before == after:
+            continue
+        if not expected and before and not after:
+            kind = "FIXED (false positive removed)"
+        elif expected and not before and after:
+            kind = "FIXED (false negative removed)"
+        elif expected and before and not after:
+            kind = "REGRESSION (new false negative)"
+        else:
+            kind = "REGRESSION (new false positive)"
+        rows.append(
+            {
+                "pair_id": pair_id[:44],
+                "human": "PASS" if expected else "FAIL",
+                baseline: "PASS" if before else "FAIL",
+                candidate: "PASS" if after else "FAIL",
+                "effect": kind,
+            }
+        )
+    return sorted(rows, key=lambda r: ("REGRESSION" not in r["effect"], r["pair_id"]))
+
+
+def regression_guard(flip_rows: list[dict[str, Any]]) -> tuple[bool, str]:
+    """A new false negative is a stop, not a line item.
+
+    The whole reason v1 was replaced is that it failed correct answers. A v3
+    that raises kappa by starting to do the same thing has not fixed the judge,
+    it has moved the error to the side that is harder to notice -- a wrongly
+    failed answer looks like a system bug and sends the next week into
+    retrieval.
+    """
+    new_fn = [r for r in flip_rows if "new false negative" in r["effect"]]
+    if new_fn:
+        names = ", ".join(r["pair_id"] for r in new_fn)
+        return False, (
+            f"BLOCKED: {len(new_fn)} new false negative(s) -- {names}. A stricter "
+            "rubric that starts failing correct answers is the v1 defect "
+            "returning, whatever it did to kappa."
+        )
+    return True, "No new false negatives."
+
+
 def verdict(cells: list[CellSummary], comparisons: list[dict[str, Any]]) -> str:
     lines: list[str] = []
     if not cells:
         return "no cells run"
 
-    best = max(cells, key=lambda c: c.balanced_accuracy)
-    lines.append(
-        f"Best cell: contract={best.contract} model={best.model}, "
-        f"balanced accuracy {best.balanced_accuracy:.3f} "
-        f"(good {best.good_passed}/{best.n_good}, bad caught {best.bad_failed}/{best.n_bad})."
-    )
+    labelled = [c for c in cells if (c.tp + c.fn + c.fp + c.tn) >= 20]
+    if labelled:
+        best = max(labelled, key=lambda c: c.kappa)
+        lo, hi = best.kappa_ci()
+        n = best.tp + best.fn + best.fp + best.tn
+        lines.append(
+            f"Best cell: contract={best.contract} model={best.model}, "
+            f"kappa {best.kappa:.4f} (95% CI [{lo:.2f}, {hi:.2f}], n={n}), "
+            f"agreement {best.tp + best.tn}/{n}, FP={best.fp}, FN={best.fn}."
+        )
+        if best.kappa >= 0.60 and lo < 0.60:
+            lines.append(
+                f"kappa clears 0.60 but its interval reaches {lo:.2f}. On {n} labels "
+                "that threshold crossing is not by itself decisive -- read the "
+                "false-positive count and the per-case flips, which do not depend "
+                "on a point estimate."
+            )
+    else:
+        best = max(cells, key=lambda c: c.balanced_accuracy)
+        lines.append(
+            f"Best cell: contract={best.contract} model={best.model}, "
+            f"balanced accuracy {best.balanced_accuracy:.3f} "
+            f"(good {best.good_passed}/{best.n_good}, bad caught {best.bad_failed}/{best.n_bad})."
+        )
+
+    one_sided = [c for c in cells if c.fp >= 3 and c.fn == 0]
+    if one_sided:
+        names = ", ".join(f"{c.contract}/{c.model}" for c in one_sided)
+        lines.append(
+            f"ONE-SIDED: {names} makes only false-positive errors. That is a "
+            "permissive judge rather than a noisy one, so the fix is a rule the "
+            "rubric is missing, not a stronger model."
+        )
 
     permissive = [c for c in cells if c.n_bad and c.bad_catch_rate < 0.6]
     if permissive:
@@ -396,6 +581,79 @@ def save_pairs(pairs: list[FrozenPair], path: str) -> str:
 def load_pairs(path: str) -> list[FrozenPair]:
     with open(path, encoding="utf-8") as fh:
         return [FrozenPair(**row) for row in json.load(fh)]
+
+
+def pairs_from_labels(run_key: str) -> list[FrozenPair]:
+    """Frozen pairs whose expected verdict is the HUMAN label, not a mutation.
+
+    These are better controls than anything `build_controls` produces, and the
+    24 labels proved it. The synthetic omission control -- truncate the answer to
+    its first two sentences -- scored 8/8 in
+    `reports/judge_v2_with_omission.json`, while real omissions slipped past the
+    same judge seven times in the same period. Truncation makes an obviously
+    stunted answer; a real omission is fluent, confident, and covers one part of
+    a multi-part disclosure.
+
+    So the mutations test whether the judge catches *detectable* breakage, and
+    human labels test whether it catches *plausible* breakage. Only the second
+    predicts behaviour in a run.
+
+    `source_context` is empty here: the answer text is stored in `eval_results`,
+    the passages are not. Contracts that want context will render "(not
+    supplied)" and that is visible in the prompt, but it means this set compares
+    contracts under a context-free judge. Pair with an autopsy-frozen set to
+    cover the with-context case.
+    """
+    from .. import db
+
+    rows = _labelled_rows(run_key)
+
+    return [
+        FrozenPair(
+            pair_id=row["case_id"],
+            question=row.get("question") or row["case_id"],
+            reference=row["expected"] or "",
+            answer=row["answer"] or "",
+            source_context="",
+            expected_verdict=bool(row["human_label"]),
+            label="human-pass" if row["human_label"] else "human-fail",
+            provenance=f"human label on {run_key}",
+        )
+        for row in rows
+    ]
+
+
+def _labelled_rows(run_key: str) -> list[dict[str, Any]]:
+    """Join eval_results to human labels on (case_id, answer_hash).
+
+    Matched on the answer hash rather than case_id alone, for the reason
+    `judge.calibration_pairs` already gives: a human label applies to the
+    specific answer that was labelled, and reusing it for a changed answer
+    inflates agreement.
+    """
+    from .. import db
+    from .judge import _hash_answer
+
+    labels = {
+        (r["case_id"], r["answer_hash"]): bool(r["human_label"])
+        for r in db.query("SELECT case_id, answer_hash, human_label FROM judge_calibration")
+    }
+    rows = db.query(
+        """
+        SELECT r.case_id, r.answer, r.expected
+          FROM eval_results r
+          JOIN eval_runs u ON u.id = r.run_id
+         WHERE u.run_key = %s AND r.kind = 'narrative'
+         ORDER BY r.case_id
+        """,
+        (run_key,),
+    )
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        key = (row["case_id"], _hash_answer(row["answer"] or ""))
+        if key in labels:
+            out.append({**dict(row), "human_label": labels[key]})
+    return out
 
 
 def freeze_from_autopsy(report_path: str, pair_id: str = "") -> FrozenPair:

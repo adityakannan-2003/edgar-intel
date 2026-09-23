@@ -22,7 +22,7 @@ from ..config import get_settings
 from ..providers import get_llm
 from ..providers.openai_compat import parse_json_strict
 from ..retrieval.metrics import cohens_kappa
-from .judge_contracts import get_contract
+from .judge_contracts import get_contract, get_structure
 from .schemas import JUDGE_SCHEMA, CaseResult, EvalCase
 
 # Below this, the judge is not tracking human judgement well enough for its
@@ -301,18 +301,24 @@ def judge_narrative(
     contract: str | None = None,
     source_context: str = "",
     model: str | None = None,
+    structure: str | None = None,
 ) -> JudgeVerdict:
     """Grade one narrative answer.
 
-    `contract` and `model` are separate parameters on purpose. Changing both at
-    once is how a prompt effect and a model effect get attributed to each other:
-    if v1+mini fails and v2+gpt-4o passes, the experiment has proved nothing.
-    Hold one fixed per comparison.
+    `contract`, `structure` and `model` are separate parameters on purpose --
+    what the rubric says, where the information sits, and which model reads it.
+    Changing two at once is how their effects get attributed to each other: if
+    v1+mini fails and v2+gpt-4o passes, the experiment has proved nothing. Hold
+    all but one fixed per comparison.
+
+    A structure only reorders the user message. The contract's system prompt is
+    unchanged by it, which is what makes a layout comparison a layout comparison.
     """
     s = get_settings()
     llm = get_llm()
     spec = get_contract(contract)
-    prompt = spec.render(
+    layout = get_structure(structure) if structure else spec
+    prompt = layout.render(
         question=case.question,
         reference=case.expected,
         candidate=answer,
@@ -412,9 +418,41 @@ def compute_kappa(pairs: list[tuple[bool, bool]]) -> float | None:
     return cohens_kappa(human, judge)
 
 
-def kappa_verdict(kappa: float | None, floor: float = KAPPA_FLOOR) -> str:
+def kappa_verdict(
+    kappa: float | None,
+    floor: float = KAPPA_FLOOR,
+    n_labels_matched: int = 0,
+) -> str:
+    """What the kappa on this run means -- including when there isn't one.
+
+    Kappa is a property of a **frozen human-labelled calibration set**, not of an
+    ordinary eval run. Labels attach to `(case_id, answer_hash)`, so a run that
+    generated new answers has no labelled answers in it at all, and its kappa is
+    absent for a structural reason rather than for want of labelling effort.
+    Saying "fewer than 20 human labels" in that situation reads as a to-do list
+    item and is misleading: labelling this run's answers would produce a kappa
+    that describes this run and no other.
+
+    Three distinct states, so a null is never ambiguous:
+
+      no overlap     none of this run's answers are in the labelled set. Expected.
+                     Calibrate on the frozen set instead.
+      too few        some overlap, below the floor where the estimate means
+                     anything.
+      measured       enough labelled answers in this very run to report.
+    """
     if kappa is None:
-        return "uncalibrated: fewer than 20 human labels, narrative scores are unverified"
+        if n_labels_matched == 0:
+            return (
+                "kappa not applicable to this run: none of its generated answers are "
+                "in the human-labelled set. Kappa belongs to the frozen calibration "
+                "set -- measure it with `eval judge-kappa`. Narrative pass rate here "
+                "is the judge's opinion, not a verified quality metric."
+            )
+        return (
+            f"uncalibrated: only {n_labels_matched} of this run's answers carry human "
+            "labels (20 is the floor, 40 is stable), so no kappa is reported for it"
+        )
     if kappa >= 0.80:
         return f"kappa={kappa:.2f}: almost perfect agreement with human labels"
     if kappa >= floor:

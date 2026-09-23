@@ -42,6 +42,19 @@ from .judge import judge_narrative
 from .judge_contracts import CONTRACTS
 from .schemas import EvalCase
 
+# Repeats per pair for a calibration comparison.
+#
+# Nine, not three, because three was not enough to distinguish a rubric change
+# from the judge disagreeing with itself. Two nominally identical context-free
+# runs of v2 on the same 24 labels produced kappa 0.4167 (FP 7, FN 0) and 0.5833
+# (FP 4, FN 1). That spread is the same size as every contract difference
+# measured so far, which means three repeats could not resolve the question being
+# asked of them.
+#
+# Raising repeats makes the per-pair majority harder to flip; it does not widen
+# n, which is the label count. Both matter and they are different knobs.
+CALIBRATION_REPEATS = 9
+
 
 @dataclass(slots=True)
 class FrozenPair:
@@ -186,6 +199,13 @@ class JudgeRun:
     model: str
     repeat: int
     expected_verdict: bool
+    # The experimental condition this verdict belongs to. `structure` is the
+    # prompt layout; `replicate` distinguishes two executions of an otherwise
+    # identical cell, which is how run-to-run variance gets measured instead of
+    # discovered by accident.
+    structure: str = "current"
+    replicate: int = 1
+    context_supplied: bool = False
     verdict: bool | None = None
     correct: bool = False
     rationale: str = ""
@@ -314,49 +334,95 @@ class CellSummary:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class Cell:
+    """One experimental condition. Duplicates differ only in `replicate`."""
+
+    contract: str
+    model: str
+    structure: str = "current"
+    replicate: int = 1
+
+
 def run_grid(
     pairs: list[FrozenPair],
     contracts: tuple[str, ...] = ("v1", "v2"),
     models: tuple[str, ...] = (),
     repeats: int = 5,
+    structures: tuple[str, ...] = ("current",),
+    duplicate: str | None = None,
     progress=None,
 ) -> list[JudgeRun]:
+    """Grade every frozen pair in every requested condition.
+
+    `duplicate` names a "contract/structure" whose cell is run a second time with
+    everything identical -- same pairs, contract, model, structure, repeats,
+    temperature 0, no generation anywhere. Its only purpose is to measure how far
+    the numbers move when nothing changed, which is the yardstick any structural
+    effect has to beat. It is kept as a separate cell and never merged into the
+    first; averaging the two would hide exactly what it was run to expose.
+    """
     s = get_settings()
     models = models or (s.judge_model,)
-    runs: list[JudgeRun] = []
+
+    cells: list[Cell] = []
     for contract in contracts:
         if contract not in CONTRACTS:
             raise ValueError(f"unknown contract {contract!r}")
-        for model in models:
-            for pair in pairs:
-                for i in range(repeats):
-                    run = JudgeRun(
-                        pair_id=pair.pair_id,
-                        label=pair.label,
-                        contract=contract,
-                        model=model,
-                        repeat=i + 1,
-                        expected_verdict=pair.expected_verdict,
+        for structure in structures:
+            for model in models:
+                cells.append(Cell(contract, model, structure, replicate=1))
+
+    if duplicate:
+        contract, _, structure = duplicate.partition("/")
+        structure = structure or "current"
+        matches = [
+            c for c in cells if c.contract == contract and c.structure == structure
+        ]
+        if not matches:
+            raise ValueError(
+                f"cannot duplicate {duplicate!r}: no such cell in this grid "
+                f"({sorted({f'{c.contract}/{c.structure}' for c in cells})})"
+            )
+        cells.extend(
+            Cell(c.contract, c.model, c.structure, replicate=2) for c in matches
+        )
+
+    runs: list[JudgeRun] = []
+    for cell in cells:
+        for pair in pairs:
+            for i in range(repeats):
+                run = JudgeRun(
+                    pair_id=pair.pair_id,
+                    label=pair.label,
+                    contract=cell.contract,
+                    model=cell.model,
+                    repeat=i + 1,
+                    expected_verdict=pair.expected_verdict,
+                    structure=cell.structure,
+                    replicate=cell.replicate,
+                    context_supplied=bool(pair.source_context),
+                )
+                try:
+                    verdict = judge_narrative(
+                        pair.as_case(),
+                        pair.answer,
+                        contract=cell.contract,
+                        source_context=pair.source_context,
+                        model=cell.model,
+                        structure=cell.structure,
                     )
-                    try:
-                        verdict = judge_narrative(
-                            pair.as_case(),
-                            pair.answer,
-                            contract=contract,
-                            source_context=pair.source_context,
-                            model=model,
-                        )
-                        run.verdict = verdict.verdict
-                        run.correct = verdict.verdict == pair.expected_verdict
-                        run.rationale = verdict.rationale
-                        run.latency_ms = verdict.latency_ms
-                        run.prompt_tokens = verdict.prompt_tokens
-                        run.completion_tokens = verdict.completion_tokens
-                    except Exception as exc:  # noqa: BLE001
-                        run.error = str(exc)[:400]
-                    runs.append(run)
-                    if progress:
-                        progress(run)
+                    run.verdict = verdict.verdict
+                    run.correct = verdict.verdict == pair.expected_verdict
+                    run.rationale = verdict.rationale
+                    run.latency_ms = verdict.latency_ms
+                    run.prompt_tokens = verdict.prompt_tokens
+                    run.completion_tokens = verdict.completion_tokens
+                except Exception as exc:  # noqa: BLE001
+                    run.error = str(exc)[:400]
+                runs.append(run)
+                if progress:
+                    progress(run)
     return runs
 
 
@@ -419,37 +485,69 @@ def single_variable_comparisons(cells: list[CellSummary]) -> list[dict[str, Any]
     return out
 
 
-def majority_verdicts(runs: list[JudgeRun]) -> dict[tuple[str, str, str], bool]:
-    """One verdict per (contract, model, pair), by majority over repeats."""
-    tally: dict[tuple[str, str, str], list[int]] = {}
+def majority_verdicts(runs: list[JudgeRun]) -> dict[tuple, bool]:
+    """One verdict per (contract, structure, model, replicate, pair), by majority.
+
+    Structure and replicate are in the key because they are conditions, not
+    noise. Collapsing them would merge a duplicate-control cell into the cell it
+    exists to be compared against.
+    """
+    tally: dict[tuple, list[int]] = {}
     for r in runs:
         if r.error or r.verdict is None:
             continue
-        bucket = tally.setdefault((r.contract, r.model, r.pair_id), [0, 0])
-        bucket[int(bool(r.verdict))] += 1
+        key = (r.contract, r.structure, r.model, r.replicate, r.pair_id)
+        tally.setdefault(key, [0, 0])[int(bool(r.verdict))] += 1
     return {key: passes > fails for key, (fails, passes) in tally.items()}
 
 
-def flips(
-    runs: list[JudgeRun], baseline: str, candidate: str, model: str | None = None
-) -> list[dict[str, Any]]:
-    """Which individual cases changed verdict between two contracts.
+def _resolve_cell(spec: str, runs: list[JudgeRun]) -> tuple[str, str]:
+    """`v3_1` or `v3_1/reference_last` -> (contract, structure).
 
-    With 7 false positives out of 24, the aggregate cannot tell a real fix from
-    a lucky one. A contract that flips the seven wrong cases is correct; one that
-    flips seven arbitrary cases lands on the same kappa and is not. Only the
-    per-case table distinguishes them.
+    A bare contract means "the only structure in this grid", which keeps the
+    contract-vs-contract comparisons written before structures existed working
+    unchanged.
+    """
+    contract, _, structure = spec.partition("/")
+    if structure:
+        return contract, structure
+    present = {r.structure for r in runs if r.contract == contract} or {"current"}
+    return contract, sorted(present)[0]
+
+
+def flips(
+    runs: list[JudgeRun],
+    baseline: str,
+    candidate: str,
+    model: str | None = None,
+    replicate: int = 1,
+) -> list[dict[str, Any]]:
+    """Which individual cases changed verdict between two conditions.
+
+    `baseline` and `candidate` are `contract` or `contract/structure`.
+
+    With a handful of errors out of a few dozen pairs, the aggregate cannot tell
+    a real fix from a lucky one. A condition that flips the wrong cases and one
+    that flips the right cases land on the same kappa; only the per-case table
+    distinguishes them.
     """
     human: dict[str, bool] = {}
     for r in runs:
         human.setdefault(r.pair_id, r.expected_verdict)
 
     model = model or next((r.model for r in runs), "")
+    base_contract, base_structure = _resolve_cell(baseline, runs)
+    cand_contract, cand_structure = _resolve_cell(candidate, runs)
     decided = majority_verdicts(runs)
+
     rows: list[dict[str, Any]] = []
     for pair_id, expected in human.items():
-        before = decided.get((baseline, model, pair_id))
-        after = decided.get((candidate, model, pair_id))
+        before = decided.get(
+            (base_contract, base_structure, model, replicate, pair_id)
+        )
+        after = decided.get(
+            (cand_contract, cand_structure, model, replicate, pair_id)
+        )
         if before is None or after is None or before == after:
             continue
         if not expected and before and not after:
@@ -476,24 +574,35 @@ def flips(
 class PairConfusion:
     """Confusion counted once per labelled pair, not once per repeat.
 
-    The human labelled 24 answers. Counting three repeats of each as three
-    observations puts n at 72, which is not 72 independent samples of human
-    agreement -- it is 24 items measured three times. It inflates confidence
-    without adding information: v2 reads kappa 0.5556 with CI [0.37, 0.74] at
-    the repeat level and 0.4167 with CI [0.12, 0.74] per pair. The second is
-    the honest one.
+    n is the number of labelled pairs, whatever the repeat count. Counting each
+    repeat as its own observation multiplies n by the repeats and adds no
+    information: the unit a human labelled is the answer, and repeats are the
+    same answer measured again. Doing it that way narrows the confidence interval
+    on nothing -- measured on the 24-pair set, v2 read kappa 0.5556 with CI
+    [0.37, 0.74] at the repeat level against 0.4167 with CI [0.12, 0.74] per
+    pair. The wider one is the honest one.
 
-    Repeats still earn their cost: they measure whether the judge is stable on
+    Repeats still earn their cost: they establish whether the judge is stable on
     an item, reported separately as `unstable_pairs`.
     """
 
     contract: str
     model: str
+    structure: str = "current"
+    replicate: int = 1
+    repeats: int = 0
+    context_supplied: bool = False
     tp: int = 0
     fn: int = 0
     fp: int = 0
     tn: int = 0
     unstable_pairs: list[str] = field(default_factory=list)
+    verdicts: dict[str, bool] = field(default_factory=dict)
+
+    @property
+    def cell_id(self) -> str:
+        """The condition, as one readable string. Duplicates differ only here."""
+        return f"{self.contract}/{self.structure}/{self.model}/r{self.replicate}"
 
     @property
     def n(self) -> int:
@@ -505,6 +614,10 @@ class PairConfusion:
         cell.tp, cell.fn, cell.fp, cell.tn = self.tp, self.fn, self.fp, self.tn
         return cell.kappa
 
+    @property
+    def agreement(self) -> float:
+        return (self.tp + self.tn) / self.n if self.n else 0.0
+
     def kappa_ci(self, iterations: int = 2000) -> tuple[float, float]:
         cell = CellSummary(self.contract, self.model)
         cell.tp, cell.fn, cell.fp, cell.tn = self.tp, self.fn, self.fp, self.tn
@@ -513,7 +626,12 @@ class PairConfusion:
     def row(self) -> dict[str, Any]:
         lo, hi = self.kappa_ci()
         return {
-            "contract": self.contract,
+            "cell": self.cell_id,
+            "structure": self.structure,
+            "rep": self.replicate,
+            "repeats": self.repeats,
+            "ctx": "yes" if self.context_supplied else "no",
+            "n": self.n,
             "kappa": round(self.kappa, 4),
             "kappa_95ci": f"[{lo:.2f}, {hi:.2f}]",
             "agreement": f"{self.tp + self.tn}/{self.n}",
@@ -524,33 +642,121 @@ class PairConfusion:
 
 
 def confusion_by_pair(runs: list[JudgeRun]) -> list[PairConfusion]:
-    """One verdict per pair by majority, then the confusion against human labels."""
+    """Per-pair majority verdicts, then the confusion against human labels.
+
+    Keyed by the full condition including `structure` and `replicate`, so a
+    duplicate-control cell stays a separate row rather than being averaged into
+    the cell it exists to be compared against.
+    """
     human: dict[str, bool] = {}
     for r in runs:
         human.setdefault(r.pair_id, r.expected_verdict)
 
-    tallies: dict[tuple[str, str, str], list[int]] = {}
+    decided = majority_verdicts(runs)
+    repeats_seen: dict[tuple, int] = {}
+    context_seen: dict[tuple, bool] = {}
+    unanimous: dict[tuple, bool] = {}
+    tallies: dict[tuple, list[int]] = {}
     for r in runs:
+        key = (r.contract, r.structure, r.model, r.replicate)
+        repeats_seen[key] = max(repeats_seen.get(key, 0), r.repeat)
+        context_seen[key] = context_seen.get(key, False) or r.context_supplied
         if r.error or r.verdict is None:
             continue
-        tallies.setdefault((r.contract, r.model, r.pair_id), [0, 0])[int(bool(r.verdict))] += 1
+        tallies.setdefault((*key, r.pair_id), [0, 0])[int(bool(r.verdict))] += 1
 
-    out: dict[tuple[str, str], PairConfusion] = {}
-    for (contract, model, pair_id), (fails, passes) in tallies.items():
-        cell = out.setdefault((contract, model), PairConfusion(contract, model))
-        decided = passes > fails
+    out: dict[tuple, PairConfusion] = {}
+    for (contract, structure, model, replicate, pair_id), (fails, passes) in tallies.items():
+        key = (contract, structure, model, replicate)
+        cell = out.setdefault(
+            key,
+            PairConfusion(
+                contract=contract,
+                model=model,
+                structure=structure,
+                replicate=replicate,
+                repeats=repeats_seen.get(key, 0),
+                context_supplied=context_seen.get(key, False),
+            ),
+        )
+        verdict_here = decided[(contract, structure, model, replicate, pair_id)]
+        cell.verdicts[pair_id] = verdict_here
         if fails and passes:
             cell.unstable_pairs.append(pair_id)
         expected = human.get(pair_id, True)
-        if expected and decided:
+        if expected and verdict_here:
             cell.tp += 1
-        elif expected and not decided:
+        elif expected and not verdict_here:
             cell.fn += 1
-        elif not expected and decided:
+        elif not expected and verdict_here:
             cell.fp += 1
         else:
             cell.tn += 1
-    return sorted(out.values(), key=lambda c: (c.contract, c.model))
+    return sorted(
+        out.values(), key=lambda c: (c.contract, c.structure, c.model, c.replicate)
+    )
+
+
+def duplicate_variance(cells: list[PairConfusion]) -> list[dict[str, Any]]:
+    """How far identical conditions moved. The yardstick, not a footnote.
+
+    Any effect smaller than this is not an effect. Reported per metric and as the
+    number of pairs whose majority verdict flipped between the two executions --
+    the most legible form, because those flips happened with nothing changed.
+    """
+    groups: dict[tuple[str, str, str], list[PairConfusion]] = {}
+    for c in cells:
+        groups.setdefault((c.contract, c.model, c.structure), []).append(c)
+
+    rows: list[dict[str, Any]] = []
+    for (contract, model, structure), members in sorted(groups.items()):
+        if len(members) < 2:
+            continue
+        members.sort(key=lambda c: c.replicate)
+        a, b = members[0], members[1]
+        shared = set(a.verdicts) & set(b.verdicts)
+        flipped = sorted(p for p in shared if a.verdicts[p] != b.verdicts[p])
+        rows.append(
+            {
+                "condition": f"{contract}/{structure}/{model}",
+                "kappa_r1": round(a.kappa, 4),
+                "kappa_r2": round(b.kappa, 4),
+                "d_kappa": round(abs(b.kappa - a.kappa), 4),
+                "FP": f"{a.fp} -> {b.fp}",
+                "FN": f"{a.fn} -> {b.fn}",
+                "agreement": f"{a.tp + a.tn}/{a.n} -> {b.tp + b.tn}/{b.n}",
+                "verdicts_flipped": len(flipped),
+                "flipped_pairs": ", ".join(flipped[:6]) or "-",
+            }
+        )
+    return rows
+
+
+def beats_noise(
+    comparison_delta: float, variance_rows: list[dict[str, Any]]
+) -> tuple[bool, str]:
+    """Is an observed difference larger than the measured duplicate-run spread?
+
+    The question this checkpoint exists to answer. Without a duplicate control
+    there is no denominator and every delta looks like a finding.
+    """
+    if not variance_rows:
+        return False, (
+            "No duplicate-control cell was run, so there is no measured noise "
+            "floor and no delta can be called an effect. Re-run with --duplicate."
+        )
+    noise = max(row["d_kappa"] for row in variance_rows)
+    flips_seen = max(row["verdicts_flipped"] for row in variance_rows)
+    if abs(comparison_delta) > noise:
+        return True, (
+            f"delta kappa {comparison_delta:+.4f} exceeds the duplicate-run spread "
+            f"of {noise:.4f} ({flips_seen} pair verdict(s) moved with nothing changed)."
+        )
+    return False, (
+        f"delta kappa {comparison_delta:+.4f} is within the duplicate-run spread of "
+        f"{noise:.4f} ({flips_seen} pair verdict(s) moved with nothing changed). "
+        "UNRESOLVED -- this is not evidence of an effect."
+    )
 
 
 # --------------------------------------------------------- adoption criteria
@@ -573,22 +779,31 @@ def check_adoption(
     baseline: str,
     model: str | None = None,
     criteria: dict[str, Any] | None = None,
+    variance_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Score a candidate contract against a declared, named acceptance gate.
+    """Score a candidate condition against a declared, named acceptance gate.
 
-    Declared before the run and checked mechanically, because an aggregate can
-    be satisfied by the wrong cases. v3 reached kappa 0.6667 -- above the
-    threshold -- by fixing three false positives and breaking two correct
-    answers. A kappa-only rule would have adopted it.
+    Declared before the run and checked mechanically, because an aggregate can be
+    satisfied by the wrong cases. v3 reached kappa 0.6667 -- above the threshold --
+    by fixing three false positives and breaking two correct answers. A
+    kappa-only rule would have adopted it.
 
-    Every clause is reported, pass or fail, so a near-miss is legible rather
-    than hidden behind one boolean.
+    When `variance_rows` are supplied, beating the measured duplicate-run spread
+    becomes a clause of its own. A gain inside the noise floor is not a gain, and
+    that judgement belongs in the gate rather than in the reader's head.
     """
     spec = {**DEFAULT_CRITERIA, **(criteria or {})}
     model = model or next((r.model for r in runs), "")
     decided = majority_verdicts(runs)
-    by_pair = {c.contract: c for c in confusion_by_pair(runs)}
-    cell = by_pair.get(candidate)
+    cand_contract, cand_structure = _resolve_cell(candidate, runs)
+    by_cell = {
+        (c.contract, c.structure): c
+        for c in confusion_by_pair(runs)
+        if c.replicate == 1
+    }
+    cell = by_cell.get((cand_contract, cand_structure))
+    base_contract, base_structure = _resolve_cell(baseline, runs)
+    base_cell = by_cell.get((base_contract, base_structure))
     flip_rows = flips(runs, baseline, candidate, model)
     new_fn = [r for r in flip_rows if "new false negative" in r["effect"]]
 
@@ -607,7 +822,7 @@ def check_adoption(
         },
     ]
     for pair_id in spec["must_pass"]:
-        got = decided.get((candidate, model, pair_id))
+        got = decided.get((cand_contract, cand_structure, model, 1, pair_id))
         clauses.append(
             {
                 "clause": f"{pair_id} = PASS",
@@ -617,7 +832,7 @@ def check_adoption(
             }
         )
     for pair_id in spec["must_fail"]:
-        got = decided.get((candidate, model, pair_id))
+        got = decided.get((cand_contract, cand_structure, model, 1, pair_id))
         clauses.append(
             {
                 "clause": f"{pair_id} = FAIL",
@@ -636,6 +851,18 @@ def check_adoption(
             "detail": f"95% CI [{lo:.2f}, {hi:.2f}]",
         }
     )
+
+    if variance_rows is not None:
+        delta = kappa - (base_cell.kappa if base_cell else 0.0)
+        ok, message = beats_noise(delta, variance_rows)
+        clauses.append(
+            {
+                "clause": "effect exceeds duplicate-run noise",
+                "observed": round(delta, 4),
+                "ok": ok,
+                "detail": message,
+            }
+        )
 
     adopted = all(c["ok"] for c in clauses)
     failed = [c["clause"] for c in clauses if not c["ok"]]
@@ -801,6 +1028,130 @@ def pairs_from_labels(run_key: str) -> list[FrozenPair]:
         )
         for row in rows
     ]
+
+
+def _case_kind(pair_id: str) -> str:
+    """The narrative topic, e.g. `nar-AAPL-fx-exposure` -> `fx-exposure`."""
+    parts = pair_id.split("-", 2)
+    return parts[2] if len(parts) > 2 else "unknown"
+
+
+def _case_ticker(pair_id: str) -> str:
+    parts = pair_id.split("-")
+    return parts[1] if len(parts) > 1 else "unknown"
+
+
+def composition(pairs: list[FrozenPair]) -> dict[str, Any]:
+    """What the calibration set is actually made of.
+
+    A kappa on 40 pairs that are 30 Apple legal questions is a kappa on one
+    question type. Reported so a skewed set is visible before it is used as a
+    yardstick, rather than inferred afterwards from a surprising result.
+    """
+    by_kind: dict[str, int] = {}
+    by_ticker: dict[str, int] = {}
+    by_label: dict[str, int] = {}
+    n_pass = 0
+    for pair in pairs:
+        by_kind[_case_kind(pair.pair_id)] = by_kind.get(_case_kind(pair.pair_id), 0) + 1
+        by_ticker[_case_ticker(pair.pair_id)] = (
+            by_ticker.get(_case_ticker(pair.pair_id), 0) + 1
+        )
+        by_label[pair.label] = by_label.get(pair.label, 0) + 1
+        n_pass += int(pair.expected_verdict)
+
+    total = len(pairs)
+    largest_kind = max(by_kind.values()) if by_kind else 0
+    largest_ticker = max(by_ticker.values()) if by_ticker else 0
+    warnings: list[str] = []
+    if total < 40:
+        warnings.append(f"only {total} labelled pairs; 40 is the floor for a stable kappa")
+    if total and largest_kind / total > 0.4:
+        dominant = max(by_kind, key=lambda k: by_kind[k])
+        warnings.append(
+            f"{dominant} is {largest_kind}/{total} of the set -- kappa will mostly "
+            "describe that question type"
+        )
+    if total and largest_ticker / total > 0.3:
+        dominant = max(by_ticker, key=lambda k: by_ticker[k])
+        warnings.append(f"{dominant} is {largest_ticker}/{total} of the set")
+    if total and not 0.25 <= n_pass / total <= 0.75:
+        warnings.append(
+            f"labels are {n_pass} PASS / {total - n_pass} FAIL -- a lopsided set "
+            "raises chance agreement and shrinks the kappa a real judge can earn"
+        )
+
+    return {
+        "total": total,
+        "human_pass": n_pass,
+        "human_fail": total - n_pass,
+        "by_kind": dict(sorted(by_kind.items(), key=lambda kv: -kv[1])),
+        "by_ticker": dict(sorted(by_ticker.items(), key=lambda kv: -kv[1])),
+        "by_label": dict(sorted(by_label.items(), key=lambda kv: -kv[1])),
+        "warnings": warnings,
+    }
+
+
+def label_targets(run_key: str, want: int = 40) -> list[dict[str, Any]]:
+    """Which unlabelled narrative cases to label next, ordered for diversity.
+
+    Labelling is the expensive step and it is human, so the order matters: this
+    puts the case whose (kind, ticker) is least represented in the existing
+    labels first. It selects *what to look at* and never what the verdict is --
+    the judge's own opinion is deliberately not a tiebreak, because a set chosen
+    to agree with the judge cannot measure the judge.
+    """
+    from .. import db
+    from .judge import _hash_answer
+
+    labelled = {
+        (r["case_id"], r["answer_hash"])
+        for r in db.query("SELECT case_id, answer_hash FROM judge_calibration")
+    }
+    rows = db.query(
+        """
+        SELECT r.case_id, r.answer, r.expected, r.passed
+          FROM eval_results r
+          JOIN eval_runs u ON u.id = r.run_id
+         WHERE u.run_key = %s AND r.kind = 'narrative'
+         ORDER BY r.case_id
+        """,
+        (run_key,),
+    )
+
+    have_kind: dict[str, int] = {}
+    have_ticker: dict[str, int] = {}
+    unlabelled: list[dict[str, Any]] = []
+    for row in rows:
+        kind, ticker = _case_kind(row["case_id"]), _case_ticker(row["case_id"])
+        if (row["case_id"], _hash_answer(row["answer"] or "")) in labelled:
+            have_kind[kind] = have_kind.get(kind, 0) + 1
+            have_ticker[ticker] = have_ticker.get(ticker, 0) + 1
+        else:
+            unlabelled.append(
+                {
+                    "case_id": row["case_id"],
+                    "kind": kind,
+                    "ticker": ticker,
+                    "judge_said": "PASS" if row["passed"] else "FAIL",
+                }
+            )
+
+    ordered: list[dict[str, Any]] = []
+    while unlabelled and len(ordered) < want:
+        nxt = min(
+            unlabelled,
+            key=lambda c: (
+                have_kind.get(c["kind"], 0),
+                have_ticker.get(c["ticker"], 0),
+                c["case_id"],
+            ),
+        )
+        unlabelled.remove(nxt)
+        have_kind[nxt["kind"]] = have_kind.get(nxt["kind"], 0) + 1
+        have_ticker[nxt["ticker"]] = have_ticker.get(nxt["ticker"], 0) + 1
+        ordered.append(nxt)
+    return ordered
 
 
 def _labelled_rows(run_key: str) -> list[dict[str, Any]]:

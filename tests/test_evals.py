@@ -131,7 +131,15 @@ class TestKappaGating:
         assert "usable" in kappa_verdict(0.75)
 
     def test_verdict_explains_missing_calibration(self):
-        assert "uncalibrated" in kappa_verdict(None)
+        """Two reasons a run has no kappa, and they mean different things.
+
+        No overlap at all is the normal case -- labels attach to a specific
+        answer hash, so a run that generated new answers has none of them. That
+        is a category statement, not an outstanding task, and saying
+        "uncalibrated" there reads as a to-do.
+        """
+        assert "not applicable to this run" in kappa_verdict(None, n_labels_matched=0)
+        assert "uncalibrated" in kappa_verdict(None, n_labels_matched=7)
 
     def test_floor_is_the_conventional_substantial_agreement_threshold(self):
         assert KAPPA_FLOOR == 0.60

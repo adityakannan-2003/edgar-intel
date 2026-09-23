@@ -68,7 +68,11 @@ class RunSummary:
     label: str
     git_sha: str
     n_cases: int
-    numeric_accuracy: float
+    # None when the run contained no numeric cases at all. A real accuracy of
+    # zero and an empty population are different facts, and this project already
+    # lost a day to a 0.0 that meant "every call returned 401" -- see
+    # baseline-45536dc9. An empty set must not be able to mint a number.
+    numeric_accuracy: float | None
     narrative_pass_rate: float
     overall_score: float
     judge_kappa: float | None
@@ -84,6 +88,9 @@ class RunSummary:
     # numeric_accuracy + abstention_rate + hallucination_rate == 1.
     abstention_rate: float = 0.0
     hallucination_rate: float = 0.0
+    # How many of this run's answers were found in the human-labelled set. Zero
+    # is the normal case and explains why judge_kappa is null.
+    judge_labels_matched: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)

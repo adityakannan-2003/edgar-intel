@@ -620,7 +620,20 @@ def eval_judge_kappa(
     run_key: str = typer.Argument(..., help="Run whose human-labelled narrative answers to grade."),
     contracts: str = typer.Option("v2,v3", help="Contracts to compare, baseline first."),
     models: str = typer.Option("", help="Judge models. Empty = the configured one."),
-    repeats: int = typer.Option(3, help="Repeats per pair; verdicts taken by majority."),
+    repeats: int = typer.Option(
+        # Kept in step with judge_lab.CALIBRATION_REPEATS by a test. Written as a
+        # literal because a typer default is evaluated at import time and cli.py
+        # imports the evals package lazily on purpose.
+        9,
+        help="Repeats per pair; verdicts taken by majority. Nine because judge "
+        "non-determinism at temperature 0 was as large as the effects measured.",
+    ),
+    structures: str = typer.Option(
+        "current", help="Prompt layouts to compare, e.g. current,reference_last"
+    ),
+    duplicate: str = typer.Option(
+        "", help="Run this cell twice as a noise control, e.g. v3_1/reference_last"
+    ),
     out: str = typer.Option("reports/judge_kappa.json"),
 ) -> None:
     """Compare judge contracts against HUMAN labels, and report kappa per contract.
@@ -644,18 +657,20 @@ def eval_judge_kappa(
         console.print("[dim]run: edgar-intel eval label <run_key> --n 40[/dim]")
         raise typer.Exit(1)
 
-    n_pass = sum(1 for p in pairs if p.expected_verdict)
-    console.print(
-        f"[dim]{len(pairs)} labelled pairs: {n_pass} human PASS, "
-        f"{len(pairs) - n_pass} human FAIL[/dim]"
-    )
-    if len(pairs) < 20:
-        console.print(
-            "[yellow]fewer than 20 labels: kappa is too noisy to act on[/yellow]"
-        )
+    comp = lab.composition(pairs)
+    _table("calibration set composition", [
+        {"metric": "total labelled pairs", "value": comp["total"]},
+        {"metric": "human PASS", "value": comp["human_pass"]},
+        {"metric": "human FAIL", "value": comp["human_fail"]},
+        {"metric": "by kind", "value": json.dumps(comp["by_kind"])},
+        {"metric": "by ticker", "value": json.dumps(comp["by_ticker"])},
+    ])
+    for warning in comp["warnings"]:
+        console.print(f"[yellow]{warning}[/yellow]")
 
     contract_list = tuple(c.strip() for c in contracts.split(",") if c.strip())
     model_list = tuple(m.strip() for m in models.split(",") if m.strip())
+    structure_list = tuple(s.strip() for s in structures.split(",") if s.strip())
 
     def progress(run) -> None:
         if run.error:
@@ -664,7 +679,8 @@ def eval_judge_kappa(
     with console.status("judging..."):
         runs = lab.run_grid(
             pairs, contracts=contract_list, models=model_list,
-            repeats=repeats, progress=progress,
+            repeats=repeats, structures=structure_list,
+            duplicate=duplicate or None, progress=progress,
         )
 
     cells = lab.summarise(runs)
@@ -672,8 +688,9 @@ def eval_judge_kappa(
     console.print()
 
     # Headline kappa is per labelled pair, by majority over repeats. Counting
-    # each repeat separately treats 24 items measured 3 times as 72 independent
-    # observations and narrows the interval without adding information.
+    # each repeat as its own observation multiplies n by the repeat count and
+    # narrows the interval without adding information -- the unit a human
+    # labelled is the answer, not one measurement of it.
     by_pair = lab.confusion_by_pair(runs)
     _table("kappa against human labels (per pair, majority of repeats)",
            [c.row() for c in by_pair])
@@ -684,13 +701,49 @@ def eval_judge_kappa(
             f"{', '.join(sorted(unstable))}[/yellow]"
         )
     payload["by_pair"] = [c.row() for c in by_pair]
+    payload["composition"] = comp
+    payload["experiment"] = {
+        "run_key": run_key,
+        "contracts": list(contract_list),
+        "structures": list(structure_list),
+        "models": list(model_list) or ["<configured>"],
+        "repeats": repeats,
+        "pair_count": len(pairs),
+        "duplicate_cell": duplicate or None,
+        "context_supplied": any(bool(p.source_context) for p in pairs),
+    }
 
-    if len(contract_list) >= 2:
+    # The noise floor, printed before any comparison, because a delta is only
+    # readable against it.
+    variance = lab.duplicate_variance(by_pair)
+    if variance:
+        _table("duplicate control: identical conditions run twice", variance)
+        payload["duplicate_variance"] = variance
+    else:
+        console.print(
+            "[yellow]no duplicate-control cell: pass --duplicate <contract>/<structure>, "
+            "or no delta can be separated from judge noise[/yellow]"
+        )
+
+    # Compare whatever the grid actually varied.
+    if len(structure_list) >= 2:
+        baseline = f"{contract_list[-1]}/{structure_list[0]}"
+        candidate = f"{contract_list[-1]}/{structure_list[-1]}"
+    elif len(contract_list) >= 2:
+        baseline, candidate = contract_list[0], contract_list[-1]
+    else:
+        baseline = candidate = ""
+
+    if baseline and candidate:
         model = model_list[0] if model_list else next((r.model for r in runs), "")
-        flip_rows = lab.flips(runs, contract_list[0], contract_list[-1], model)
-        _table(
-            f"per-case flips: {contract_list[0]} -> {contract_list[-1]}", flip_rows
-        ) if flip_rows else console.print("[yellow]no case changed verdict[/yellow]")
+        flip_rows = lab.flips(runs, baseline, candidate, model)
+        if flip_rows:
+            _table(f"per-case flips: {baseline} -> {candidate}", flip_rows)
+        else:
+            console.print(
+                f"[yellow]no case changed verdict between {baseline} and {candidate}"
+                "[/yellow]"
+            )
 
         ok, message = lab.regression_guard(flip_rows)
         console.print(f"[{'green' if ok else 'red'}]{message}[/{'green' if ok else 'red'}]")
@@ -699,20 +752,51 @@ def eval_judge_kappa(
 
         # The declared gate, checked clause by clause. An aggregate can be
         # satisfied by the wrong cases: v3 reached kappa 0.6667 by fixing three
-        # false positives and breaking two correct answers.
+        # false positives and breaking two correct answers. When a duplicate
+        # control ran, beating its spread is a clause too.
         adoption = lab.check_adoption(
-            runs, candidate=contract_list[-1], baseline=contract_list[0], model=model
+            runs,
+            candidate=candidate,
+            baseline=baseline,
+            model=model,
+            variance_rows=variance if variance else None,
         )
         _table(f"adoption criteria: {adoption['candidate']}", adoption["clauses"])
         colour = "green" if adoption["adopted"] else "red"
         console.print(f"[{colour}]{adoption['summary']}[/{colour}]")
         payload["adoption"] = adoption
 
-        with open(out, "w", encoding="utf-8") as fh:
-            json.dump(payload, fh, indent=2)
+    with open(out, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, indent=2)
 
     console.print(f"\n[bold]{payload['verdict']}[/bold]")
     console.print(f"[dim]full report: {out}[/dim]")
+
+
+@eval_app.command("judge-targets")
+def eval_judge_targets(
+    run_key: str = typer.Argument(..., help="Run whose narrative answers to label."),
+    want: int = typer.Option(40, help="How many to list; 40 is the stability floor."),
+) -> None:
+    """Which narrative cases to hand-label next, ordered for diversity.
+
+    Labelling is the expensive step and it is human, so the order matters. This
+    puts the case whose (kind, ticker) is least represented in the existing
+    labels first, so a set of 40 does not turn out to be 30 legal questions about
+    two companies.
+
+    It never suggests a verdict. The judge's own opinion is shown for context but
+    is deliberately not a tiebreak -- a calibration set chosen to agree with the
+    judge cannot measure the judge.
+    """
+    from .evals import judge_lab as lab
+
+    targets = lab.label_targets(run_key, want)
+    if not targets:
+        console.print(f"[green]every narrative answer in {run_key} is already labelled[/green]")
+        return
+    _table(f"label these next ({len(targets)})", targets)
+    console.print(f"[dim]then: edgar-intel eval label {run_key} --n {len(targets)}[/dim]")
 
 
 @eval_app.command("retrieval")

@@ -262,6 +262,114 @@ V3_1 = JudgeContract(
 
 CONTRACTS: dict[str, JudgeContract] = {c.name: c for c in (V1, V2, V3, V3_1)}
 
+
+# --------------------------------------------------------- prompt structures
+#
+# Where the information sits, as an axis separate from what the rubric says.
+#
+# Two rubric iterations changed nothing measurable, and the run that supplied
+# source context showed why the wording may not be the lever: with the passages
+# present, v2 and v3_1 produced byte-identical confusion matrices -- 17/24, FP 7,
+# FN 0, the same seven cases. The rubric stopped mattering at all.
+#
+# The hypothesis that leaves is structural rather than semantic. The context runs
+# to thousands of tokens of filing text and the reference is three sentences. A
+# judge that verifies the answer's claims are supported -- they are, the answers
+# are source-grounded -- has satisfied the check it can see, and the coverage
+# check needs a reference that is now a rounding error in the prompt. On that
+# reading the context is not only adding information, it is diluting the
+# reference.
+#
+# So these change position, not content. A contract's `system` is byte-identical
+# across structures, which a test enforces.
+@dataclass(frozen=True, slots=True)
+class PromptStructure:
+    """A layout for the judge's user message."""
+
+    name: str
+    template: str
+    rationale: str = ""
+
+    def render(
+        self, question: str, reference: str, candidate: str, source_context: str = ""
+    ) -> str:
+        return self.template.format(
+            question=question,
+            reference=reference,
+            candidate=candidate,
+            source_context=source_context or "(not supplied)",
+        )
+
+
+CURRENT_STRUCTURE = PromptStructure(
+    name="current",
+    template=V2.template,
+    rationale="the shipped layout: reference early, then context, then candidate",
+)
+
+
+# The coverage-standard instruction belongs to the layout rather than the rubric:
+# it is what tells the judge how to read the new ordering. Arm B is therefore a
+# bundle -- reordering plus one sentence -- and not a pure layout test. That is
+# what the checkpoint asked for, and if it wins, `reference_last_layout_only`
+# below decomposes it without another design round.
+_COVERAGE_STANDARD = (
+    "The reference answer defines the required coverage standard.\n"
+    "Use the source context only to verify factual support, resolve ambiguity, "
+    "or check additional claims.\n"
+    "Do not treat factual support from the source context as sufficient for PASS "
+    "when required reference coverage is missing.\n"
+)
+
+_REFERENCE_LAST_BODY = """QUESTION
+{question}
+
+SOURCE CONTEXT
+{source_context}
+
+CANDIDATE ANSWER
+{candidate}
+
+REFERENCE ANSWER -- REQUIRED COVERAGE
+{reference}
+"""
+
+REFERENCE_LAST = PromptStructure(
+    name="reference_last",
+    template=_REFERENCE_LAST_BODY
+    + "\n"
+    + _COVERAGE_STANDARD
+    + """
+Return JSON only:
+{{"verdict": true | false, "rationale": "brief explanation"}}
+""",
+    rationale="reference immediately before the verdict, plus the coverage-standard instruction",
+)
+
+REFERENCE_LAST_LAYOUT_ONLY = PromptStructure(
+    name="reference_last_layout_only",
+    template=_REFERENCE_LAST_BODY
+    + """
+Return JSON only:
+{{"verdict": true | false, "rationale": "brief explanation"}}
+""",
+    rationale="reordering alone, to decompose reference_last if it wins",
+)
+
+
+STRUCTURES: dict[str, PromptStructure] = {
+    s.name: s for s in (CURRENT_STRUCTURE, REFERENCE_LAST, REFERENCE_LAST_LAYOUT_ONLY)
+}
+
+DEFAULT_STRUCTURE = "current"
+
+
+def get_structure(name: str | None = None) -> PromptStructure:
+    key = name or DEFAULT_STRUCTURE
+    if key not in STRUCTURES:
+        raise ValueError(f"unknown prompt structure {key!r}; have {sorted(STRUCTURES)}")
+    return STRUCTURES[key]
+
 # The shipped contract. Still v1 until the A/B says otherwise -- a rubric change
 # applied before it is measured would make every run before it incomparable and
 # every run after it unexplained.

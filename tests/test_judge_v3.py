@@ -219,14 +219,14 @@ class TestPerCaseFlips:
             JudgeRun("p", "x", "v3", "m", 2, False, verdict=False),
             JudgeRun("p", "x", "v3", "m", 3, False, verdict=True),
         ]
-        assert majority_verdicts(runs)[("v3", "m", "p")] is False
+        assert majority_verdicts(runs)[("v3", "current", "m", 1, "p")] is False
 
     def test_errored_repeats_are_ignored_not_counted_as_fail(self):
         runs = [
             JudgeRun("p", "x", "v3", "m", 1, True, verdict=True),
             JudgeRun("p", "x", "v3", "m", 2, True, error="400"),
         ]
-        assert majority_verdicts(runs)[("v3", "m", "p")] is True
+        assert majority_verdicts(runs)[("v3", "current", "m", 1, "p")] is True
 
 
 class TestRegressionGuard:

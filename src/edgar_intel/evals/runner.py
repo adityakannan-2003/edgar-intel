@@ -290,8 +290,14 @@ def run_suite(
         (db.jsonb(summary.as_dict()), run_id),
     )
 
-    kappa = compute_kappa(calibration_pairs(run_id))
+    # Kappa is reported here only if this run's own answers happen to carry human
+    # labels, which is rare by design -- labels attach to a specific answer hash.
+    # See judge.kappa_verdict for why a null here is a category statement rather
+    # than an outstanding task.
+    pairs = calibration_pairs(run_id)
+    kappa = compute_kappa(pairs)
     summary.judge_kappa = kappa
+    summary.judge_labels_matched = len(pairs)
     db.execute(
         "UPDATE eval_runs SET summary = %s WHERE id = %s",
         (db.jsonb(summary.as_dict()), run_id),
@@ -355,7 +361,7 @@ def summarise_run(
     numeric = [r for r in results if r.kind == "numeric"]
     narrative = [r for r in results if r.kind == "narrative"]
 
-    numeric_acc = _mean([1.0 if r.passed else 0.0 for r in numeric])
+    numeric_acc = _mean_or_none([1.0 if r.passed else 0.0 for r in numeric])
     narrative_rate = _mean([1.0 if r.passed else 0.0 for r in narrative])
 
     # Split the numeric failures. A model that abstains when the context lacks
@@ -383,12 +389,12 @@ def summarise_run(
         label=label,
         git_sha=sha,
         n_cases=len(results),
-        numeric_accuracy=round(numeric_acc, 4),
+        numeric_accuracy=None if numeric_acc is None else round(numeric_acc, 4),
         narrative_pass_rate=round(narrative_rate, 4),
         # Weighted by case count so adding narrative cases cannot quietly swamp
         # the verifiable numeric signal.
         overall_score=round(
-            (numeric_acc * len(numeric) + narrative_rate * len(narrative))
+            ((numeric_acc or 0.0) * len(numeric) + narrative_rate * len(narrative))
             / max(1, len(results)),
             4,
         ),
@@ -402,6 +408,17 @@ def summarise_run(
         abstention_rate=round(abstained, 4),
         hallucination_rate=round(hallucinated, 4),
     )
+
+
+def _mean_or_none(values: list[float]) -> float | None:
+    """The mean, or None for an empty population.
+
+    `_mean` returns 0.0 for an empty list, which is right for a rate over cases
+    that exist and wrong for a population that does not. A narrative-only run
+    reported `numeric_accuracy: 0.0` and read as a total failure of the numeric
+    path; there was no numeric path in that run.
+    """
+    return sum(values) / len(values) if values else None
 
 
 def _mean(values: list[float]) -> float:
@@ -464,7 +481,7 @@ def _write_report(summary: RunSummary, results: list[CaseResult], kappa: float |
     path = os.path.join(s.reports_dir, f"{summary.run_key}.json")
     payload = {
         "summary": summary.as_dict(),
-        "judge_calibration": kappa_verdict(kappa),
+        "judge_calibration": kappa_verdict(kappa, n_labels_matched=summary.judge_labels_matched),
         "failure_counts": failure_counts_by_kind(results),
         "failure_sample_per_kind": FAILURE_SAMPLE_PER_KIND,
         "failures": sample_failures_by_kind(results),

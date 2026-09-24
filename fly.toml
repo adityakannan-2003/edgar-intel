@@ -1,0 +1,67 @@
+# Fly.io deployment.
+#
+# Two decisions worth being able to defend:
+#
+# 1. The database is NOT here. Fly's managed Postgres image does not ship
+#    pgvector, and this schema opens with `CREATE EXTENSION vector`. Rather than
+#    maintain a custom Postgres machine for a portfolio deployment, the DSN
+#    points at a managed Postgres that has pgvector already (Neon or Supabase,
+#    both free-tier). `docs/DEPLOY.md` has the loading steps.
+#
+# 2. `min_machines_running = 0`. The instance sleeps when idle and cold-starts on
+#    the first request. A cold start pays the model load -- which is why /ready
+#    embeds a probe string, warming it -- and in exchange the deployment costs
+#    nothing while nobody is looking at it. For a URL on a resume that is the
+#    right trade; for a service with users it would not be.
+
+app = "edgar-intel"
+primary_region = "ewr"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8000"
+  EDGAR_LLM_PROVIDER = "openai"
+  EDGAR_EMBED_PROVIDER = "local"
+  EDGAR_SERVICE_NAME = "edgar-intel"
+  # Retrieval is free and stays open. /ask spends the key and does not.
+  EDGAR_API_RATE_LIMIT_PER_MIN = "20"
+
+# Secrets, set with `fly secrets set` and never in this file:
+#   EDGAR_DB_DSN      managed Postgres with pgvector
+#   EDGAR_LLM_API_KEY the model key /ask spends
+#   EDGAR_API_KEY     the key callers must present to /ask
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    # Liveness. Cheap, and must not depend on Postgres: restarting the process
+    # because the database blinked turns a blip into an outage.
+    grace_period = "20s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/health"
+
+  [[http_service.checks]]
+    # Readiness. Database + index + embedder. The long grace period is the
+    # MiniLM load on a cold machine.
+    grace_period = "120s"
+    interval = "60s"
+    method = "GET"
+    timeout = "15s"
+    path = "/ready"
+
+[[vm]]
+  # 1 GB is not padding. MiniLM-L6-v2 plus the ms-marco cross-encoder plus torch
+  # CPU runtime does not fit in 512 MB, and the failure mode is an OOM kill
+  # partway through the first request rather than a clean error.
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1

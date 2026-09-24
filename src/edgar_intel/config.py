@@ -95,6 +95,16 @@ class Settings(BaseSettings):
     otlp_endpoint: str = ""
     service_name: str = "edgar-intel"
 
+    # ----------------------------------------------------------------- serving
+    # Endpoints that spend money on a model call. Empty = open, which is the
+    # local default and must stay that way so the test suite and docker-compose
+    # keep working unchanged. Set it before exposing the service to the internet:
+    # `/ask` runs the agent, and the agent spends the deployment's own API key.
+    api_key: str = ""
+    # Per-client-IP budget for the paid endpoints. A public URL with an
+    # unmetered `/ask` is somebody else's spending decision.
+    api_rate_limit_per_min: int = 20
+
     def cost_usd(self, prompt_tokens: int, completion_tokens: int) -> float:
         """Dollar cost of one call. Reported per-request and per-1k-requests."""
         return (

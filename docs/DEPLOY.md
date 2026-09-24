@@ -57,33 +57,73 @@ psql "$EDGAR_DB_DSN" -c "SELECT extname FROM pg_extension WHERE extname IN ('vec
 
 Both rows must come back. `pg_trgm` is also required.
 
-## 2. Load the corpus
+## 2. Load the corpus — copy it, do not rebuild it
 
-Run from a machine that can reach `sec.gov` — in this project's environment that
-means the local Mac, since `sec.gov` is blocked by egress policy from cloud
-containers. Pointing `EDGAR_DB_DSN` at the remote database and running the
-ingest locally is the whole trick: the slow, network-bound work happens where
-the network works, and the deployed instance only reads.
+The local database already holds everything the deployed instance needs: 24
+filings, 264 sections, 23,499 chunks across four strategies, every one embedded,
+1,338 XBRL facts and the eval-run history that `/stats/eval` serves. **Copy that.**
 
-```bash
-edgar-intel ingest run                      # ~24 filings, 8 companies, 3 years
-edgar-intel ingest verify-facts             # must come back clean
-edgar-intel index build --strategy all      # chunks + embeddings, the slow step
-edgar-intel status                          # record these counts
-```
-
-`index build` writes every embedding over the wire to the remote database; on a
-home connection expect this to be the longest step by far. It is also the step
-whose absence `/ready` catches: a deployed instance with an empty `chunks` table
-returns 503 with `index: false` rather than serving empty results.
-
-Optional, and worth it — `/stats/eval` has nothing to report until an evaluation
-run exists in the remote database:
+Re-running `ingest` and `index build` against a remote DSN also works and is the
+wrong choice. It re-fetches from `sec.gov`, re-embeds all 23,499 chunks on CPU,
+and then writes every 384-dimensional vector over a home uplink one statement at
+a time — an hour or more, for a database that is byte-for-byte reproducible from
+the one already on disk. Worse, a fresh ingest can pick up *newer* filings than
+the ones the current metrics were measured against, so `/stats/eval` would report
+numbers from a corpus the instance is no longer serving.
 
 ```bash
-edgar-intel eval build
-edgar-intel eval run --label deployed
+# 1. extensions first -- a restore cannot create a vector column without them
+psql "$REMOTE_DSN" -c "CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+
+# 2. dump local, excluding the extension statements the target already has
+pg_dump "postgresql://edgar:edgar@localhost:5433/edgar" \
+  --no-owner --no-privileges --no-comments \
+  -f /tmp/edgar.sql
+
+# 3. restore
+psql "$REMOTE_DSN" -v ON_ERROR_STOP=1 -f /tmp/edgar.sql
 ```
+
+If step 3 fails on `CREATE EXTENSION` because the role lacks permission, the
+extensions from step 1 are already there — re-run with those lines stripped:
+`grep -v 'CREATE EXTENSION' /tmp/edgar.sql > /tmp/edgar-noext.sql`.
+
+Two things to check before trusting it:
+
+```bash
+# counts must match `edgar-intel status` locally: 24 / 264 / 23499 / 1338
+psql "$REMOTE_DSN" -c "SELECT 'filings' t, count(*) FROM filings
+  UNION ALL SELECT 'sections', count(*) FROM sections
+  UNION ALL SELECT 'chunks', count(*) FROM chunks
+  UNION ALL SELECT 'embedded', count(*) FROM chunks WHERE embedding IS NOT NULL
+  UNION ALL SELECT 'xbrl_facts', count(*) FROM xbrl_facts;"
+
+# the HNSW index has to exist on the target, and a dump may not carry it usefully
+psql "$REMOTE_DSN" -c "\di+ chunks_embedding_idx"
+```
+
+If the HNSW index is missing, rebuild it **after** the rows are loaded — building
+it on an empty table and then inserting is the slow order:
+
+```bash
+psql "$REMOTE_DSN" -c "CREATE INDEX IF NOT EXISTS chunks_embedding_idx
+  ON chunks USING hnsw (embedding vector_cosine_ops)
+  WITH (m = 16, ef_construction = 64);"
+```
+
+The `m` and `ef_construction` values are not decoration — they must match
+`sql/001_schema.sql`. Building the deployed index with pgvector's defaults would
+give the live instance different recall characteristics from the one every number
+in `docs/METRICS.md` was measured on, and nothing would report the difference.
+
+`embedded` must equal `chunks`. A deployed instance with an empty or partial
+`chunks` table is what `/ready` catches — it returns 503 with `index: false`
+rather than serving empty results.
+
+**Storage:** the corpus is roughly 45 MB of chunk bodies, ~36 MB of vectors, plus
+the `body_tsv` GIN index and the HNSW index. That fits a Neon or Supabase free
+tier, but check the project's limit before the restore rather than halfway through
+it.
 
 ## 3. Deploy
 

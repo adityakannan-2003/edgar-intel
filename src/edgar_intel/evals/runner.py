@@ -428,6 +428,25 @@ def _mean(values: list[float]) -> float:
 FAILURE_SAMPLE_PER_KIND = 25
 
 
+def subject_of(case_id: str) -> str:
+    """The ticker a case id belongs to: `num-PG-NetIncomeLoss-2025` -> `PG`.
+
+    Read from the id rather than from `CaseResult`, which carries no ticker and is
+    a `slots=True` dataclass persisted field-by-field -- adding one to spread a
+    *report* sample across companies would mean touching the result schema for a
+    presentation concern. Reading the id also means this works on reports that
+    already exist.
+
+    Ids are `<kind>-<TICKER>-<rest>`. Anything that does not match that shape
+    falls into one bucket, which degrades to the old first-N behaviour for those
+    rows rather than dropping them.
+    """
+    parts = case_id.split("-")
+    if len(parts) >= 3 and parts[1].isupper() and parts[1].isalpha():
+        return parts[1]
+    return "?"
+
+
 def sample_failures_by_kind(
     results: list[CaseResult], per_kind: int = FAILURE_SAMPLE_PER_KIND
 ) -> list[dict[str, Any]]:
@@ -445,25 +464,65 @@ def sample_failures_by_kind(
     is a hole in the instrumentation.
 
     Quota per kind rather than a global cap, so a kind can never be crowded out
-    by a noisier one. Order within a kind is preserved.
+    by a noisier one.
+
+    That fixed the cross-kind crowding and left the same defect one level down.
+    Taking the *first* 25 of a kind in result order is not a sample: results are
+    ordered by CIK, so on `baseline-v5` the 25 numeric rows covered CAT, PG and
+    JNJ -- the three lowest CIKs -- and **none of the other five companies
+    appeared at all.** 54 of 79 numeric failures were absent, and the three
+    companies present were exactly the ones the ordering happened to favour. Any
+    read of "what is failing" from that file was a read of three companies.
+
+    So the quota is now filled round-robin across ticker within each kind. A
+    company with one failure gets it shown before a company with thirty gets its
+    second. Order is no longer "preserved" -- that was the bug wearing the
+    clothes of a feature.
     """
-    by_kind: dict[str, list[dict[str, Any]]] = {}
+    grouped: dict[str, dict[str, list[CaseResult]]] = {}
     for r in results:
         if r.passed:
             continue
-        rows = by_kind.setdefault(r.kind, [])
-        if len(rows) >= per_kind:
-            continue
-        rows.append(
+        grouped.setdefault(r.kind, {}).setdefault(subject_of(r.case_id), []).append(r)
+
+    out: list[dict[str, Any]] = []
+    for kind in sorted(grouped):
+        buckets = [grouped[kind][t] for t in sorted(grouped[kind])]
+        taken: list[CaseResult] = []
+        depth = 0
+        while len(taken) < per_kind and any(len(b) > depth for b in buckets):
+            for bucket in buckets:
+                if len(taken) >= per_kind:
+                    break
+                if len(bucket) > depth:
+                    taken.append(bucket[depth])
+            depth += 1
+        out += [
             {
                 "case_id": r.case_id,
                 "kind": r.kind,
+                "ticker": subject_of(r.case_id),
                 "expected": r.expected[:400],
                 "answer": r.answer[:400],
                 "why": r.judge_rationale or r.error,
             }
-        )
-    return [row for kind in sorted(by_kind) for row in by_kind[kind]]
+            for r in taken
+        ]
+    return out
+
+
+def failures_omitted_by_kind(
+    results: list[CaseResult], per_kind: int = FAILURE_SAMPLE_PER_KIND
+) -> dict[str, int]:
+    """How many failures the sample does not show, per kind.
+
+    `failure_counts` and the length of `failures` already imply this, and nobody
+    subtracts. Stating it is the difference between a reader who knows they are
+    looking at a sample and one who thinks they are looking at the failures.
+    """
+    return {
+        kind: max(0, n - per_kind) for kind, n in failure_counts_by_kind(results).items()
+    }
 
 
 def failure_counts_by_kind(results: list[CaseResult]) -> dict[str, int]:
@@ -484,6 +543,7 @@ def _write_report(summary: RunSummary, results: list[CaseResult], kappa: float |
         "judge_calibration": kappa_verdict(kappa, n_labels_matched=summary.judge_labels_matched),
         "failure_counts": failure_counts_by_kind(results),
         "failure_sample_per_kind": FAILURE_SAMPLE_PER_KIND,
+        "failures_omitted_by_kind": failures_omitted_by_kind(results),
         "failures": sample_failures_by_kind(results),
     }
     with open(path, "w", encoding="utf-8") as fh:

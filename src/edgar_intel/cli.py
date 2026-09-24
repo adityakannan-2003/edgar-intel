@@ -284,6 +284,101 @@ def eval_build(
         )
 
 
+@eval_app.command("narrative-sources")
+def eval_narrative_sources(
+    per_company: int = typer.Option(5, help="Narrative topics per company to plan for."),
+    missing_only: bool = typer.Option(
+        True, help="Dump only cases that have no human reference yet."
+    ),
+    cases: str = typer.Option("", help="Comma-separated case ids; overrides --missing-only."),
+    out: str = typer.Option("", help="Output path. Empty = a name derived from the selection."),
+    overwrite: bool = typer.Option(False, help="Replace an existing dump."),
+    max_section_chars: int = typer.Option(
+        0, help="Truncate each section, marked explicitly. 0 = no truncation."
+    ),
+) -> None:
+    """Dump the filing sections a narrative reference answer must be written from.
+
+    Expanding the narrative set to 8 companies x 5 topics needs 16 new reference
+    answers, and a reference answer is ground truth: written from memory it
+    measures the writer's recollection instead of the system. Every existing
+    reference was written against `reports/narrative_source_sections.txt`; this
+    is that dump, reproducible, for the cases that do not have one yet.
+
+    A case whose expected Item has no section is reported rather than skipped.
+    Incorporation by reference is routine, and "no section" and "the company
+    discloses nothing" must not look alike.
+    """
+    from .evals.narrative_sources import (
+        default_dump_name,
+        dump,
+        missing_references,
+        narrative_plan,
+    )
+
+    plan = narrative_plan(max_per_company=per_company)
+    if cases:
+        wanted = {c.strip() for c in cases.split(",") if c.strip()}
+        selected = [p for p in plan if p.case_id in wanted]
+        unknown = wanted - {p.case_id for p in selected}
+        if unknown:
+            console.print(f"[red]not in the plan: {', '.join(sorted(unknown))}[/red]")
+            raise typer.Exit(1)
+        label = "selected"
+    elif missing_only:
+        selected = missing_references(plan)
+        label = "missing"
+    else:
+        selected = plan
+        label = "all"
+
+    if not selected:
+        console.print("[green]every planned case already has a human reference[/green]")
+        return
+
+    def progress(sources) -> None:
+        mark = (
+            "[green]ok[/green]"
+            if sources.expected_item_found
+            else "[yellow]NO SECTION[/yellow]"
+        )
+        console.print(
+            f"  {sources.plan.case_id:<34} item {sources.plan.item:<3} "
+            f"{len(sources.sections)} sec  {sources.total_chars:>8,}c  {mark}"
+        )
+
+    try:
+        payload = dump(
+            selected,
+            out_path=out or default_dump_name(len(selected), label),
+            overwrite=overwrite,
+            max_section_chars=max_section_chars,
+            progress=progress,
+        )
+    except FileExistsError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from exc
+
+    console.print()
+    _table("narrative sources", payload["rows"])
+    console.print(
+        f"[bold]{payload['cases']} cases, {payload['total_chars']:,} chars -> "
+        f"{payload['out_path']}[/bold]"
+    )
+    if payload["missing_sections"]:
+        console.print(
+            "[yellow]no section for the expected Item: "
+            + ", ".join(payload["missing_sections"])
+            + " -- the disclosure is elsewhere or incorporated by reference[/yellow]"
+        )
+    if payload["year_mismatches"]:
+        console.print(
+            "[yellow]case year and 10-K year disagree: "
+            + ", ".join(payload["year_mismatches"])
+            + " -- the dump names the year the text came from[/yellow]"
+        )
+
+
 @eval_app.command("run")
 def eval_run(
     path: str = typer.Option("evalset/golden.json"),

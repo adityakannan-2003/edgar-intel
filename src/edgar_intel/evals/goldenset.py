@@ -539,66 +539,78 @@ def generate_narrative_cases(max_per_company: int = 3, seed: int = 7) -> list[Ev
     deliberately generic; the discipline is to replace each one with what the
     filing actually says after reading it. A narrative eval set you have not
     read is a narrative eval set you cannot defend.
+
+    The company x seed expansion itself lives in `narrative_sources.narrative_plan`,
+    because the sources dumper needs exactly the same grid *before* any reference
+    exists for it. This function is the half that refuses to emit a case without
+    a human reference.
     """
-    rng = random.Random(seed)
+    from .narrative_sources import narrative_plan
+
     cases: list[EvalCase] = []
-    for row in db.query("SELECT cik, ticker, name FROM companies ORDER BY ticker"):
-        seeds = NARRATIVE_SEEDS[:]
-        rng.shuffle(seeds)
-        for seed_case in seeds[:max_per_company]:
-            year_row = db.query_one(
-                "SELECT MAX(fiscal_year) AS fy FROM filings WHERE cik = %s", (row["cik"],)
-            )
-            fy = year_row["fy"] if year_row else None
-            case_id = f"nar-{row['ticker'] or row['cik']}-{seed_case['slug']}"
+    for item in narrative_plan(max_per_company=max_per_company, seed=seed):
+        reference = NARRATIVE_REFERENCES.get(item.case_id)
+        if reference is None:
+            raise ValueError(f"Missing narrative reference for {item.case_id}")
 
-            reference = NARRATIVE_REFERENCES.get(case_id)
-            if reference is None:
-                raise ValueError(f"Missing narrative reference for {case_id}")
-
-            cases.append(
-                    EvalCase(
-                    case_id=case_id,
-                    kind="narrative",
-                    question=NARRATIVE_QUESTION_OVERRIDES.get(
-                    case_id,
-                    seed_case["question"].format(company=row["name"]),
-                    ),
-                    expected=reference,
-                    ticker=row["ticker"],
-                    fiscal_year=fy,
-                    difficulty="single_hop",
-                    notes=f"human-reviewed reference grounded in FY{fy} filing; "
-                        f"expected evidence in Item {seed_case['item']}",
-                )
+        cases.append(
+            EvalCase(
+                case_id=item.case_id,
+                kind="narrative",
+                question=item.question,
+                expected=reference,
+                ticker=item.ticker,
+                fiscal_year=item.fiscal_year,
+                difficulty="single_hop",
+                notes=f"human-reviewed reference grounded in FY{item.fiscal_year} "
+                f"filing; expected evidence in Item {item.item}",
             )
+        )
     return cases
 
+
 NARRATIVE_QUESTION_OVERRIDES = {
+    # The generic supply-chain template fits a health insurer badly: UNH has no
+    # manufacturing supply chain, and its Item 1A risk is dependence on
+    # providers and third-party vendors. The question is rewritten to ask what
+    # the filing actually discloses; the reference answer is unchanged.
     "nar-UNH-supply-concentration": (
-        "UnitedHealth says noncompliance with privacy and security requirements, "
-        "or a privacy or security breach involving the company or one of its "
-        "third-party service providers, could harm its reputation and business. "
-        "Consequences can include mandatory disclosure, loss of existing or new "
-        "customers, increased incident-management and remediation costs, and "
-        "significant fines, penalties and litigation awards."
+        "What third-party supplier, vendor and provider dependency risks does "
+        "UnitedHealth Group disclose?"
     ),
 }
 
-def test_all_narrative_cases_have_human_references():
-    from edgar_intel.evals.goldenset import (
-        NARRATIVE_REFERENCES,
-        generate_narrative_cases,
-    )
 
-    cases = generate_narrative_cases()
+def check_question_overrides(
+    overrides: dict[str, str] | None = None,
+    references: dict[str, str] | None = None,
+) -> list[str]:
+    """Reject an override that is an answer rather than a question.
 
-    assert len(cases) == 24
+    This exists because the UNH override was, for a while, a paragraph of
+    reference-answer prose sitting in the dict that replaces the *question*.
+    The golden set on disk predated it, so nothing failed; the next rebuild
+    would have asked the model to answer a statement about privacy breaches and
+    graded the reply against an answer about provider dependence. Ground truth
+    corrupted quietly, exactly like the fiscal years taken from the report
+    instead of the fact.
+    """
+    overrides = NARRATIVE_QUESTION_OVERRIDES if overrides is None else overrides
+    references = NARRATIVE_REFERENCES if references is None else references
+    reference_bodies = {v.strip() for v in references.values()}
 
-    for case in cases:
-        assert case.case_id in NARRATIVE_REFERENCES
-        assert "REPLACE this reference" not in case.expected
-        assert len(case.expected) > 80
+    problems: list[str] = []
+    for case_id, text in overrides.items():
+        body = text.strip()
+        if not body.endswith("?"):
+            problems.append(f"{case_id}: override is not a question (no '?')")
+        if len(body) > 300:
+            problems.append(
+                f"{case_id}: override is {len(body)} chars -- too long for a question"
+            )
+        if body in reference_bodies:
+            problems.append(f"{case_id}: override duplicates a reference answer")
+    return problems
 
 # ----------------------------------------------------------- evidence linking
 import re
@@ -941,6 +953,13 @@ def build(
     strategy: str | None = None,
 ) -> list[EvalCase]:
     from ..config import get_settings
+
+    problems = check_question_overrides()
+    if problems:
+        raise ValueError(
+            "Refusing to rebuild the golden set with malformed question overrides:\n  "
+            + "\n  ".join(problems)
+        )
 
     strategy = strategy or get_settings().default_strategy
     cases = generate_numeric_cases(numeric_per_company)

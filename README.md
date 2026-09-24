@@ -139,7 +139,12 @@ index build time and tail latency — pgvector keeps vectors, full text, and the
 XBRL ground truth in one transactional store, so a single query can filter by
 company and fiscal year *and* rank by vector distance. See
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the rest of the decisions and
-their tradeoffs.
+their tradeoffs, [`docs/METRICS.md`](docs/METRICS.md) for every number this repo
+has actually measured and an explicit **NOT MEASURED** on the ones it has not,
+and [`docs/DEPLOY.md`](docs/DEPLOY.md) for running it somewhere with a URL —
+including why the container needs `torch` (queries are embedded at request time,
+384-d, so the query model cannot be swapped for an API one) and why `/ask` sits
+behind a key and a rate limit while `/search` stays open.
 
 An honest note on the lexical side: it is Postgres full-text search scored with
 `ts_rank_cd`, which is tf-idf-family but is **not** BM25 — it has no
@@ -175,13 +180,18 @@ you then fail. The work that converts it into something you can defend:
 1. **Run it against real filings.** Pick your own eight companies. The parser
    will break on at least one of them — filings are inconsistent, and fixing
    that is the most valuable hour you will spend here.
-2. **Build the narrative eval set properly.** The seeded reference answers in
-   `goldenset.py` are generic placeholders and say so. Read the filings and
-   replace them. Then hand-label 40 answers and look at the kappa you actually
-   get.
+2. **Build the narrative eval set properly.** The seeded references in
+   `NARRATIVE_SEEDS` are generic and say so; `NARRATIVE_REFERENCES` replaces all
+   24 of them with prose written from the filing text that
+   `edgar-intel eval narrative-sources` dumps. Do that for your own companies,
+   then hand-label the answers and look at the κ you actually get. Be ready for
+   it to come back unusable — here it came back at 0.42 with 7 false positives
+   and 0 false negatives, and three rubric revisions did not fix it.
 3. **Run the strategy comparison and record the real numbers.**
    `edgar-intel eval compare` gives you a table. Whatever it says is your
    result — including if section-aware loses, which happens and is interesting.
+   This repo has **not** run it yet, which is why no chunking table appears in
+   `docs/METRICS.md`.
 4. **Break something on purpose.** Set `retrieve_k=5`, watch recall collapse,
    watch the failure breakdown correctly attribute it to retrieval. Now you
    have seen the instrument work.

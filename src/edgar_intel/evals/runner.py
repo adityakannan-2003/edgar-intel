@@ -23,6 +23,7 @@ from ..providers import get_llm
 from ..providers.openai_compat import parse_json_strict
 from ..retrieval import metrics as m
 from ..retrieval.search import DEFAULT_CONTEXT_MAX_CHARS, build_context_report, search
+from .evidence import index_shape, labels_for
 from .judge import build_result, calibration_pairs, compute_kappa, kappa_verdict
 from .judge_contracts import get_contract
 from .schemas import ANSWER_SCHEMA, CaseResult, EvalCase, RunSummary
@@ -193,8 +194,29 @@ def run_suite(
     strategy = strategy or s.default_strategy
     run_key = f"{label or 'run'}-{uuid.uuid4().hex[:8]}"
 
+    # Which index this run grades against, and labels that belong to it. The
+    # golden set's chunk ids were linked against one build of one strategy; any
+    # other strategy, or the same one re-chunked, would score hit@k = 0 against
+    # them without an error. See evals/evidence.py.
+    index = index_shape(strategy)
+    if index["chunks"] == 0:
+        raise RunAborted(
+            f"No chunks under strategy '{strategy}'. A run against an empty index "
+            "is not a score of zero -- every answer would be an abstention. Build "
+            "it first (edgar-intel index build), or check the strategy name."
+        )
+    if mode != "lexical" and index["embedded"] < index["chunks"]:
+        raise RunAborted(
+            f"'{strategy}' has {index['embedded']} of {index['chunks']} chunks "
+            f"embedded, so dense retrieval would search part of the index -- an "
+            f"interrupted build. Re-run `edgar-intel index build` for it first."
+        )
+    cases, evidence_labels = labels_for(cases, strategy)
+
     config = {
         "strategy": strategy,
+        "index": index,
+        "evidence_labels": evidence_labels,
         "mode": mode,
         "use_rerank": use_rerank,
         "k": k or s.retrieve_k,
@@ -560,6 +582,12 @@ def compare_strategies(
 
     This is the experiment that produces the comparison table -- and the
     resume bullet. Same questions, same models, same judge; one variable.
+
+    Same *labelling procedure* too, which is not the same thing as the same
+    labels: the golden set's chunk ids belong to one strategy, so each run
+    re-derives them for its own index (`run_suite` -> `labels_for`). Grading
+    four strategies against section_aware's ids would give the other three
+    hit@k = 0 by construction.
     """
     summaries: list[RunSummary] = []
     for strategy in strategies:

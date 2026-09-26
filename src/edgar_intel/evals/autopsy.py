@@ -42,6 +42,7 @@ from ..config import get_settings
 from ..providers import get_llm
 from ..providers.openai_compat import parse_json_strict
 from ..retrieval.search import DEFAULT_CONTEXT_MAX_CHARS, infer_expected_items
+from .evidence import labels_for
 from .judge import JUDGE_SYSTEM, JUDGE_TEMPLATE, grade, judge_narrative
 from .runner import ANSWER_SYSTEM, ANSWER_TEMPLATE, answer_question, git_sha
 from .schemas import ANSWER_SCHEMA, EvalCase
@@ -266,6 +267,8 @@ def autopsy(
     s = get_settings()
     strategy = strategy or s.default_strategy
     k = k or s.retrieve_k
+    # Gold ids from another index would read as "cut" or "never retrieved".
+    (case,), evidence_labels = labels_for([case], strategy)
     probes = facts or derive_fact_probes(case.expected)
     probes_were_derived = facts is None
 
@@ -284,6 +287,7 @@ def autopsy(
             "llm_model": s.llm_model,
             "judge_model": s.judge_model,
             "inferred_items": infer_expected_items(case.question),
+            "evidence_labels": evidence_labels,
         },
         question=case.question,
         reference=case.expected,

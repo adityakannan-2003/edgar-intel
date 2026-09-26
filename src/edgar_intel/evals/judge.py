@@ -109,27 +109,6 @@ def parse_number(text: str) -> float | None:
             best = (score, value)
     return best[1] if best else None
 
-def parse_percent(text: str) -> float | None:
-    """Extract only a percentage-bearing value from free text.
-
-    Comparative answers often contain both the underlying dollar figures and
-    the calculated percentage change. Generic numeric parsing prefers the
-    currency figures because they carry stronger numeric signals, so percent
-    cases need their own extraction path.
-    """
-    cleaned_text = _DATE_LIKE.sub(" ", _YEAR_LABEL.sub(" ", text))
-
-    for match in _NUM_IN_TEXT.finditer(cleaned_text):
-        raw = match.group(0).strip()
-        if "%" not in raw:
-            continue
-        value = _to_float(raw)
-        if value is not None:
-            return value
-
-    return None
-
-
 def _to_float(raw: str) -> float | None:
     cleaned = raw.replace("$", "").replace(",", "").replace("%", "").strip()
     scale = 1
@@ -197,22 +176,217 @@ def _apply_direction(magnitude: float, answer: str, expected: float) -> float:
         return abs(magnitude)
     return magnitude
 
+# "3.4%", "3.4 %", "3 percent", "3.4 per cent", "3.4 pct". Filings and models
+# both write the word as often as the sign: yoy-CAT-Revenues-2023-2024 answered
+# "a decrease of $2.251 billion, or 3 percent" and was failed for "no
+# percentage found".
+_PERCENT_IN_TEXT = re.compile(
+    r"(?<![\w.])(-?\d[\d,]*(?:\.\d+)?)\s*(?:%|percent\b|per\s+cent\b|pct\b)", re.I
+)
+
+
 def parse_percent(text: str) -> float | None:
-    """Extract only a percentage-bearing value from free text."""
+    """Extract only a percentage-bearing value from free text.
+
+    Comparative answers often contain both the underlying dollar figures and
+    the calculated percentage change. Generic numeric parsing prefers the
+    currency figures because they carry stronger numeric signals, so percent
+    cases need their own extraction path.
+
+    (This function used to be defined twice in this module, identically; the
+    second definition silently replaced the first.)
+    """
     cleaned_text = _DATE_LIKE.sub(" ", _YEAR_LABEL.sub(" ", text))
-
-    for match in _NUM_IN_TEXT.finditer(cleaned_text):
-        raw = match.group(0).strip()
-
-        if "%" not in raw:
-            continue
-
-        value = _to_float(raw)
-
+    for match in _PERCENT_IN_TEXT.finditer(cleaned_text):
+        value = _to_float(match.group(1))
         if value is not None:
             return value
-
     return None
+
+
+# ------------------------------------------------ comparative cases, D2
+#
+# "How did X change from FY2023 to FY2024?" does not ask for a percentage, and
+# the model mostly answers the way a filing does: both figures, a direction, a
+# dollar delta. yoy-CAT-ResearchAndDevelopmentExpense-2023-2024 answered "FY2024
+# was $2,107 million, a decrease from $2,108 million in FY2023" -- exactly right
+# -- and was failed for "no percentage found". In the baseline-v5 failure
+# sample, 8 of the 11 comparative failures were this shape.
+#
+# The expected change is derived from the two XBRL values recorded in the
+# case's notes, so an answer stating both of them has stated the change. It
+# still has to earn the pass: two *different* figures in the answer must match
+# the two values, the change they imply must be within the same 0.5-point
+# tolerance as a stated percentage, and the answer must not contradict itself
+# -- a direction word opposite to the change, or the two years attached the
+# wrong way round.
+_SOURCE_FACT = re.compile(r"FY(\d{4})=([-+]?\d[\d,]*(?:\.\d+)?)")
+_YEAR_MENTION = re.compile(r"\b(?:FY\s?|fiscal\s+(?:year\s+)?)?((?:19|20)\d{2})\b", re.I)
+_WENT_DOWN = re.compile(
+    r"\b(?:decrease[ds]?|decreasing|decline[ds]?|declining|fell|fall(?:s|en)?|"
+    r"drop(?:s|ped)?|down|lower|reduc(?:ed|tion))\b",
+    re.I,
+)
+_WENT_UP = re.compile(
+    r"\b(?:increase[ds]?|increasing|rose|rise[ns]?|rising|grew|grow(?:s|n|th)?|"
+    r"up|higher|gain(?:s|ed)?)\b",
+    re.I,
+)
+_PERCENT_POINT_TOLERANCE = 0.5
+
+
+def comparative_source_values(notes: str) -> list[tuple[int, float]]:
+    """The (fiscal year, value) pairs a comparative case was built from, sorted."""
+    return sorted(
+        (int(year), float(value.replace(",", "")))
+        for year, value in _SOURCE_FACT.findall(notes or "")
+    )
+
+
+def _figure_mentions(text: str) -> list[tuple[int, int, float]]:
+    """(start, end, value) for every figure in the text that is not a year,
+    a date or a percentage -- positions in the original text, so a figure can
+    be tied to the year written next to it."""
+    skip = [m.span() for m in _YEAR_LABEL.finditer(text)]
+    skip += [m.span() for m in _DATE_LIKE.finditer(text)]
+    out: list[tuple[int, int, float]] = []
+    for m in _NUM_IN_TEXT.finditer(text):
+        raw = m.group(0).strip()
+        if not raw or "%" in raw or _looks_like_a_bare_year(raw):
+            continue
+        if any(a < m.end() and m.start() < b for a, b in skip):
+            continue
+        tail = text[m.end() : m.end() + 12].lower()
+        if re.match(r"\s*(?:percent|per\s+cent|pct)\b", tail):
+            continue
+        value = _to_float(raw)
+        if value is not None:
+            out.append((m.start(), m.end(), value))
+    return out
+
+
+def _scaled_match(value: float, target: float, tol: float) -> tuple[float, float] | None:
+    """(relative error, scaled value) at the closest common reporting scale."""
+    best: tuple[float, float] | None = None
+    for scale in (1, 1_000, 1_000_000):
+        candidate = value * scale
+        if target == 0:
+            err = 0.0 if candidate == 0 else float("inf")
+        else:
+            err = abs(candidate - target) / abs(target)
+        if err <= tol and (best is None or err < best[0]):
+            best = (err, candidate)
+    return best
+
+
+def _stated_direction(answer: str) -> int | None:
+    """+1 or -1 when the answer names one direction, None when it names none
+    or both ("revenue rose while margins fell" states no single direction)."""
+    down, up = bool(_WENT_DOWN.search(answer)), bool(_WENT_UP.search(answer))
+    if down == up:
+        return None
+    return 1 if up else -1
+
+
+_SEGMENT_BREAK = re.compile(r"(?<=[.;!?])\s+")
+
+
+def _nearest_year(text: str, start: int, end: int) -> int | None:
+    """The year written closest to a figure, looking in its own sentence first.
+
+    None when there is no year, or when two different years are equally close
+    -- "from $20.12 in FY2023 to $22.05 in FY2024" leaves $22.05 four characters
+    from each, and a tie is not evidence of anything.
+    """
+    seg_start, seg_end = 0, len(text)
+    for m in _SEGMENT_BREAK.finditer(text):
+        if m.start() >= end:
+            seg_end = m.start()
+            break
+        if m.end() <= start:
+            seg_start = m.end()
+
+    def closest(lo: int, hi: int) -> tuple[bool, int | None]:
+        gaps: list[tuple[int, int]] = []
+        for m in _YEAR_MENTION.finditer(text, lo, hi):
+            if m.start() < end and start < m.end():
+                continue  # the figure itself
+            gap = m.start() - end if m.start() >= end else start - m.end()
+            gaps.append((gap, int(m.group(1))))
+        if not gaps:
+            return False, None
+        gaps.sort()
+        if len(gaps) > 1 and gaps[0][0] == gaps[1][0] and gaps[0][1] != gaps[1][1]:
+            return True, None
+        return True, gaps[0][1]
+
+    found, year = closest(seg_start, seg_end)
+    if found:
+        return year
+    return closest(0, len(text))[1]
+
+
+def _fmt_value(value: float) -> str:
+    return f"{value:,.0f}" if float(value).is_integer() else f"{value:,.2f}"
+
+
+def grade_change_from_figures(
+    case: EvalCase, answer: str, tol: float
+) -> tuple[bool, float, str]:
+    """Grade a comparative answer that states the two figures instead of a percentage."""
+    no_pct = "no percentage found in the answer"
+    source = comparative_source_values(case.notes)
+    if len(source) != 2 or case.expected_value is None:
+        return False, 0.0, no_pct
+    (y0, prev), (y1, cur) = source
+
+    mentions = _figure_mentions(answer)
+    best: tuple[float, int, int, float, float] | None = None
+    for i, (_, _, v_prev) in enumerate(mentions):
+        m_prev = _scaled_match(v_prev, prev, tol)
+        if m_prev is None:
+            continue
+        for j, (_, _, v_cur) in enumerate(mentions):
+            if j == i:
+                continue
+            m_cur = _scaled_match(v_cur, cur, tol)
+            if m_cur is None:
+                continue
+            total = m_prev[0] + m_cur[0]
+            if best is None or total < best[0]:
+                best = (total, i, j, m_prev[1], m_cur[1])
+    if best is None:
+        return False, 0.0, f"{no_pct}, and it does not state both the FY{y0} and FY{y1} figures"
+
+    _, i, j, a_prev, a_cur = best
+    expected = case.expected_value
+    implied = (a_cur - a_prev) / abs(a_prev) * 100 if a_prev else float("inf")
+    if abs(implied - expected) > _PERCENT_POINT_TOLERANCE:
+        return False, 0.0, (
+            f"{no_pct}; its figures imply {implied:+.2f}% against {expected:+.2f}% expected"
+        )
+
+    true_sign = (cur > prev) - (cur < prev)
+    said = _stated_direction(answer)
+    if said is not None and true_sign != 0 and said != true_sign:
+        word = "an increase" if said > 0 else "a decrease"
+        return False, 0.0, (
+            f"{no_pct}; both figures match but the answer calls a {expected:+.2f}% change {word}"
+        )
+
+    year_of_prev = _nearest_year(answer, mentions[i][0], mentions[i][1])
+    year_of_cur = _nearest_year(answer, mentions[j][0], mentions[j][1])
+    if year_of_prev == y1 and year_of_cur == y0:
+        return False, 0.0, (
+            f"{no_pct}; both figures match but are attached to the wrong years "
+            f"(FY{y0}'s value next to FY{y1} and vice versa)"
+        )
+
+    return True, 1.0, (
+        f"no percentage stated; both figures match (FY{y0} {_fmt_value(prev)}, "
+        f"FY{y1} {_fmt_value(cur)}) and imply {implied:+.2f}% against "
+        f"{expected:+.2f}% expected"
+    )
 
 def grade_numeric(
     case: EvalCase, answer: str, tolerance: float | None = None
@@ -252,7 +426,9 @@ def grade_numeric(
         got = parse_percent(answer)
 
         if got is None:
-            return False, 0.0, "no percentage found in the answer"
+            # A stated percentage governs when there is one. Without one, an
+            # answer giving both figures has still stated the change (D2).
+            return grade_change_from_figures(case, answer, tol)
 
         signed = _apply_direction(got, answer, expected)
         ok = abs(signed - expected) <= 0.5

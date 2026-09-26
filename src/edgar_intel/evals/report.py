@@ -198,6 +198,19 @@ def compare_runs(run_keys: list[str]) -> list[dict[str, Any]]:
     return out
 
 
+def attribute_failure(retrieval: dict[str, Any] | str | None) -> str:
+    """'retrieval' when none of the labelled evidence was in the top 5,
+    'generation' when some was and the answer still failed, 'unlabelled' when
+    the case has no labels to judge by. One rule, shared with `eval regrade`,
+    so a re-marked run is attributed exactly as the original was."""
+    if isinstance(retrieval, str):
+        retrieval = json.loads(retrieval)
+    recall = (retrieval or {}).get("recall@5")
+    if recall is None:
+        return "unlabelled"
+    return "retrieval" if recall == 0 else "generation"
+
+
 def failure_breakdown(run_key: str) -> dict[str, Any]:
     """Where a run actually lost points.
 
@@ -224,13 +237,10 @@ def failure_breakdown(run_key: str) -> dict[str, Any]:
     for row in rows:
         if row["passed"]:
             continue
-        retrieval = row["retrieval"]
-        if isinstance(retrieval, str):
-            retrieval = json.loads(retrieval)
-        recall = (retrieval or {}).get("recall@5")
-        if recall is None:
+        cause = attribute_failure(row["retrieval"])
+        if cause == "unlabelled":
             unlabelled += 1
-        elif recall == 0:
+        elif cause == "retrieval":
             retrieval_misses += 1
         else:
             generation_misses += 1

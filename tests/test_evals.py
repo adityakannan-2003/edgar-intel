@@ -101,18 +101,22 @@ class TestNumericGrading:
         assert "expected_value" in why
 
     def test_percent_grading_ignores_underlying_currency_figures(self):
-        """Regression: dollar values must not win over the YoY percentage."""
-    case = numeric_case(-3.36, unit="percent")
-    answer = (
-        "Revenue fell from $67,060 million to $64,809 million, "
-        "a decline of 3.4%."
-    )
+        """Regression: dollar values must not win over the YoY percentage.
 
-    passed, score, why = grade_numeric(case, answer)
+        (The body of this test used to sit one indent level too far out, in the
+        class body: it ran once at import and the test itself asserted nothing.)
+        """
+        case = numeric_case(-3.36, unit="percent")
+        answer = (
+            "Revenue fell from $67,060 million to $64,809 million, "
+            "a decline of 3.4%."
+        )
 
-    assert passed
-    assert score == 1.0
-    assert "read -3.40%" in why
+        passed, score, why = grade_numeric(case, answer)
+
+        assert passed
+        assert score == 1.0
+        assert "read -3.40%" in why
 
 
 class TestKappaGating:

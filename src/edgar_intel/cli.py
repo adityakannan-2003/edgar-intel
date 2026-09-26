@@ -230,19 +230,47 @@ def ingest_verify_facts() -> None:
 @index_app.command("build")
 def index_build(
     strategy: str = typer.Option("all", help="fixed | recursive | section_aware | semantic | all"),
-    target_tokens: int = typer.Option(512),
+    target_tokens: int = typer.Option(512, help="Chunk ceiling in token_est, header and overlap included."),
     overlap: int = typer.Option(64),
+    suffix: str = typer.Option(
+        "",
+        help="Build beside the existing index instead of replacing it: "
+        "--suffix _t169 stores section_aware as section_aware_t169.",
+    ),
 ) -> None:
+    """Chunk and embed. Without --suffix this REPLACES the strategy's index.
+
+    A re-chunk measured against the index it replaces needs both to exist, so
+    use --suffix for any experiment; the golden set's labels are re-derived
+    for the new index automatically at run time (evals/evidence.py).
+    """
     from .chunking import STRATEGIES
-    from .retrieval.index import index_strategy
+    from .retrieval.index import index_label_problem, index_strategy
 
     strategies = list(STRATEGIES) if strategy == "all" else [strategy]
+    labels = {st: f"{st}{suffix}" if suffix else None for st in strategies}
+    problems = [p for st in strategies if (p := index_label_problem(st, labels[st]))]
+    if problems:
+        console.print(f"[red]{problems[0]}[/red]")
+        raise typer.Exit(1)
+
     rows = []
     for st in strategies:
-        with console.status(f"building {st}..."):
-            stats = index_strategy(st, target_tokens, overlap, progress=lambda m: console.log(m))
+        name = labels[st] or st
+        with console.status(f"building {name}..."):
+            stats = index_strategy(
+                st, target_tokens, overlap, progress=lambda m: console.log(m), label=labels[st]
+            )
         rows.append(stats.as_dict())
     _table("index build", rows)
+    if suffix:
+        built = ",".join(labels[st] for st in strategies)
+        console.print(
+            f"[dim]existing indexes untouched. Measure with: edgar-intel index "
+            f"embed-window --strategy {labels[strategies[0]]}  |  edgar-intel eval "
+            f"retrieval --strategy {labels[strategies[0]]} --out <new file>  |  "
+            f"eval compare --strategies {built}[/dim]"
+        )
 
 
 @index_app.command("report")
@@ -250,6 +278,39 @@ def index_report_cmd() -> None:
     from .retrieval.index import index_report
 
     _table("index by strategy", index_report())
+
+
+@index_app.command("embed-window")
+def index_embed_window(
+    strategy: str = typer.Option("", help="One strategy, or empty for all four."),
+    sample: int = typer.Option(300, help="Chunks to tokenise per corpus."),
+    seed: int = typer.Option(7, help="Sampling seed, so the number is reproducible."),
+) -> None:
+    """Measure how much of each chunk the embedding model actually reads.
+
+    `index report` shows `token_est`, which is `len(body) // 4` -- a character
+    heuristic, not the model's tokeniser -- and the chunkers size themselves
+    against a 512-token budget that no embedding model here was chosen for.
+    all-MiniLM-L6-v2 has a 256 word-piece window and `LocalEmbedder.embed` never
+    sets `max_seq_length`, so text past it is dropped before the vector exists:
+    still in Postgres, still reachable lexically, invisible to dense retrieval.
+
+    This tokenises real chunk bodies with the model's own tokeniser and reports
+    the share of text the embedder never sees. It exists as a command rather than
+    a script because it has to be re-run after any change to chunk size, and
+    because the last measurement kept as a one-off script was lost.
+    """
+    from .retrieval.index import embed_window_audit, embed_window_verdict
+
+    with console.status("tokenising..."):
+        audit = embed_window_audit(strategy or None, sample=sample, seed=seed)
+
+    console.print(
+        f"[bold]{audit['model']}[/bold]  window = "
+        f"{audit['window_tokens'] or 'unknown'} word-piece tokens"
+    )
+    _table("tokens per chunk, measured", audit["rows"])
+    console.print(f"[bold]{embed_window_verdict(audit)}[/bold]")
 
 
 # --------------------------------------------------------------------- eval
@@ -429,6 +490,59 @@ def eval_gate(
     console.print(result.render())
     if not result.passed:
         raise typer.Exit(1)
+
+
+@eval_app.command("regrade")
+def eval_regrade(
+    run_key: str = typer.Argument(..., help="A finished run, e.g. baseline-v5-2943b37a."),
+    path: str = typer.Option("evalset/golden.json", help="The golden set that run used."),
+    out: str = typer.Option("", help="Report path; default reports/regrade-<run_key>.json."),
+    overwrite: bool = typer.Option(False),
+) -> None:
+    """Re-mark a run's stored numeric answers with the current grader. Free.
+
+    For measuring a grader fix (D2) without a paid run, whose fresh answers
+    would mix provider drift into the delta. Read-only on the database. Cases
+    whose expected answer changed since the run are skipped, not re-graded.
+    """
+    from .evals.goldenset import load
+    from .evals.regrade import regrade_run
+
+    try:
+        payload = regrade_run(run_key, load(path), path, out or None, overwrite)
+    except (FileExistsError, ValueError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from exc
+
+    b, a = payload["before"], payload["after"]
+    _table(
+        f"{run_key}: {payload['numeric_graded']} numeric answers re-marked",
+        [
+            {"": "stored verdicts", **{k: b[k] for k in ("numeric_accuracy", "abstention_rate", "hallucination_rate")}},
+            {"": "current grader", **{k: a[k] for k in ("numeric_accuracy", "abstention_rate", "hallucination_rate")}},
+        ],
+    )
+    console.print(
+        f"fail -> pass: {len(payload['fail_to_pass'])}   "
+        f"pass -> fail: {len(payload['pass_to_fail'])}   skipped: {payload['skipped']}"
+    )
+    fa = payload["failure_attribution"]
+    console.print(
+        f"failures, retrieval / generation / unlabelled: "
+        f"{fa['before']['retrieval']} / {fa['before']['generation']} / {fa['before']['unlabelled']}"
+        f"  ->  {fa['after']['retrieval']} / {fa['after']['generation']} / {fa['after']['unlabelled']}"
+    )
+    if payload["stored_verdicts_reproduce_report"] is False:
+        console.print(
+            f"[red]stored verdicts give {b['numeric_accuracy']} but the run reported "
+            f"{payload['reported_numeric_accuracy']} -- these rows are not the run the "
+            f"report describes; do not quote the delta.[/red]"
+        )
+    if payload["pass_to_fail"]:
+        console.print("[yellow]answers that passed before and fail now -- read them:[/yellow]")
+        for flip in payload["pass_to_fail"]:
+            console.print(f"  {flip['case_id']}: {flip['after']}")
+    console.print(f"[dim]full report: {payload['out_path']}[/dim]")
 
 
 @eval_app.command("compare")
@@ -899,6 +1013,8 @@ def eval_retrieval(
     path: str = typer.Option("evalset/golden.json"),
     limit: int = typer.Option(0, help="Use only the first N cases."),
     out: str = typer.Option("reports/retrieval_sweep.json"),
+    strategy: str = typer.Option("", help="Index to sweep; default is the shipped strategy."),
+    overwrite: bool = typer.Option(False, help="Replace an existing report at --out."),
 ) -> None:
     """Sweep retrieval configurations and attribute where the evidence is lost.
 
@@ -914,7 +1030,21 @@ def eval_retrieval(
     if limit:
         cases = cases[:limit]
 
-    payload = sweep(cases, out_path=out, progress=lambda msg: console.log(msg))
+    try:
+        payload = sweep(
+            cases, out_path=out, progress=lambda msg: console.log(msg),
+            strategy=strategy or None, overwrite=overwrite,
+        )
+    except FileExistsError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from exc
+    for st, rec in payload["evidence_labels"].items():
+        if rec.get("relinked"):
+            console.print(
+                f"[yellow]{st}: {rec['stale_labels']} of {rec['labels']} golden-set "
+                f"labels were not in this index; re-derived for it "
+                f"({rec['cases_labelled_after_relink']} cases labelled).[/yellow]"
+            )
     _table(f"retrieval sweep ({payload['n_cases']} gradeable cases)", payload["rows"])
     console.print()
     console.print(f"[bold]{payload['diagnosis']}[/bold]")

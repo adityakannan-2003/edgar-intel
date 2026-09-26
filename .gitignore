@@ -14,3 +14,8 @@ evalset/
 
 # Saved filings and run reports — regenerate with `edgar-intel ingest doctor`
 data/raw_filings/
+
+# Node / Neon CLI. neon.ts is config and IS committed; auth state and
+# node_modules are not.
+node_modules/
+.neon/

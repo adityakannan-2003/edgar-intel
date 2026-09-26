@@ -60,6 +60,58 @@ def estimate_tokens(text: str) -> int:
     return max(1, len(text) // CHARS_PER_TOKEN)
 
 
+# ------------------------------------------------------------- the ceiling
+# `target_tokens` is a ceiling, not an average. Every strategy below guarantees
+# that no chunk it emits is longer than `target_tokens * CHARS_PER_TOKEN`
+# characters -- overlap and section headers included -- and
+# `tests/test_chunk_bounds.py` asserts it for all four.
+#
+# It was not always true, and each strategy broke it differently. `semantic`
+# returned whole blocks with the budget never consulted, up to 31,476 token_est
+# against a target of 512 (D9). `recursive` prepended its overlap tail after the
+# budget check, reaching 576. `section_aware` added its header on top of that,
+# 588. That mattered little while nobody knew the embedder's window; it matters
+# a great deal once the target is chosen to fit it (D8), because a chunk over
+# the window is scored by dense retrieval on its opening only.
+
+
+def _bounded_pieces(text: str, budget: int) -> list[str]:
+    """Split `text` into pieces of at most `budget` characters.
+
+    Cuts prefer a line break, then any whitespace, and only then land
+    mid-token -- a table row or a figure cut in half is a chunk holding a
+    number without its label. The split is balanced rather than greedy: a unit
+    of 2,100 characters against a 2,048 budget becomes two pieces of about
+    1,050, not 2,048 and 52, so splitting never manufactures the fragment a
+    size floor exists to prevent. Every piece of an oversized unit is therefore
+    at least about a quarter of the budget.
+    """
+    text = text.strip()
+    if budget <= 0:
+        raise ValueError("budget must be positive")
+    pieces: list[str] = []
+    while len(text) > budget:
+        needed = -(-len(text) // budget)       # ceil: pieces still required
+        target = -(-len(text) // needed)       # balanced length, <= budget
+        cut = _cut_point(text, lo=max(1, target // 2), hi=target)
+        head, text = text[:cut].strip(), text[cut:].strip()
+        if head:
+            pieces.append(head)
+    if text:
+        pieces.append(text)
+    return pieces
+
+
+def _cut_point(text: str, lo: int, hi: int) -> int:
+    """Last line break in text[lo:hi+1], else last whitespace, else `hi`."""
+    window = text[lo : hi + 1]
+    for sep in ("\n", " ", "\t"):
+        at = window.rfind(sep)
+        if at != -1:
+            return lo + at
+    return hi
+
+
 # --------------------------------------------------------------------- fixed
 def chunk_fixed(text: str, target_tokens: int = 512, overlap_tokens: int = 64) -> list[str]:
     size = target_tokens * CHARS_PER_TOKEN
@@ -92,20 +144,23 @@ def chunk_recursive(text: str, target_tokens: int = 512, overlap_tokens: int = 6
     units = _split_to_units(text, size)
     chunks: list[str] = []
     buf: list[str] = []
-    buf_len = 0
+    buf_len = 0  # exact length of " ".join(buf)
 
     for unit in units:
         ulen = len(unit)
-        if buf and buf_len + ulen > size:
-            chunks.append(" ".join(buf).strip())
-            if overlap > 0:
-                tail = " ".join(buf)[-overlap:]
-                buf = [tail]
-                buf_len = len(tail)
-            else:
-                buf, buf_len = [], 0
+        if buf and buf_len + 1 + ulen > size:
+            joined = " ".join(buf)
+            chunks.append(joined.strip())
+            buf, buf_len = [], 0
+            # Carry the overlap forward only as far as the next unit leaves
+            # room for it. Prepending it unconditionally after the budget check
+            # is how this strategy reached 576 token_est against a 512 target.
+            room = min(overlap, size - ulen - 1)
+            if room > 0:
+                tail = joined[-room:]
+                buf, buf_len = [tail], len(tail)
+        buf_len = ulen if not buf else buf_len + 1 + ulen
         buf.append(unit)
-        buf_len += ulen + 1
 
     if buf:
         tail = " ".join(buf).strip()
@@ -130,7 +185,10 @@ def _split_to_units(text: str, size: int) -> list[str]:
             if len(sent) <= size:
                 units.append(sent)
             else:
-                units.extend(sent[i : i + size] for i in range(0, len(sent), size))
+                # Last resort, and a common one: a financial table has almost
+                # no sentence punctuation, so the whole table arrives here as
+                # one "sentence". Cut it at row boundaries where possible.
+                units.extend(_bounded_pieces(sent, size))
     return units
 
 
@@ -140,14 +198,26 @@ def chunk_section_aware(
     target_tokens: int = 512,
     overlap_tokens: int = 64,
 ) -> list[Chunk]:
-    """Chunk within Item boundaries, prefixing each chunk with its section title."""
+    """Chunk within Item boundaries, prefixing each chunk with its section title.
+
+    The header is part of the chunk, so it is paid for out of the same budget:
+    the body is chunked to `target_tokens` minus the header's share. Adding it
+    afterwards is how this strategy reached 588 token_est against 512.
+    """
+    size = target_tokens * CHARS_PER_TOKEN
     out: list[Chunk] = []
     ordinal = 0
     for sec in sections:
         title = sec.get("title") or ""
         item = sec.get("item")
         header = f"[{item} {title}] ".strip() if item else (f"[{title}] " if title else "")
-        for piece in chunk_recursive(sec["body"], target_tokens, overlap_tokens):
+        # A header may never take more than half the budget (only reachable
+        # with a toy target), so the body always keeps room to say something.
+        header = header[: size // 2]
+        header_tokens = -(-len(header) // CHARS_PER_TOKEN)
+        body_tokens = max(1, target_tokens - header_tokens)
+        body_overlap = min(overlap_tokens, body_tokens - 1)
+        for piece in chunk_recursive(sec["body"], body_tokens, body_overlap):
             out.append(
                 Chunk(
                     body=f"{header}{piece}".strip(),
@@ -167,6 +237,7 @@ def chunk_semantic(
     target_tokens: int = 512,
     breakpoint_percentile: float = 0.25,
     min_sentences: int = 2,
+    min_tokens: int = 8,
 ) -> list[str]:
     """Split where consecutive-sentence similarity falls into its lowest quartile.
 
@@ -174,25 +245,43 @@ def chunk_semantic(
     absolute cosine value, because similarity distributions differ wildly
     between a Risk Factors section and a footnote table. An absolute threshold
     tuned on one produces nonsense on the other.
-    """
-    sentences = [s.strip() for s in _SENT_SPLIT.split(text) if s.strip()]
-    if len(sentences) <= min_sentences:
-        return [text.strip()] if text.strip() else []
 
-    vecs = embed_fn(sentences)
+    Bounded at both ends (D9). `_SENT_SPLIT` matches almost nothing inside a
+    financial-statement table or an exhibit index, so such a block arrives as a
+    single "sentence" -- one reached 31,476 token_est, about 125,000
+    characters, of which the embedder reads the first 256 word-pieces. Three
+    paths used to emit a block like that whole: the two early returns, and the
+    main loop restarting its buffer as `[nxt]` however long `nxt` was. Now every
+    unit is cut to the budget before grouping, so no path can exceed it.
+
+    At the other end, `min_tokens 1` came from fragments such as "Item 1." or
+    "U.S." that the sentence split leaves behind. Those are glued to their
+    neighbour rather than dropped: dropping text to fix a size statistic trades
+    one silent loss for another.
+    """
+    budget = target_tokens * CHARS_PER_TOKEN
+    # Capped well below the smallest piece `_bounded_pieces` can produce, so
+    # gluing and splitting can never fight over the same fragment.
+    floor = min(min_tokens * CHARS_PER_TOKEN, budget // 8)
+    units = _semantic_units(text, budget, floor)
+    if not units:
+        return []
+    if len(units) <= min_sentences:
+        return _pack(units, budget)
+
+    vecs = embed_fn(units)
     sims = [_cosine(vecs[i], vecs[i + 1]) for i in range(len(vecs) - 1)]
     if not sims:
-        return [text.strip()]
+        return _pack(units, budget)
 
     threshold = _percentile(sims, breakpoint_percentile)
-    budget = target_tokens * CHARS_PER_TOKEN
 
     chunks: list[str] = []
-    buf = [sentences[0]]
-    buf_len = len(sentences[0])
+    buf = [units[0]]
+    buf_len = len(units[0])  # exact length of " ".join(buf)
     for i, sim in enumerate(sims):
-        nxt = sentences[i + 1]
-        too_big = buf_len + len(nxt) > budget
+        nxt = units[i + 1]
+        too_big = buf_len + 1 + len(nxt) > budget
         topic_shift = sim <= threshold and len(buf) >= min_sentences
         if too_big or topic_shift:
             chunks.append(" ".join(buf).strip())
@@ -203,6 +292,44 @@ def chunk_semantic(
     if buf:
         chunks.append(" ".join(buf).strip())
     return [c for c in chunks if c]
+
+
+def _semantic_units(text: str, budget: int, floor: int) -> list[str]:
+    """Sentences, with sub-floor fragments glued forward and every unit <= budget."""
+    sentences = [s.strip() for s in _SENT_SPLIT.split(text) if s.strip()]
+    glued: list[str] = []
+    carry = ""
+    for sent in sentences:
+        sent = f"{carry} {sent}" if carry else sent
+        if len(sent) < floor:
+            carry = sent
+            continue
+        carry = ""
+        glued.append(sent)
+    if carry:
+        # A trailing fragment has nothing after it to join, so it joins the
+        # unit before it -- or stands alone if the whole text is that short.
+        if glued:
+            glued[-1] = f"{glued[-1]} {carry}"
+        else:
+            glued.append(carry)
+    return [piece for sent in glued for piece in _bounded_pieces(sent, budget)]
+
+
+def _pack(units: list[str], budget: int) -> list[str]:
+    """Greedy packing of units already known to fit, for the no-similarity paths."""
+    chunks: list[str] = []
+    buf: list[str] = []
+    buf_len = 0
+    for unit in units:
+        if buf and buf_len + 1 + len(unit) > budget:
+            chunks.append(" ".join(buf))
+            buf, buf_len = [], 0
+        buf_len = len(unit) if not buf else buf_len + 1 + len(unit)
+        buf.append(unit)
+    if buf:
+        chunks.append(" ".join(buf))
+    return chunks
 
 
 def _cosine(a: list[float], b: list[float]) -> float:

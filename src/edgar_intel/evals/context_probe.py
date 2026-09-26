@@ -44,6 +44,7 @@ from typing import Any
 
 from ..config import get_settings
 from ..retrieval.search import DEFAULT_CONTEXT_MAX_CHARS, infer_expected_items
+from .evidence import labels_for
 from .judge import grade
 from .runner import answer_question, git_sha
 from .schemas import EvalCase
@@ -277,6 +278,8 @@ def probe(
     k = k or s.retrieve_k
     boost = s.item_boost_weight if item_boost is None else item_boost
     sha = git_sha()
+    # Gold ids from another index would report every relevant chunk as lost.
+    cases, evidence_labels = labels_for(cases, strategy)
 
     out_path = out_path or default_report_name(
         context_max_chars, boost, rerank_settings, context_packing
@@ -315,6 +318,7 @@ def probe(
             "embed_model": s.embed_model,
             "rerank_model": s.rerank_model,
             "repeats": repeats,
+            "evidence_labels": evidence_labels,
         },
         "out_path": out_path,
         "cases": [c.case_id for c in cases],

@@ -136,14 +136,44 @@ def sweep(
     configs: list[SweepConfig] | None = None,
     out_path: str = "reports/retrieval_sweep.json",
     progress=None,
+    strategy: str | None = None,
+    overwrite: bool = False,
 ) -> dict[str, Any]:
+    """Every configuration over the same cases, graded on labels for its index.
+
+    Refuses to overwrite an earlier sweep: `reports/retrieval_sweep.json` is the
+    source of the 0.194 ceiling gap and the 525-of-539 ms reranker figure, and
+    re-running with the default path would have replaced that evidence -- the
+    `context_probe_16k.json` collision again.
+    """
+    if os.path.exists(out_path) and not overwrite:
+        raise FileExistsError(
+            f"{out_path} already exists and is cited evidence. Pass a new --out, "
+            "or --overwrite if replacing it is the intent."
+        )
+    from .evidence import index_shape, labels_for
+
     configs = configs or default_sweep()
-    results = [run_config(cases, c, progress) for c in configs]
+    if strategy:
+        for c in configs:
+            c.strategy = strategy
+    default = get_settings().default_strategy
+
+    labelled: dict[str, list[EvalCase]] = {}
+    evidence: dict[str, Any] = {}
+    indexes: dict[str, Any] = {}
+    for st in dict.fromkeys(c.strategy or default for c in configs):
+        labelled[st], evidence[st] = labels_for(cases, st)
+        indexes[st] = index_shape(st)
+
+    results = [run_config(labelled[c.strategy or default], c, progress) for c in configs]
 
     payload = {
         "n_cases": results[0].n_cases if results else 0,
         "rows": [r.row() for r in results],
         "diagnosis": diagnose(results),
+        "index": indexes,
+        "evidence_labels": evidence,
     }
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as fh:

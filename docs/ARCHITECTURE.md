@@ -86,6 +86,13 @@ alongside recall. A project reporting only recall would conclude reranking did
 nothing. There is a test asserting exactly this
 (`test_recall_is_blind_to_order_but_ndcg_is_not`).
 
+**And on this corpus it ships off.** The argument above is why a reranker *can*
+earn its latency, not a finding that this one does. `baseline-v6` changed only
+`use_rerank` at one commit: 0.7356 numeric accuracy with it against 0.7404
+without, hit@5 0.638 against 0.660, p50 1434 ms against 892. `EDGAR_USE_RERANK`
+(default `false`) is the one setting `/search`, `/ask` and `eval run` follow, and
+`/config` reports it.
+
 ## 5. Why four chunking strategies
 
 Not to use four. To be able to say which one is better *on this corpus* and show

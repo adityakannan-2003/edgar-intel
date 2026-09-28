@@ -18,9 +18,9 @@ from two facts:
 | endpoint | cost | public |
 |---|---|---|
 | `GET /health` | free | yes — liveness, no database dependency |
-| `GET /ready` | free | yes — database + index + embedder |
+| `GET /ready` | free | yes — database + the served strategy's index + embedder |
 | `GET /config` | free | yes — non-secret runtime config |
-| `GET /stats/eval` | free | yes — the latest evaluation summary |
+| `GET /stats/eval` | free | yes — the latest evaluation summary; the judge's fields withheld unless κ clears the floor |
 | `GET /stats/agent` | free | yes |
 | `POST /search` | free | yes — local embeddings and Postgres only |
 | `POST /ask` | **paid** | **key + rate limit** — runs the agent against a paid model |
@@ -44,54 +44,78 @@ both do on their free tiers.
 
 ```bash
 # Neon: create a project, copy the pooled connection string.
-export EDGAR_DB_DSN='postgresql://USER:PASS@HOST/DB?sslmode=require'
-edgar-intel init                   # creates the extensions and the schema
+export REMOTE_DSN='postgresql://USER:PASS@HOST/DB?sslmode=require'
+psql "$REMOTE_DSN" -c "CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+psql "$REMOTE_DSN" -c "SELECT extname, extversion FROM pg_extension WHERE extname IN ('vector','pg_trgm');"
 ```
 
-Check the extension actually landed — `CREATE EXTENSION` fails silently under a
-role without permission on some hosts:
+Both rows must come back — `CREATE EXTENSION` fails silently under a role
+without permission on some hosts. Note pgvector's version; §2d may need it.
 
-```bash
-psql "$EDGAR_DB_DSN" -c "SELECT extname FROM pg_extension WHERE extname IN ('vector','pg_trgm');"
-```
-
-Both rows must come back. `pg_trgm` is also required.
+**Do not run `edgar-intel init` against it.** The restore in §2 creates the
+schema, and a database whose tables already exist makes that restore stop on
+"relation already exists".
 
 ## 2. Load the corpus — copy it, do not rebuild it
 
 The local database already holds everything the deployed instance needs: 24
-filings, 264 sections, 23,499 chunks across four strategies, every one embedded,
-1,338 XBRL facts and the eval-run history that `/stats/eval` serves. **Copy that.**
+filings, 264 sections, 1,338 XBRL facts, the `section_aware` index the service
+reads — 5,468 chunks, every one embedded — and the eval-run history that
+`/stats/eval` serves. **Copy that, and only that.**
 
 Re-running `ingest` and `index build` against a remote DSN also works and is the
-wrong choice. It re-fetches from `sec.gov`, re-embeds all 23,499 chunks on CPU,
-and then writes every 384-dimensional vector over a home uplink one statement at
-a time — an hour or more, for a database that is byte-for-byte reproducible from
+wrong choice. It re-fetches from `sec.gov`, re-embeds every chunk on CPU, and
+then writes every 384-dimensional vector over a home uplink one statement at a
+time — an hour or more, for a database that is byte-for-byte reproducible from
 the one already on disk. Worse, a fresh ingest can pick up *newer* filings than
 the ones the current metrics were measured against, so `/stats/eval` would report
 numbers from a corpus the instance is no longer serving.
 
+### 2a. Before the copy
+
+- **Exercise `/ask` locally.** The agent has never run end to end outside the
+  tests (`agent_traces` is 0). A few `edgar-intel agent ask "…"` calls against
+  the local database cost cents, show whether it works before the internet can
+  call it, and leave traces that the copy then carries to `/stats/agent`.
+- **Record no evaluation run after the one you mean to publish.** `/stats/eval`
+  serves the most recently *finished* run — today
+  `baseline-v6-no-rerank-7362c6c7`, the reference run in `docs/METRICS.md`.
+
+### 2b. Make a trimmed copy
+
+The local `chunks` table also holds three strategies the service never reads
+(`fixed`, `recursive`, `semantic`) and the `section_aware_t144` experiment —
+about 50,000 rows the deployed database would store and never query. Trim a copy
+rather than the original, so the local database keeps every experiment:
+
 ```bash
-# 1. extensions first -- a restore cannot create a vector column without them
-psql "$REMOTE_DSN" -c "CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+export LOCAL=postgresql://edgar:edgar@localhost:5433
+# TEMPLATE needs no other session on `edgar`: stop the API, close any psql first
+psql "$LOCAL/postgres" -c "DROP DATABASE IF EXISTS edgar_deploy;"       # the copy, never `edgar`
+psql "$LOCAL/postgres" -c "CREATE DATABASE edgar_deploy TEMPLATE edgar;"
+psql "$LOCAL/edgar_deploy" -c "DELETE FROM chunks WHERE strategy <> 'section_aware';"
+psql "$LOCAL/edgar_deploy" -c "SELECT strategy, count(*) FROM chunks GROUP BY 1;"   # section_aware | 5468
+psql "$LOCAL/edgar_deploy" -c "SELECT pg_size_pretty(pg_database_size(current_database()));"
+```
 
-# 2. dump local, excluding the extension statements the target already has
-pg_dump "postgresql://edgar:edgar@localhost:5433/edgar" \
-  --no-owner --no-privileges --no-comments \
-  -f /tmp/edgar.sql
+### 2c. Copy it
 
-# 3. restore
+```bash
+# 1. dump the trimmed copy -- schema, data, and the HNSW index definition
+pg_dump "$LOCAL/edgar_deploy" --no-owner --no-privileges --no-comments -f /tmp/edgar.sql
+
+# 2. restore into the empty database
 psql "$REMOTE_DSN" -v ON_ERROR_STOP=1 -f /tmp/edgar.sql
 ```
 
-If step 3 fails on `CREATE EXTENSION` because the role lacks permission, the
-extensions from step 1 are already there — re-run with those lines stripped:
+If the restore fails on `CREATE EXTENSION` because the role lacks permission, the
+extensions from §1 are already there — re-run with those lines stripped:
 `grep -v 'CREATE EXTENSION' /tmp/edgar.sql > /tmp/edgar-noext.sql`.
 
 Two things to check before trusting it:
 
 ```bash
-# counts must match `edgar-intel status` locally: 24 / 264 / 23499 / 1338
+# counts: 24 filings / 264 sections / 5468 chunks / 5468 embedded / 1338 facts
 psql "$REMOTE_DSN" -c "SELECT 'filings' t, count(*) FROM filings
   UNION ALL SELECT 'sections', count(*) FROM sections
   UNION ALL SELECT 'chunks', count(*) FROM chunks
@@ -117,13 +141,44 @@ give the live instance different recall characteristics from the one every numbe
 in `docs/METRICS.md` was measured on, and nothing would report the difference.
 
 `embedded` must equal `chunks`. A deployed instance with an empty or partial
-`chunks` table is what `/ready` catches — it returns 503 with `index: false`
-rather than serving empty results.
+`section_aware` index is what `/ready` catches — it returns 503 with
+`index: false` rather than serving empty results.
 
-**Storage:** the corpus is roughly 45 MB of chunk bodies, ~36 MB of vectors, plus
-the `body_tsv` GIN index and the HNSW index. That fits a Neon or Supabase free
-tier, but check the project's limit before the restore rather than halfway through
-it.
+### 2d. Check retrieval on the target, not just the row counts
+
+Row counts miss the one failure specific to this copy. Dense retrieval filters on
+strategy, ticker and fiscal year and orders by vector distance. If Postgres
+answers that from the HNSW index, pgvector applies the filters *after* the index
+returns its `hnsw.ef_search` candidates — 40 by default — so a query filtered to
+one company-year can get a handful of rows instead of k, with no error. Locally
+the planner has not done this (dense-only reaches 0.810 in the 26 Sep sweep), but
+the deployed database is smaller and differently shaped. Measure it:
+
+```bash
+EDGAR_DB_DSN="$REMOTE_DSN" edgar-intel eval retrieval --out reports/retrieval_neon.json
+```
+
+It embeds the queries locally and only reads the remote database. Compare it
+with `reports/retrieval_current_d7.json` configuration by configuration — match
+rows on `mode`, `rerank`, `k` and `top_n`, because the newer sweep names its
+rows from the `use_rerank` setting. Same data, same queries: the figures should
+agree. Ties in the lexical ranking can move a case or two; a drop in the
+dense-only row is the signal this check exists for.
+
+If dense-only falls, turn on pgvector's iterative index scans for the database
+(pgvector 0.8 or later), so a filtered scan keeps going until it has k rows, and
+measure again:
+
+```bash
+psql "$REMOTE_DSN" -c "ALTER DATABASE <dbname> SET hnsw.iterative_scan = strict_order;"
+```
+
+On an older pgvector, stop there: the query has to change, not the settings.
+
+**Storage:** trimmed, `chunks` is 5,468 rows — about 10 MB of text and 8 MB of
+vectors — plus the `body_tsv` GIN and HNSW indexes, the sections and the eval
+history. The size query in §2b gives the real figure; check it against the
+provider's free-tier limit before the restore rather than halfway through it.
 
 ## 3. Deploy
 
@@ -139,17 +194,24 @@ fly deploy
 The image build installs torch from the CPU wheel index and pre-downloads both
 models, so it is large and slow to build once, then fast to start.
 
+Leave `EDGAR_USE_RERANK` unset. Its default, `false`, is the configuration every
+number in `docs/METRICS.md` describes; on a shared CPU the cross-encoder would
+also cost well over the 540 ms it cost on the Mac. The reranker model is still in
+the image, so a request can ask for `"rerank": true` explicitly.
+
 ## 4. Verify — in this order
 
 ```bash
 curl -fsS https://edgar-intel.fly.dev/health
-curl -fsS https://edgar-intel.fly.dev/ready          # expect ready: true
-curl -fsS https://edgar-intel.fly.dev/config         # ask_requires_api_key: true
-curl -fsS https://edgar-intel.fly.dev/stats/eval
+curl -fsS https://edgar-intel.fly.dev/ready          # ready: true, strategy section_aware, indexed_chunks 5468
+curl -fsS https://edgar-intel.fly.dev/config         # ask_requires_api_key: true, use_rerank: false
+curl -fsS https://edgar-intel.fly.dev/stats/eval     # baseline-v6-no-rerank; judge_calibration.withheld
+                                                     #   lists narrative_pass_rate and overall_score
 
 curl -fsS -X POST https://edgar-intel.fly.dev/search \
   -H 'content-type: application/json' \
   -d '{"query":"supplier concentration risk","ticker":"AAPL","top_n":5}'
+                                                     # "reranked": false
 
 # Should be 401 without the key:
 curl -si -X POST https://edgar-intel.fly.dev/ask \
@@ -176,7 +238,7 @@ amount of restarting will fix.**
 | Fly machine, 1 GB shared-cpu-1, suspending when idle | free allowance covers a portfolio deployment |
 | Neon / Supabase free tier | 0 |
 | `/search` | 0 — local embeddings, Postgres only |
-| `/ask` | ~$0.0005 per request at `gpt-4o-mini` (measured: $0.5435 per 1k) |
+| `/ask` | ~$0.0005 per request at `gpt-4o-mini` (measured: $0.5439 per 1k in `baseline-v6`) |
 
 The rate limit at 20/min per IP caps a single abusive client at roughly $0.60 an
 hour. That is the number the limit was chosen against, and it is why the limit is
@@ -191,6 +253,6 @@ to everyone else for the price of a rounding error.
 - Cold start pays the model load. `/ready` embeds a probe string to warm it, but
   the first request after a suspend is still slower than p95 from the evaluation
   runs, which were measured against a warm local process.
-- `p50 996 ms / p95 1700 ms` in `docs/METRICS.md` are **local** figures. Do not
+- `p50 892 ms / p95 1732 ms` in `docs/METRICS.md` are **local** figures. Do not
   quote them for the deployed instance until `edgar-intel bench sweep` has run
   against the URL.

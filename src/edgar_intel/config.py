@@ -63,6 +63,18 @@ class Settings(BaseSettings):
     # query AND passage together, so a long chunk is silently truncated and the
     # model scores a passage it has only partly read.
     rerank_max_length: int = 512
+    # Whether retrieval reranks when a caller does not say: `/search`, the
+    # agent's search tool behind `/ask`, `eval run`, `eval compare` and the
+    # sweep's "shipped" row all read this one setting. One setting because a
+    # service that reranks while every published number was measured without
+    # reranking reports on a system it does not run -- which is what the
+    # defaults did until 27 Sep, when /search and the agent reranked and v5/v6
+    # were measured with `--no-rerank`.
+    #
+    # Off, on evidence: baseline-v6, one sha and one variable, gave 0.7404
+    # numeric accuracy without it and 0.7356 with it, hit@5 0.660 vs 0.638, p50
+    # 892 vs 1434 ms. The reranker adds ~540 ms for nothing measurable here.
+    use_rerank: bool = False
 
     # ------------------------------------------------------------- retrieval
     default_strategy: str = "section_aware"

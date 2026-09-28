@@ -82,12 +82,17 @@ def default_sweep(shipped_top_n: int | None = None, shipped_k: int | None = None
     s = get_settings()
     k = shipped_k or s.retrieve_k
     top_n = shipped_top_n or s.rerank_top_n
+    shipped_rerank = s.use_rerank
     return [
-        # What is actually shipped. Everything else is measured against this.
-        SweepConfig("shipped", "hybrid", True, k, top_n),
-        # Same candidates, no reranking. A drop here means the reranker helps;
-        # a rise means it is actively hurting.
-        SweepConfig("no-rerank", "hybrid", False, k, top_n),
+        # What is actually shipped -- reranking as `Settings.use_rerank` says.
+        # This row was hard-coded to rerank, so after reranking was dropped the
+        # sweep kept calling the configuration nobody ran "shipped".
+        SweepConfig("shipped", "hybrid", shipped_rerank, k, top_n),
+        # The same with reranking flipped, named for what it does, so the
+        # reranker's effect reads the same whichever way the setting points.
+        SweepConfig(
+            "no-rerank" if shipped_rerank else "rerank", "hybrid", not shipped_rerank, k, top_n
+        ),
         # The ceiling: every candidate retrieval found, unranked and untruncated.
         # No downstream stage can beat this.
         SweepConfig("ceiling", "hybrid", False, k, k),
@@ -186,8 +191,13 @@ def diagnose(results: list[SweepResult], metric: str = "hit@5") -> str:
     by_name = {r.config.name: r for r in results}
     shipped = by_name.get("shipped")
     ceiling = by_name.get("ceiling")
-    no_rerank = by_name.get("no-rerank")
     wide = by_name.get("wide-k")
+    # The reranker's effect is the reranked row against the plain one, whichever
+    # of the two is the shipped configuration.
+    if shipped and shipped.config.use_rerank:
+        reranked, plain = shipped, by_name.get("no-rerank")
+    else:
+        reranked, plain = by_name.get("rerank"), shipped
     if not shipped or not ceiling:
         return "sweep incomplete; cannot attribute the loss"
 
@@ -229,24 +239,36 @@ def diagnose(results: list[SweepResult], metric: str = "hit@5") -> str:
             f"Ranking or truncation is losing {gap:.3f}. The evidence IS retrieved "
             "but does not reach the top of the list."
         )
-        if no_rerank:
-            nr = no_rerank.metrics.get(metric, 0.0)
-            if nr > shipped_v + 0.02:
+        if reranked and plain:
+            ships = shipped.config.use_rerank
+            r_v = reranked.metrics.get(metric, 0.0)
+            p_v = plain.metrics.get(metric, 0.0)
+            if p_v > r_v + 0.02:
                 lines.append(
-                    f"Reranking is HURTING: {metric} is {nr:.3f} without it versus "
-                    f"{shipped_v:.3f} with it. Check the cross-encoder is scoring "
-                    "the right field, then consider dropping it -- it is also the "
-                    "slowest stage."
+                    f"Reranking is HURTING: {metric} is {p_v:.3f} without it versus "
+                    f"{r_v:.3f} with it. "
+                    + (
+                        "Check the cross-encoder is scoring the right field, then "
+                        "consider dropping it -- it is also the slowest stage."
+                        if ships
+                        else "It is off in the shipped configuration, which is right."
+                    )
                 )
-            elif shipped_v > nr + 0.02:
+            elif r_v > p_v + 0.02:
                 lines.append(
-                    f"Reranking helps ({shipped_v:.3f} vs {nr:.3f}); the remaining "
-                    "loss is top_n truncation. Raise rerank_top_n."
+                    f"Reranking helps ({r_v:.3f} vs {p_v:.3f}). "
+                    + (
+                        "The remaining loss is top_n truncation. Raise rerank_top_n."
+                        if ships
+                        else "It is off in the shipped configuration -- measure it "
+                        "end to end before turning it on."
+                    )
                 )
             else:
                 lines.append(
                     "Reranking is changing almost nothing. It costs the majority of "
-                    "retrieval latency, so justify keeping it or remove it."
+                    "retrieval latency, so "
+                    + ("justify keeping it or remove it." if ships else "leave it off.")
                 )
     else:
         lines.append(

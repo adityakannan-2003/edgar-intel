@@ -86,7 +86,7 @@ def answer_question(
     case: EvalCase,
     strategy: str,
     mode: str = "hybrid",
-    use_rerank: bool = True,
+    use_rerank: bool | None = None,
     k: int | None = None,
     top_n: int | None = None,
     item_boost: float | None = None,
@@ -184,7 +184,7 @@ def run_suite(
     label: str = "",
     strategy: str | None = None,
     mode: str = "hybrid",
-    use_rerank: bool = True,
+    use_rerank: bool | None = None,
     k: int | None = None,
     top_n: int | None = None,
     sha: str = "",
@@ -192,6 +192,9 @@ def run_suite(
 ) -> tuple[int, RunSummary]:
     s = get_settings()
     strategy = strategy or s.default_strategy
+    # Resolved here, once, so the config records the value that ran rather than
+    # "None" -- and so an unflagged run measures what the service ships.
+    use_rerank = s.use_rerank if use_rerank is None else use_rerank
     run_key = f"{label or 'run'}-{uuid.uuid4().hex[:8]}"
 
     # Which index this run grades against, and labels that belong to it. The

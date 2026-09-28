@@ -446,13 +446,30 @@ def eval_run(
     label: str = typer.Option(""),
     strategy: str = typer.Option(""),
     mode: str = typer.Option("hybrid"),
-    rerank: bool = typer.Option(True),
+    rerank: bool = typer.Option(
+        False, "--rerank", help="Rerank, whatever EDGAR_USE_RERANK says."
+    ),
+    no_rerank: bool = typer.Option(
+        False, "--no-rerank", help="Do not rerank, whatever EDGAR_USE_RERANK says."
+    ),
     top_n: int = typer.Option(0, help="Passages placed in the answering context. 0 = configured default."),
     limit: int = typer.Option(0, help="Run only the first N cases."),
     git_sha: str = typer.Option(""),
 ) -> None:
+    """Run the golden set end to end and record the run.
+
+    Without --rerank or --no-rerank the run measures what the service ships
+    (`EDGAR_USE_RERANK`, default off). Two plain flags rather than one
+    `--rerank/--no-rerank` pair so that "neither" can mean "the setting"; the
+    config block records the value that ran.
+    """
     from .evals.goldenset import load
     from .evals.runner import RunAborted, run_suite
+
+    if rerank and no_rerank:
+        console.print("[red]--rerank and --no-rerank contradict each other[/red]")
+        raise typer.Exit(2)
+    use_rerank = True if rerank else (False if no_rerank else None)
 
     cases = load(path)
     if limit:
@@ -467,7 +484,7 @@ def eval_run(
     try:
         _, summary = run_suite(
             cases, label=label, strategy=strategy or None, mode=mode,
-            use_rerank=rerank, top_n=top_n or None, sha=git_sha, progress=progress,
+            use_rerank=use_rerank, top_n=top_n or None, sha=git_sha, progress=progress,
         )
     except RunAborted as exc:
         console.print()

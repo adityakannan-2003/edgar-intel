@@ -402,7 +402,7 @@ def search(
     k: int | None = None,
     top_n: int | None = None,
     mode: str = "hybrid",
-    use_rerank: bool = True,
+    use_rerank: bool | None = None,
     ticker: str | None = None,
     fiscal_year: int | None = None,
     item: str | None = None,
@@ -414,11 +414,17 @@ def search(
     10-K Item the question is about. 0.0 disables it, which is the default --
     it must be measured before it ships, and a default-on ranking change would
     contaminate every A/B comparison already in flight.
+
+    `use_rerank=None` means "whatever this instance ships" (`Settings.use_rerank`).
+    The default used to be a hard-coded True, so every caller that did not say --
+    `/search`, the agent -- reranked, while the evaluation measured the system
+    with `--no-rerank`. Experiments still pass True or False explicitly.
     """
     s = get_settings()
     started = time.perf_counter()
     stage: dict[str, int] = {}
     boost = s.item_boost_weight if item_boost is None else item_boost
+    use_rerank = s.use_rerank if use_rerank is None else use_rerank
 
     t0 = time.perf_counter()
     if mode == "dense":

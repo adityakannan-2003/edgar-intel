@@ -132,7 +132,10 @@ class SearchRequest(BaseModel):
     mode: str = Field(default="hybrid", pattern="^(dense|lexical|hybrid)$")
     strategy: str | None = None
     top_n: int = Field(default=8, ge=1, le=50)
-    rerank: bool = True
+    # None = what this instance ships (`EDGAR_USE_RERANK`, reported by /config).
+    # It was a hard-coded True, so /search reranked while every published number
+    # was measured without reranking.
+    rerank: bool | None = None
 
 
 class AskRequest(BaseModel):
@@ -166,8 +169,16 @@ def ready() -> JSONResponse:
     does not pay the several seconds of load.
     """
     checks: dict[str, Any] = {"database": db.healthcheck()}
+    # The index this instance serves, not any index: a database holding only
+    # some other strategy's chunks would otherwise report ready and then return
+    # nothing to every query.
+    strategy = get_settings().default_strategy
+    checks["strategy"] = strategy
     try:
-        row = db.query_one("SELECT COUNT(*) AS n FROM chunks WHERE embedding IS NOT NULL")
+        row = db.query_one(
+            "SELECT COUNT(*) AS n FROM chunks WHERE strategy = %s AND embedding IS NOT NULL",
+            (strategy,),
+        )
         checks["index"] = bool(row and row["n"] > 0)
         checks["indexed_chunks"] = int(row["n"]) if row else 0
     except Exception:
@@ -226,6 +237,9 @@ def search_endpoint(req: SearchRequest) -> dict[str, Any]:
         bag["hits"] = len(result.hits)
     return {
         "query": req.query,
+        # What actually ran, not what was asked for: `search()` records a
+        # rerank stage only when the cross-encoder was called.
+        "reranked": "rerank_ms" in result.stage_latency_ms,
         "latency_ms": result.latency_ms,
         "stage_latency_ms": result.stage_latency_ms,
         "hits": [
@@ -290,7 +304,52 @@ def eval_stats() -> dict[str, Any]:
         import json
 
         summary = json.loads(summary)
-    return {"run_key": run["run_key"], "label": run["label"], "summary": summary}
+    summary = dict(summary or {})
+    return {
+        "run_key": run["run_key"],
+        "label": run["label"],
+        "git_sha": run.get("git_sha"),
+        "judge_calibration": _withhold_uncalibrated(summary),
+        "summary": summary,
+    }
+
+
+# The fields that carry the LLM judge's verdicts. `overall_score` blends the
+# narrative pass rate into the numeric accuracy, so it inherits the judge's
+# trustworthiness.
+_JUDGE_FIELDS = ("narrative_pass_rate", "overall_score")
+
+
+def _withhold_uncalibrated(summary: dict[str, Any]) -> dict[str, Any]:
+    """Blank the judge's numbers unless kappa clears the floor. Mutates `summary`.
+
+    A public URL is the one place a number gets quoted without its caveats. The
+    judge's narrative pass rate has never cleared the kappa floor in the shipped
+    configuration -- 0.4167 against 0.60, and in baseline-v5 it reported 0.79
+    for answers humans passed at 0.50 -- and an ordinary run carries no kappa at
+    all, because labels attach to specific answers. So those fields are nulled
+    here rather than flagged, with the reason beside them. The run's own record
+    in the database keeps every value; only the public view changes.
+    """
+    from ..evals.judge import KAPPA_FLOOR, kappa_verdict
+
+    kappa = summary.get("judge_kappa")
+    calibrated = kappa is not None and kappa >= KAPPA_FLOOR
+    withheld = [] if calibrated else [f for f in _JUDGE_FIELDS if summary.get(f) is not None]
+    for field_name in withheld:
+        summary[field_name] = None
+    return {
+        "kappa": kappa,
+        "floor": KAPPA_FLOOR,
+        "calibrated": calibrated,
+        "verdict": kappa_verdict(
+            kappa, n_labels_matched=int(summary.get("judge_labels_matched") or 0)
+        ),
+        "withheld": withheld,
+        "verified_without_a_judge": [
+            "numeric_accuracy", "abstention_rate", "hallucination_rate", "retrieval",
+        ],
+    }
 
 
 @app.get("/config")
@@ -300,6 +359,9 @@ def config() -> dict[str, Any]:
     return {
         "strategy": s.default_strategy,
         "retrieve_k": s.retrieve_k,
+        # Whether /search and /ask rerank by default -- the configuration the
+        # numbers on /stats/eval have to describe.
+        "use_rerank": s.use_rerank,
         "rerank_top_n": s.rerank_top_n,
         "llm_provider": s.llm_provider,
         "llm_model": s.llm_model,

@@ -80,6 +80,24 @@ def covers_full_year(period_start: date | None, period_end: date | None) -> bool
     return FULL_YEAR_MIN_DAYS <= (period_end - period_start).days <= FULL_YEAR_MAX_DAYS
 
 
+# A 52/53-week year "ending on the Sunday nearest December 31" ends as late as
+# January 3. A year meant to end in January ends at the other end of the month:
+# NVIDIA's ends on the last Sunday of January, never before the 25th. A week is
+# a margin on the first and nowhere near the second.
+JANUARY_SPILLOVER_DAYS = 7
+
+
+def fiscal_year_ending(period_end: date) -> int:
+    """The fiscal year named by a period ending on `period_end`.
+
+    The rule, and why it has an exception, is in `fiscal_year_of`. This is the
+    same rule for callers that have a date and no `fy` -- the filing index.
+    """
+    if period_end.month == 1 and period_end.day <= JANUARY_SPILLOVER_DAYS:
+        return period_end.year - 1
+    return period_end.year
+
+
 def fiscal_year_of(period_end: date | None, reported_fy: int) -> int:
     """The fiscal year a fact BELONGS TO -- not the one it was reported in.
 
@@ -100,18 +118,42 @@ def fiscal_year_of(period_end: date | None, reported_fy: int) -> int:
     two different expected values. Every answer graded against the wrong year's
     figure counted as a model failure. The model was frequently right.
 
-    The period the fact actually covers lives in `start`/`end`. The year of
-    `end` is the fiscal year for every filer in this universe, including the
-    January enders (NVIDIA's fiscal 2024 ended 2024-01-28 and NVIDIA calls it
-    fiscal 2024).
+    The period the fact actually covers lives in `start`/`end`, and the fiscal
+    year is the calendar year of `end` -- except when `end` falls in the first
+    `JANUARY_SPILLOVER_DAYS` of January. Then it is the year before.
 
-    Where this rule breaks: a filer whose fiscal year ends in the first weeks
-    of January and labels it by the *starting* calendar year. None are in this
-    universe, and `ingest verify-facts` cross-checks every derived year against
-    the period end recorded in `filings`, so the assumption is tested rather
-    than trusted.
+    That exception was learned the same way. Johnson & Johnson reports a
+    52/53-week year ending on the Sunday nearest December 31, so some of its
+    years end in early January: fiscal 2022 ran 2022-01-03 -> 2023-01-01. Taking
+    the year of `end` filed it under 2023, where it collided with the real
+    fiscal 2023 and, as the earlier accession, displaced it. Fiscal 2020 (ending
+    2021-01-03) was filed under 2021, fiscal 2021 under 2022, and nothing under
+    2020. Twelve golden cases asked about JNJ's 2023 and were graded against
+    fiscal-2022 figures (D13 in docs/METRICS.md). The rule it replaced said no
+    filer in this universe ended a year in early January; JNJ had done so eight
+    times.
+
+    A real January year-end sits at the other end of the month. NVIDIA's fiscal
+    2024 ended 2024-01-28 and NVIDIA calls it fiscal 2024, so late January keeps
+    the year of `end`.
+
+    Checked on 29 Sep 2026 against the `fy` of each 10-K for its own year, for
+    all 135 fiscal years of the eight companies that have one in
+    `companyfacts`. The rule agrees on 131. That includes all eight
+    early-January JNJ year-ends, where the old rule was wrong on each. The four
+    disagreements are NVIDIA's 10-Ks for fiscal 2011-2014. Their `fy` is
+    internally inconsistent: two consecutive years both claim 2010, and no
+    filing claims 2014. The rule gives the unbroken sequence.
+
+    Where this still breaks: a filer whose year ends in late January or early
+    February and is named for the year it *starts* in, as many retailers do.
+    None are in this universe. A mislabel that shifts only some years, as JNJ's
+    did, leaves a gap or two adjacent years that are not a year apart, and
+    `ingest verify-facts` flags both. One that shifts every year alike leaves
+    neither. Only the filer's own `fy` shows it, which is why the rule was
+    checked against `fy` above.
     """
-    return period_end.year if period_end is not None else reported_fy
+    return fiscal_year_ending(period_end) if period_end is not None else reported_fy
 
 
 def extract_facts(
@@ -218,6 +260,62 @@ def conflicting_years(facts: list[Fact]) -> list[tuple]:
     for f in facts:
         groups.setdefault((f.cik, f.tag, f.unit, f.fiscal_year), set()).add(f.value)
     return sorted(k for k, v in groups.items() if len(v) > 1)
+
+
+def misdated_years(facts: list[Fact]) -> list[tuple]:
+    """Consecutive years of one series whose labels and periods disagree.
+
+    Two years labelled n apart must end n years apart. This checks the labels
+    against the calendar without knowing the fiscal-year rule, which is the
+    point: a check that derives years the same way as the ingest agrees with
+    whatever the ingest got wrong. JNJ under the old rule failed it both ways.
+    "2023" (ending 2023-01-01) and "2024" (ending 2024-12-29) were labelled
+    adjacent but ended two years apart, because real fiscal 2023 had been
+    displaced. "2019" and "2021" were labelled two apart but ended one year
+    apart.
+
+    What it cannot see is every year shifted by the same amount. Nothing in the
+    database can, because the filing index derives its year by the same rule.
+    That takes the filer's own `fy` (see `fiscal_year_of`).
+
+    Returns (cik, tag, unit, year, period_end, next_year, next_period_end).
+    """
+    series: dict[tuple, list[Fact]] = {}
+    for f in facts:
+        if f.fiscal_period == "FY" and f.period_end is not None:
+            series.setdefault((f.cik, f.taxonomy, f.tag, f.unit), []).append(f)
+
+    out = []
+    for (cik, _, tag, unit), rows in series.items():
+        rows.sort(key=lambda f: f.fiscal_year)
+        for a, b in zip(rows, rows[1:], strict=False):
+            years = b.fiscal_year - a.fiscal_year
+            days = (b.period_end - a.period_end).days
+            if not years * FULL_YEAR_MIN_DAYS <= days <= years * FULL_YEAR_MAX_DAYS:
+                out.append(
+                    (cik, tag, unit, a.fiscal_year, a.period_end, b.fiscal_year, b.period_end)
+                )
+    return sorted(out)
+
+
+def missing_years(facts: list[Fact]) -> list[tuple[str, int]]:
+    """(cik, fiscal_year) with no annual fact at all, inside a company's range.
+
+    One tag can legitimately skip a year -- filers switch concepts -- but a
+    company does not skip a fiscal year. A hole in every tag at once means a
+    year's facts were filed under a neighbouring label. Under the old rule JNJ
+    had three: 2009, 2015 and 2020.
+    """
+    years: dict[str, set[int]] = {}
+    for f in facts:
+        if f.fiscal_period == "FY":
+            years.setdefault(f.cik, set()).add(f.fiscal_year)
+    return sorted(
+        (cik, y)
+        for cik, present in years.items()
+        for y in range(min(present), max(present) + 1)
+        if y not in present
+    )
 
 
 def annual_facts(facts: list[Fact]) -> list[Fact]:

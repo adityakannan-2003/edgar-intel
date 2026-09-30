@@ -14,12 +14,17 @@ from __future__ import annotations
 
 from datetime import date
 
+import pytest
+
 from edgar_intel.ingest.xbrl import (
     Fact,
     conflicting_years,
     covers_full_year,
     extract_facts,
+    fiscal_year_ending,
     fiscal_year_of,
+    misdated_years,
+    missing_years,
     pick_research_and_development,
 )
 
@@ -43,6 +48,43 @@ class TestFiscalYearDerivation:
 
     def test_falls_back_to_the_reported_year_without_a_period(self):
         assert fiscal_year_of(None, reported_fy=2024) == 2024
+
+    @pytest.mark.parametrize(
+        ("period_end", "fiscal_year"),
+        [
+            (date(2023, 1, 1), 2022),  # 10-K 0000200406-23-000016, fy 2022
+            (date(2022, 1, 2), 2021),
+            (date(2021, 1, 3), 2020),
+            (date(2017, 1, 1), 2016),
+        ],
+    )
+    def test_early_january_year_end_belongs_to_the_year_before(self, period_end, fiscal_year):
+        """JNJ's year ends on the Sunday nearest December 31, sometimes in January.
+
+        Its FY2022 10-K covers 2022-01-03 -> 2023-01-01 and says fiscal 2022.
+        The year of `end` filed it under 2023 (D13).
+        """
+        assert fiscal_year_of(period_end, reported_fy=fiscal_year) == fiscal_year
+
+    @pytest.mark.parametrize(
+        ("period_end", "fiscal_year"),
+        [
+            (date(2023, 12, 31), 2023),  # JNJ, the same rule ending in December
+            (date(2024, 12, 29), 2024),  # JNJ
+            (date(2015, 1, 25), 2015),  # NVDA, the earliest its year has ended
+            (date(2021, 1, 31), 2021),  # NVDA, a 53-week year
+            (date(2024, 9, 28), 2024),  # AAPL
+            (date(2023, 9, 3), 2023),  # COST, a 53-week year
+        ],
+    )
+    def test_other_year_ends_keep_the_year_they_end_in(self, period_end, fiscal_year):
+        assert fiscal_year_of(period_end, reported_fy=0) == fiscal_year
+
+    def test_filings_use_the_same_rule_as_facts(self):
+        """`filings.fiscal_year` and `xbrl_facts.fiscal_year` must agree, or the
+        golden set drops a covered year and verify-facts reports false drift."""
+        for end in (date(2023, 1, 1), date(2023, 12, 31), date(2024, 1, 28)):
+            assert fiscal_year_ending(end) == fiscal_year_of(end, reported_fy=0)
 
 
 class TestFullYearDetection:
@@ -254,3 +296,159 @@ class TestConflictDetector:
             for y in (2023, 2024, 2025)
         ]
         assert conflicting_years(facts) == []
+
+
+JNJ = "0000200406"
+JNJ_FY2022_10K = "0000200406-23-000016"  # fy 2022, year ended 2023-01-01
+JNJ_FY2023_10K = "0000200406-24-000013"  # fy 2023, year ended 2023-12-31
+
+
+class TestEarlyJanuaryYearEnds:
+    """JNJ's FY2022 and FY2023 10-Ks, as `companyfacts` reports them."""
+
+    def test_fiscal_2022_does_not_displace_fiscal_2023(self):
+        """The collision that dropped JNJ's real fiscal 2023.
+
+        With the year of `end`, 2022-01-03 -> 2023-01-01 became "2023". The
+        FY2022 10-K is the earlier accession, so it won the key, and
+        `xbrl_facts` held $94.94 billion as JNJ's 2023 revenue instead of $85.16
+        billion. Fiscal 2020 was filed as 2021, and nothing as 2020.
+        """
+        facts = extract_facts(
+            JNJ,
+            _payload(
+                [
+                    {"fy": 2022, "fp": "FY", "form": "10-K", "val": 82_584_000_000,
+                     "start": "2019-12-30", "end": "2021-01-03", "accn": JNJ_FY2022_10K},
+                    {"fy": 2022, "fp": "FY", "form": "10-K", "val": 93_775_000_000,
+                     "start": "2021-01-04", "end": "2022-01-02", "accn": JNJ_FY2022_10K},
+                    {"fy": 2022, "fp": "FY", "form": "10-K", "val": 94_943_000_000,
+                     "start": "2022-01-03", "end": "2023-01-01", "accn": JNJ_FY2022_10K},
+                    {"fy": 2023, "fp": "FY", "form": "10-K", "val": 79_990_000_000,
+                     "start": "2022-01-03", "end": "2023-01-01", "accn": JNJ_FY2023_10K},
+                    {"fy": 2023, "fp": "FY", "form": "10-K", "val": 85_159_000_000,
+                     "start": "2023-01-02", "end": "2023-12-31", "accn": JNJ_FY2023_10K},
+                ],
+                tag="RevenueFromContractWithCustomerExcludingAssessedTax",
+            ),
+        )
+        by_year = {f.fiscal_year: f.value for f in facts}
+        assert by_year == {
+            2020: 82_584_000_000,
+            2021: 93_775_000_000,
+            2022: 94_943_000_000,  # as first reported, not the post-Kenvue 79.99bn
+            2023: 85_159_000_000,
+        }
+        assert conflicting_years(facts) == []
+
+    def test_a_balance_sheet_dated_in_early_january(self):
+        """Instant facts have no start; the date alone must give the year."""
+        payload = {
+            "facts": {
+                "us-gaap": {
+                    "RevenueFromContractWithCustomerExcludingAssessedTax": {"units": {"USD": [
+                        {"fy": 2022, "fp": "FY", "form": "10-K", "val": 94_943_000_000,
+                         "start": "2022-01-03", "end": "2023-01-01", "accn": JNJ_FY2022_10K},
+                        {"fy": 2023, "fp": "FY", "form": "10-K", "val": 85_159_000_000,
+                         "start": "2023-01-02", "end": "2023-12-31", "accn": JNJ_FY2023_10K},
+                    ]}},
+                    "Assets": {"units": {"USD": [
+                        {"fy": 2022, "fp": "FY", "form": "10-K", "val": 187_378_000_000,
+                         "end": "2023-01-01", "accn": JNJ_FY2022_10K},
+                        {"fy": 2023, "fp": "FY", "form": "10-K", "val": 167_558_000_000,
+                         "end": "2023-12-31", "accn": JNJ_FY2023_10K},
+                    ]}},
+                }
+            }
+        }
+        assets = {f.fiscal_year: f.value for f in extract_facts(JNJ, payload) if f.tag == "Assets"}
+        assert assets == {2022: 187_378_000_000, 2023: 167_558_000_000}
+
+
+def _series(rows, cik=JNJ, tag="RevenueFromContractWithCustomerExcludingAssessedTax"):
+    """Facts from (fiscal_year, period_start, period_end, value) rows."""
+    return [
+        Fact(cik, "us-gaap", tag, "USD", year, "FY", start, end, value, None, "10-K")
+        for year, start, end, value in rows
+    ]
+
+
+# JNJ revenue exactly as ingested under the old rule (xbrl_facts, 29 Sep 2026).
+JNJ_REVENUE_AS_INGESTED = [
+    (2018, date(2018, 1, 1), date(2018, 12, 30), 81_581_000_000),
+    (2019, date(2018, 12, 31), date(2019, 12, 29), 82_059_000_000),
+    (2021, date(2019, 12, 30), date(2021, 1, 3), 82_584_000_000),
+    (2022, date(2021, 1, 4), date(2022, 1, 2), 93_775_000_000),
+    (2023, date(2022, 1, 3), date(2023, 1, 1), 94_943_000_000),
+    (2024, date(2024, 1, 1), date(2024, 12, 29), 88_821_000_000),
+    (2025, date(2024, 12, 30), date(2025, 12, 28), 94_193_000_000),
+]
+
+
+class TestMislabelledYearsAreDetected:
+    """The checks `ingest verify-facts` runs without knowing the year rule.
+
+    The drift check compares facts to the filing index, but the index derives
+    its year the same way, and only covers the ingested filings. It could not
+    have found JNJ's missing 2020. These can.
+    """
+
+    def test_jnj_as_ingested_is_flagged(self):
+        facts = _series(JNJ_REVENUE_AS_INGESTED)
+        tag = "RevenueFromContractWithCustomerExcludingAssessedTax"
+        assert misdated_years(facts) == [
+            # labelled two years apart, ended one year apart: 2020 is under "2021"
+            (JNJ, tag, "USD", 2019, date(2019, 12, 29), 2021, date(2021, 1, 3)),
+            # labelled adjacent, ended two years apart: real 2023 was displaced
+            (JNJ, tag, "USD", 2023, date(2023, 1, 1), 2024, date(2024, 12, 29)),
+        ]
+        assert missing_years(facts) == [(JNJ, 2020)]
+
+    def test_jnj_under_the_current_rule_is_clean(self):
+        facts = _series(
+            [
+                (fiscal_year_of(end, reported_fy=0), start, end, value)
+                for _, start, end, value in JNJ_REVENUE_AS_INGESTED
+            ]
+            + [(2023, date(2023, 1, 2), date(2023, 12, 31), 85_159_000_000)]
+        )
+        assert misdated_years(facts) == []
+        assert missing_years(facts) == []
+
+    def test_52_53_week_and_january_filers_are_clean(self):
+        """A 53-week year or a late-January end must not read as a mislabel."""
+        nvda = _series(
+            [
+                (2021, date(2020, 1, 27), date(2021, 1, 31), 16_675_000_000),
+                (2022, date(2021, 2, 1), date(2022, 1, 30), 26_914_000_000),
+                (2023, date(2022, 1, 31), date(2023, 1, 29), 26_974_000_000),
+                (2024, date(2023, 1, 30), date(2024, 1, 28), 60_922_000_000),
+            ],
+            cik="0001045810",
+            tag="Revenues",
+        )
+        cost = _series(
+            [
+                (2022, date(2021, 8, 30), date(2022, 8, 28), 1.0),
+                (2023, date(2022, 8, 29), date(2023, 9, 3), 1.0),
+                (2024, date(2023, 9, 4), date(2024, 9, 1), 1.0),
+            ],
+            cik="0000909832",
+        )
+        assert misdated_years(nvda + cost) == []
+        assert missing_years(nvda + cost) == []
+
+    def test_a_tag_may_skip_a_year_that_the_company_did_not(self):
+        """Filers switch concepts. A gap in one tag, with the periods two years
+        apart as labelled, is not a mislabel -- and the company still has a fact
+        for the year under another tag."""
+        rd = _series(
+            [
+                (2021, date(2021, 1, 4), date(2022, 1, 2), 1.0),
+                (2023, date(2023, 1, 2), date(2023, 12, 31), 1.0),
+            ],
+            tag="ResearchAndDevelopmentExpense",
+        )
+        revenue = _series([(2022, date(2022, 1, 3), date(2023, 1, 1), 1.0)])
+        assert misdated_years(rd + revenue) == []
+        assert missing_years(rd + revenue) == []

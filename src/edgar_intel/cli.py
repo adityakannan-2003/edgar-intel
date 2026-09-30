@@ -174,13 +174,20 @@ def ingest_verify_facts() -> None:
     whatever rate the corruption happens to reach, and every hour spent tuning
     retrieval afterwards is wasted.
 
-    Two independent checks. First, no fiscal year may hold two different values
-    for the same tag; that is impossible if the fiscal year was derived from the
-    fact's own period and inevitable if it was read from the report's `fy`.
-    Second, each fact's period end must match the period end that the filing
-    index — a completely separate SEC endpoint — records for that fiscal year.
-    Agreement between the two is what makes the derivation rule evidence rather
-    than an assumption.
+    Four checks. First, no fiscal year may hold two different values for the
+    same tag; that is impossible if the fiscal year was derived from the fact's
+    own period and inevitable if it was read from the report's `fy`. Second,
+    each fact's period end must match the period end that the filing index — a
+    completely separate SEC endpoint — records for that fiscal year.
+
+    The second shares the fiscal-year rule with the facts: `filings.fiscal_year`
+    is derived from its period end the same way, so a filing whose year ends in
+    early January agrees with its own mislabelled facts. It also only sees the
+    few years that have an ingested filing. JNJ's fiscal 2020 went missing for
+    exactly those reasons (D13). The last two checks assume no rule at all.
+    They compare the labels with the calendar across every year of history:
+    years labelled n apart must end n years apart, and a company has a fact
+    for every year between its first and last.
     """
     rows = db.query(
         """
@@ -222,7 +229,52 @@ def ingest_verify_facts() -> None:
     else:
         console.print("[green]every fact's period end agrees with the filing index[/green]")
 
-    if rows or drift:
+    from .ingest.xbrl import Fact, misdated_years, missing_years
+
+    facts = [
+        Fact(**r)
+        for r in db.query(
+            """
+            SELECT cik, taxonomy, tag, unit, fiscal_year, fiscal_period, period_start,
+                   period_end, value::float8 AS value, accession, form
+              FROM xbrl_facts
+             WHERE fiscal_period = 'FY'
+            """
+        )
+    ]
+    tickers = {r["cik"]: r["ticker"] for r in db.query("SELECT cik, ticker FROM companies")}
+
+    misdated = misdated_years(facts)
+    if misdated:
+        console.print(
+            f"[red]{len(misdated)} pairs of years are labelled a different distance apart "
+            "than their periods — a year was filed under its neighbour's label[/red]"
+        )
+        _table(
+            "misdated years",
+            [
+                {"ticker": tickers.get(cik, cik), "tag": tag, "year": y1, "period_end": e1,
+                 "next_year": y2, "next_period_end": e2}
+                for cik, tag, _, y1, e1, y2, e2 in misdated[:20]
+            ],
+        )
+    else:
+        console.print("[green]every series' year labels advance with its period ends[/green]")
+
+    missing = missing_years(facts)
+    if missing:
+        console.print(
+            f"[red]{len(missing)} fiscal years hold no fact at all between a company's "
+            "first and last year[/red]"
+        )
+        _table(
+            "missing years",
+            [{"ticker": tickers.get(cik, cik), "fiscal_year": y} for cik, y in missing[:20]],
+        )
+    else:
+        console.print("[green]no company skips a fiscal year[/green]")
+
+    if rows or drift or misdated or missing:
         raise typer.Exit(1)
 
 

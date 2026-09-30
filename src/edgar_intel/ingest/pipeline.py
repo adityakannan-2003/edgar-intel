@@ -10,13 +10,14 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 from .. import db
 from ..config import get_settings
 from .edgar_client import EdgarClient, recent_filings
 from .parse import parse_filing
-from .xbrl import extract_facts, to_rows
+from .xbrl import extract_facts, fiscal_year_ending, to_rows
 
 
 @dataclass(slots=True)
@@ -56,7 +57,8 @@ def upsert_company(cik: str, ticker: str | None, name: str, sic: str | None = No
 def upsert_filing(cik: str, row: dict[str, Any], source_url: str) -> int | None:
     fiscal_year = None
     if row.get("period_end"):
-        fiscal_year = int(str(row["period_end"])[:4])
+        # The facts' rule, so a filing and the facts it reports share a year.
+        fiscal_year = fiscal_year_ending(date.fromisoformat(str(row["period_end"])))
     result = db.query_one(
         """
         INSERT INTO filings (cik, accession, form, filing_date, period_end,

@@ -27,11 +27,13 @@ import json
 import os
 import re
 from dataclasses import asdict, dataclass, field
+from datetime import date
 from typing import Any
 
 from ..config import get_settings
 from .edgar_client import EdgarClient, recent_filings
 from .parse import find_item_offsets, html_to_text, split_sections
+from .xbrl import fiscal_year_ending
 
 # Items a 10-K is required to contain. Missing one of these is the strongest
 # signal that heading detection failed rather than that the filer omitted it.
@@ -282,7 +284,11 @@ def run(
                     with open(path, "w", encoding="utf-8") as fh:
                         fh.write(html)
 
-                fy = int(str(row["period_end"])[:4]) if row.get("period_end") else None
+                fy = (
+                    fiscal_year_ending(date.fromisoformat(str(row["period_end"])))
+                    if row.get("period_end")
+                    else None
+                )
                 diagnoses.append(diagnose_html(ticker, row["accession"], fy, html))
             except Exception as exc:
                 diagnoses.append(

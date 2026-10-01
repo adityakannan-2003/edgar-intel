@@ -51,7 +51,7 @@ jobs:
           cache: pip
       - run: pip install -e ".[dev]"
       - name: Apply schema
-        run: psql "$EDGAR_DB_DSN" -f sql/001_schema.sql
+        run: edgar-intel init
       - name: Load the frozen evaluation fixture
         run: edgar-intel fixture load --path tests/fixtures/mini_corpus.json
       - name: Build the index

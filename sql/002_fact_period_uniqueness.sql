@@ -16,33 +16,41 @@
 -- values, and questions whose expected answer belonged to a different year.
 --
 -- Dropping period_end from the key makes a second value for a year impossible
--- to insert rather than merely unlikely. Existing rows must be discarded: their
--- fiscal_year column is wrong at the source and cannot be repaired in place.
-
-BEGIN;
-
-TRUNCATE TABLE xbrl_facts;
-
-ALTER TABLE xbrl_facts
-    DROP CONSTRAINT IF EXISTS xbrl_facts_cik_taxonomy_tag_unit_fiscal_year_fiscal_period_p_key;
+-- to insert rather than merely unlikely. Rows stored under the old key must be
+-- discarded: their fiscal_year column is wrong at the source and cannot be
+-- repaired in place.
+--
+-- `edgar-intel init` re-runs every file in sql/, so this one has to be a no-op
+-- once applied. The discard is therefore keyed on the old constraint still
+-- being present -- found by its period_end column, not by name, because
+-- Postgres truncated the generated name -- and never runs again after the swap.
+-- An unconditional TRUNCATE here once wiped the ground truth on every `init`.
 
 DO $$
 DECLARE
-    conname TEXT;
+    old_key TEXT;
 BEGIN
-    SELECT c.conname INTO conname
+    SELECT c.conname INTO old_key
       FROM pg_constraint c
-      JOIN pg_class t ON t.oid = c.conrelid
-     WHERE t.relname = 'xbrl_facts'
+      JOIN pg_attribute a
+        ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+     WHERE c.conrelid = 'xbrl_facts'::regclass
        AND c.contype = 'u'
+       AND a.attname = 'period_end'
      LIMIT 1;
-    IF conname IS NOT NULL THEN
-        EXECUTE format('ALTER TABLE xbrl_facts DROP CONSTRAINT %I', conname);
+
+    IF old_key IS NOT NULL THEN
+        TRUNCATE TABLE xbrl_facts;
+        EXECUTE format('ALTER TABLE xbrl_facts DROP CONSTRAINT %I', old_key);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+         WHERE conrelid = 'xbrl_facts'::regclass
+           AND conname = 'xbrl_facts_period_key'
+    ) THEN
+        ALTER TABLE xbrl_facts
+            ADD CONSTRAINT xbrl_facts_period_key
+            UNIQUE (cik, taxonomy, tag, unit, fiscal_year, fiscal_period);
     END IF;
 END $$;
-
-ALTER TABLE xbrl_facts
-    ADD CONSTRAINT xbrl_facts_period_key
-    UNIQUE (cik, taxonomy, tag, unit, fiscal_year, fiscal_period);
-
-COMMIT;

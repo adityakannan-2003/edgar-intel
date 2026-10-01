@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from edgar_intel.evals.judge import KAPPA_FLOOR, compute_kappa, grade_numeric, kappa_verdict, parse_number
+from edgar_intel.evals.judge import (
+    KAPPA_FLOOR,
+    compute_kappa,
+    grade_numeric,
+    kappa_verdict,
+    parse_number,
+)
 from edgar_intel.evals.schemas import EvalCase
 from edgar_intel.finetune.dataset import parse_extraction, score_extraction
 from edgar_intel.providers.fake import FakeEmbedder, FakeLLM, FakeReranker

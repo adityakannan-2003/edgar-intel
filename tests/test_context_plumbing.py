@@ -14,8 +14,6 @@ in place, and pin the character-cap behaviour that the same experiment exposed.
 
 from __future__ import annotations
 
-import pytest
-
 from edgar_intel.retrieval.search import (
     DEFAULT_CONTEXT_MAX_CHARS,
     Hit,

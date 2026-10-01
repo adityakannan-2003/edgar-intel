@@ -655,7 +655,6 @@ def confusion_by_pair(runs: list[JudgeRun]) -> list[PairConfusion]:
     decided = majority_verdicts(runs)
     repeats_seen: dict[tuple, int] = {}
     context_seen: dict[tuple, bool] = {}
-    unanimous: dict[tuple, bool] = {}
     tallies: dict[tuple, list[int]] = {}
     for r in runs:
         key = (r.contract, r.structure, r.model, r.replicate)
@@ -1011,7 +1010,6 @@ def pairs_from_labels(run_key: str) -> list[FrozenPair]:
     replayable under later judge contracts without changing the evidence the
     judge sees.
     """
-    from .. import db
 
     rows = _labelled_rows(run_key)
 

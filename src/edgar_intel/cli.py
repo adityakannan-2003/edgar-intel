@@ -1176,7 +1176,13 @@ def eval_label(
     report meaningful. Without it, kappa cannot be computed and the judge's
     pass rate is an unverified claim.
     """
-    from .evals.judge import calibration_pairs, compute_kappa, kappa_verdict, record_human_label, sample_for_labelling
+    from .evals.judge import (
+        calibration_pairs,
+        compute_kappa,
+        kappa_verdict,
+        record_human_label,
+        sample_for_labelling,
+    )
 
     run = db.query_one("SELECT id FROM eval_runs WHERE run_key = %s", (run_key,))
     if not run:

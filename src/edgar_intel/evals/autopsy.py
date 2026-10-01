@@ -44,7 +44,7 @@ from ..providers.openai_compat import parse_json_strict
 from ..retrieval.search import DEFAULT_CONTEXT_MAX_CHARS, infer_expected_items
 from .evidence import labels_for
 from .judge import JUDGE_SYSTEM, JUDGE_TEMPLATE, grade, judge_narrative
-from .runner import ANSWER_SYSTEM, ANSWER_TEMPLATE, answer_question, git_sha
+from .runner import ANSWER_SYSTEM, answer_question, git_sha
 from .schemas import ANSWER_SCHEMA, EvalCase
 
 BODY_PREVIEW_CHARS = 900

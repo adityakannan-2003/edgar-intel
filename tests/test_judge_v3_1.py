@@ -16,9 +16,9 @@ from __future__ import annotations
 import pytest
 
 from edgar_intel.evals.judge_contracts import (
-    CONTRACTS,
     _V3_1_DO_NOT_FAIL,
     _V3_1_MATERIALITY_BOUNDARY,
+    CONTRACTS,
     get_contract,
 )
 from edgar_intel.evals.judge_lab import (
@@ -235,7 +235,7 @@ class TestAdoptionGate:
             {k: v for k, v in zip(
                 ["nar-PG-fx-exposure", "nar-PG-legal", "nar-CAT-fx-exposure",
                  "nar-AAPL-supply-concentration", "nar-COST-supply-concentration"],
-                [True, True, False, False, False])}
+                [True, True, False, False, False], strict=True)}
         ), candidate="v3_1", baseline="v3", model="m")
         names = [c["clause"] for c in result["clauses"]]
         assert "new false negatives = 0" in names

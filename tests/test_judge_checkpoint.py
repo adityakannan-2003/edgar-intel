@@ -26,6 +26,7 @@ from edgar_intel.evals.judge_contracts import (
 )
 from edgar_intel.evals.judge_lab import (
     CALIBRATION_REPEATS,
+    FrozenPair,
     JudgeRun,
     beats_noise,
     check_adoption,
@@ -35,7 +36,6 @@ from edgar_intel.evals.judge_lab import (
     flips,
     run_grid,
 )
-from edgar_intel.evals.judge_lab import FrozenPair
 
 
 def pair(pid: str, human: bool = True, context: str = "ctx") -> FrozenPair:

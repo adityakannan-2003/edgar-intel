@@ -15,12 +15,12 @@ from __future__ import annotations
 from datetime import date
 
 from edgar_intel.ingest.xbrl import (
+    Fact,
     conflicting_years,
     covers_full_year,
     extract_facts,
     fiscal_year_of,
     pick_research_and_development,
-    Fact
 )
 
 

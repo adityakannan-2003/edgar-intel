@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 from typing import Any
 
 from .. import db
@@ -613,8 +614,6 @@ def check_question_overrides(
     return problems
 
 # ----------------------------------------------------------- evidence linking
-import re
-
 _NARRATIVE_STOPWORDS = {
     "about", "after", "also", "because", "been", "being", "company",
     "could", "does", "during", "fiscal", "from", "have", "into",

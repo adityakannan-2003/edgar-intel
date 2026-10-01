@@ -213,7 +213,7 @@ class TestTheRateLimitOnTheSpendingPath:
     def test_zero_disables_the_limit(self, monkeypatch):
         _limit(monkeypatch, 0)
         app_module.reset_rate_limits()
-        for i in range(50):
+        for _ in range(50):
             app_module.enforce_rate_limit(_fake_request(), now=1000.0)
 
     def test_the_last_forwarded_hop_is_the_trusted_one(self):

@@ -43,7 +43,12 @@ class SearchFilingsArgs(BaseModel):
 
 class GetFactArgs(BaseModel):
     ticker: str
-    tag: str = Field(description="XBRL tag, e.g. Revenues or NetIncomeLoss.")
+    tag: str = Field(
+        description=(
+            "XBRL tag, e.g. Revenues or NetIncomeLoss. 'revenue' is accepted and "
+            "resolves to the revenue tag the company reports."
+        )
+    )
     fiscal_year: int
     fiscal_period: str = Field(default="FY")
 
@@ -55,7 +60,12 @@ class GetFactArgs(BaseModel):
 
 class CompareFactArgs(BaseModel):
     ticker: str
-    tag: str
+    tag: str = Field(
+        description=(
+            "XBRL tag, e.g. Revenues or NetIncomeLoss. 'revenue' is accepted and "
+            "resolves to the revenue tag the company reports in both years."
+        )
+    )
     year_a: int
     year_b: int
 
@@ -67,8 +77,8 @@ class CompareFactArgs(BaseModel):
 
 class RatioArgs(BaseModel):
     ticker: str
-    numerator_tag: str
-    denominator_tag: str
+    numerator_tag: str = Field(description="XBRL tag. 'revenue' is accepted.")
+    denominator_tag: str = Field(description="XBRL tag. 'revenue' is accepted.")
     fiscal_year: int
 
     @field_validator("ticker")
@@ -133,18 +143,59 @@ def search_filings(args: SearchFilingsArgs) -> ToolResult:
     )
 
 
+# The model passes the user's word for a figure as the tag. No XBRL fact is
+# tagged "revenue", so before this map `get_fact` matched nothing and the agent
+# escalated questions whose answer was in the database. `compare_fact` and
+# `compute_ratio` had the same gap and resolve through the same map.
+#
+# Deterministic by construction: a word maps to a fixed, ordered list of tags,
+# and the first one the company reported wins -- for that year in `get_fact` and
+# `compute_ratio`, for both years in `compare_fact`. The order is
+# `PREFERRED_TAG_FAMILIES["revenue"]` in evals/goldenset.py -- the tag the golden
+# set grades against -- and a test holds the two together.
+TAG_ALIASES: dict[str, tuple[str, ...]] = {
+    "revenue": (
+        "RevenueFromContractWithCustomerExcludingAssessedTax",
+        # CAT, NVDA, PG and UNH report revenue only under this one.
+        "Revenues",
+    ),
+}
+
+
+def resolve_tag(tag: str) -> tuple[str, ...]:
+    """The XBRL tags to try for `tag`, in order.
+
+    A real tag passes through untouched: `Revenues` means `Revenues`, even for a
+    company that also reports the contract tag. Only a word that is not a tag
+    is looked up, ignoring case and surrounding whitespace.
+    """
+    if tag in CORE_TAGS:
+        return (tag,)
+    return TAG_ALIASES.get(tag.strip().lower(), (tag,))
+
+
+def _tried(tag: str, tags: tuple[str, ...]) -> str:
+    """` (tried A, B)` when `tag` was an alias, so a miss names what was looked up."""
+    return f" (tried {', '.join(tags)})" if tags != (tag,) else ""
+
+
 def get_fact(args: GetFactArgs) -> ToolResult:
-    row = db.query_one(
-        """
-        SELECT x.value, x.unit, x.tag, x.fiscal_year, x.accession, co.name
-          FROM xbrl_facts x
-          JOIN companies co ON co.cik = x.cik
-         WHERE co.ticker = %s AND x.tag = %s
-           AND x.fiscal_year = %s AND x.fiscal_period = %s
-         LIMIT 1
-        """,
-        (args.ticker, args.tag, args.fiscal_year, args.fiscal_period),
-    )
+    tags = resolve_tag(args.tag)
+    row = None
+    for tag in tags:
+        row = db.query_one(
+            """
+            SELECT x.value, x.unit, x.tag, x.fiscal_year, x.accession, co.name
+              FROM xbrl_facts x
+              JOIN companies co ON co.cik = x.cik
+             WHERE co.ticker = %s AND x.tag = %s
+               AND x.fiscal_year = %s AND x.fiscal_period = %s
+             LIMIT 1
+            """,
+            (args.ticker, tag, args.fiscal_year, args.fiscal_period),
+        )
+        if row:
+            break
     if not row:
         available = db.query(
             """
@@ -158,7 +209,8 @@ def get_fact(args: GetFactArgs) -> ToolResult:
         return ToolResult(
             ok=False,
             summary=(
-                f"No {args.tag} reported for {args.ticker} FY{args.fiscal_year}. "
+                f"No {args.tag} reported for {args.ticker} "
+                f"FY{args.fiscal_year}{_tried(args.tag, tags)}. "
                 f"Available tags: {', '.join(r['tag'] for r in available) or 'none'}"
             ),
             data={"available_tags": [r["tag"] for r in available]},
@@ -182,22 +234,41 @@ def get_fact(args: GetFactArgs) -> ToolResult:
 
 
 def compare_fact(args: CompareFactArgs) -> ToolResult:
-    rows = db.query(
-        """
-        SELECT x.fiscal_year, x.value, x.unit, x.prior_year_value
-          FROM xbrl_facts x JOIN companies co ON co.cik = x.cik
-         WHERE co.ticker = %s AND x.tag = %s
-           AND x.fiscal_year = ANY(%s) AND x.fiscal_period = 'FY'
-        """,
-        (args.ticker, args.tag, [args.year_a, args.year_b]),
-    )
-    by_year = {int(r["fiscal_year"]): float(r["value"]) for r in rows}
+    # One tag for both years, never one per year: a change between two different
+    # concepts is not a change, and the golden set only builds year-over-year
+    # cases within a single tag. A company that switched tags still gets an
+    # answer from the next tag in order, if that one covers both years.
+    tags = resolve_tag(args.tag)
+    rows: list[dict[str, Any]] = []
+    by_year: dict[int, float] = {}
+    have: set[int] = set()
+    for tag in tags:
+        rows = db.query(
+            """
+            SELECT x.fiscal_year, x.value, x.unit, x.prior_year_value
+              FROM xbrl_facts x JOIN companies co ON co.cik = x.cik
+             WHERE co.ticker = %s AND x.tag = %s
+               AND x.fiscal_year = ANY(%s) AND x.fiscal_period = 'FY'
+            """,
+            (args.ticker, tag, [args.year_a, args.year_b]),
+        )
+        by_year = {int(r["fiscal_year"]): float(r["value"]) for r in rows}
+        have.update(by_year)
+        if args.year_a in by_year and args.year_b in by_year:
+            break
     if args.year_a not in by_year or args.year_b not in by_year:
-        missing = [y for y in (args.year_a, args.year_b) if y not in by_year]
+        missing = [y for y in (args.year_a, args.year_b) if y not in have]
+        tried = _tried(args.tag, tags)
         return ToolResult(
             ok=False,
-            summary=f"Missing {args.tag} for {args.ticker} in {missing}.",
-            data={"have": sorted(by_year)},
+            summary=(
+                f"Missing {args.tag} for {args.ticker} in {missing}{tried}."
+                if missing
+                else f"{args.tag} for {args.ticker} is reported under different tags in "
+                f"FY{args.year_a} and FY{args.year_b}{tried}, so there is no "
+                "like-for-like change."
+            ),
+            data={"have": sorted(have)},
         )
     # Adjacent years go on the later year's basis -- its filing's own figure
     # for the year before -- so a stock split or restatement between the two
@@ -215,14 +286,16 @@ def compare_fact(args: CompareFactArgs) -> ToolResult:
     return ToolResult(
         ok=True,
         summary=(
-            f"{args.ticker} {args.tag}: FY{args.year_a} {format_value(a, unit)} -> "
+            f"{args.ticker} {tag}: FY{args.year_a} {format_value(a, unit)} -> "
             f"FY{args.year_b} {format_value(b, unit)}, {direction} {abs(pct):.1f}%"
         ),
-        data={"year_a": a, "year_b": b, "pct_change": round(pct, 4), "unit": unit},
+        data={"year_a": a, "year_b": b, "pct_change": round(pct, 4), "unit": unit, "tag": tag},
     )
 
 
 def compute_ratio(args: RatioArgs) -> ToolResult:
+    numerators = resolve_tag(args.numerator_tag)
+    denominators = resolve_tag(args.denominator_tag)
     rows = db.query(
         """
         SELECT x.tag, x.value, x.unit
@@ -230,25 +303,38 @@ def compute_ratio(args: RatioArgs) -> ToolResult:
          WHERE co.ticker = %s AND x.tag = ANY(%s)
            AND x.fiscal_year = %s AND x.fiscal_period = 'FY'
         """,
-        (args.ticker, [args.numerator_tag, args.denominator_tag], args.fiscal_year),
+        (args.ticker, [*numerators, *denominators], args.fiscal_year),
     )
     values = {r["tag"]: float(r["value"]) for r in rows}
-    if args.numerator_tag not in values or args.denominator_tag not in values:
+    # Each side takes the first of its tags that was reported, in `resolve_tag`
+    # order -- not whichever row the database returned first.
+    num = next((t for t in numerators if t in values), None)
+    den = next((t for t in denominators if t in values), None)
+    if num is None or den is None:
         return ToolResult(
             ok=False,
-            summary=f"Need both {args.numerator_tag} and {args.denominator_tag}; have {list(values)}.",
+            summary=(
+                f"Need both {args.numerator_tag}{_tried(args.numerator_tag, numerators)} and "
+                f"{args.denominator_tag}{_tried(args.denominator_tag, denominators)}; "
+                f"have {list(values)}."
+            ),
         )
-    denom = values[args.denominator_tag]
+    denom = values[den]
     if denom == 0:
         return ToolResult(ok=False, summary="Denominator is zero.")
-    ratio = values[args.numerator_tag] / denom
+    ratio = values[num] / denom
     return ToolResult(
         ok=True,
         summary=(
-            f"{args.ticker} FY{args.fiscal_year}: {args.numerator_tag} / "
-            f"{args.denominator_tag} = {ratio:.4f} ({ratio * 100:.2f}%)"
+            f"{args.ticker} FY{args.fiscal_year}: {num} / {den} = {ratio:.4f} "
+            f"({ratio * 100:.2f}%)"
         ),
-        data={"ratio": round(ratio, 6), "pct": round(ratio * 100, 4), **values},
+        data={
+            "ratio": round(ratio, 6),
+            "pct": round(ratio * 100, 4),
+            num: values[num],
+            den: denom,
+        },
     )
 
 

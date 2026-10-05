@@ -680,18 +680,57 @@ NARRATIVE_EVIDENCE_TERMS = {
     ],
 }
 
-def _numeric_value_needles(value: float) -> list[str]:
-    """Generate filing-style representations of a numeric source value."""
+# A needle with fewer digits than this labels chunks by coincidence. Diluted EPS
+# of 2.94 used to become the needle "3", which is in nearly every chunk of a
+# 10-K, so the "relevant" chunks were whichever ones the ORDER BY put first.
+_MIN_NEEDLE_DIGITS = 3
+
+
+def _decimal_form(value: float) -> str:
+    """Two decimals, as statements print per-share amounts ("11.80", not
+    "11.8"), or more when the value carries them: a dividend of 1.0065 is not
+    printed "1.01"."""
+    for places in (2, 3, 4):
+        if abs(round(value, places) - value) < 1e-9:
+            return f"{value:,.{places}f}"
+    return f"{value:,.2f}"
+
+
+def _numeric_value_needles(value: float, unit: str | None = None) -> list[str]:
+    """Filing-style renderings of a numeric source value, most specific first.
+
+    Large values appear at whatever scale the statement is presented in:
+    383,285,000,000 is printed "383,285" in a table "in millions". Per-share
+    figures and other small values appear with their decimals: 2.94, not 3.
+
+    `unit` is the fact's own unit when known. Year-over-year cases carry
+    "percent" (the unit of the change), so their source values come in without
+    one and are classified by size alone.
+    """
     raw = abs(value)
+    if raw == 0:
+        # "0.00" or "0" says nothing about which chunk holds the fact.
+        return []
+
+    per_share = unit is not None and unit.startswith("USD/")
     needles: list[str] = []
 
-    for scale in (1, 1_000, 1_000_000, 1_000_000_000):
-        scaled = raw / scale
+    if per_share or raw < 1_000:
+        needles.append(_decimal_form(raw))
+        if not per_share and raw == int(raw):
+            needles.append(f"{raw:,.0f}")
+    else:
+        for scale in (1, 1_000, 1_000_000, 1_000_000_000):
+            scaled = raw / scale
 
-        if scaled >= 1:
-            needles.append(f"{scaled:,.0f}")
+            if scaled >= 1:
+                needles.append(f"{scaled:,.0f}")
 
-    return list(dict.fromkeys(needles))
+    return [
+        needle
+        for needle in dict.fromkeys(needles)
+        if sum(ch.isdigit() for ch in needle) >= _MIN_NEEDLE_DIGITS
+    ]
 
 
 def _comparative_source_facts(notes: str) -> list[tuple[int, float]]:
@@ -908,7 +947,7 @@ def link_evidence(
         chunk_ids: list[str] = []
 
         if case.expected_value is not None:
-            for needle in _numeric_value_needles(case.expected_value):
+            for needle in _numeric_value_needles(case.expected_value, case.unit):
                 rows = db.query(
                     """
                     SELECT

@@ -96,7 +96,7 @@ def filter_to_covered(
 
 def _facts(cik: str | None = None) -> list[dict[str, Any]]:
     sql = """
-        SELECT cik, tag, unit, fiscal_year, fiscal_period, value
+        SELECT cik, tag, unit, fiscal_year, fiscal_period, value, prior_year_value
           FROM xbrl_facts
          WHERE fiscal_period = 'FY'
     """
@@ -217,10 +217,16 @@ def _yoy_cases(
     covered: set[tuple[str, int]] | None = None,
 ) -> list[EvalCase]:
     by_tag: dict[str, dict[int, float]] = {}
+    # The year before each year, as that year's own filing printed it.
+    printed_prior: dict[str, dict[int, float]] = {}
     for r in rows:
         if r["tag"] not in CORE_TAGS:
             continue
         by_tag.setdefault(r["tag"], {})[int(r["fiscal_year"])] = float(r["value"])
+        if r.get("prior_year_value") is not None:
+            printed_prior.setdefault(r["tag"], {})[int(r["fiscal_year"])] = float(
+                r["prior_year_value"]
+            )
 
     out: list[EvalCase] = []
     tags = list(by_tag)
@@ -238,7 +244,12 @@ def _yoy_cases(
                 (cik, prev) not in covered or (cik, cur) not in covered
             ):
                 continue
-            a, b = by_tag[tag][prev], by_tag[tag][cur]
+            # Both years on one basis: the current year's filing, as printed
+            # beside it. Each year's own value can come from a different
+            # filing, across a stock split or a restatement (D12).
+            original = by_tag[tag][prev]
+            a = printed_prior.get(tag, {}).get(cur, original)
+            b = by_tag[tag][cur]
             if a == 0:
                 continue
             delta_pct = (b - a) / abs(a) * 100
@@ -259,7 +270,13 @@ def _yoy_cases(
                     fiscal_year=cur,
                     tag=tag,
                     difficulty="comparative",
-                    notes=f"FY{prev}={_fmt(a)}, FY{cur}={_fmt(b)}",
+                    notes=f"FY{prev}={_fmt(a)}, FY{cur}={_fmt(b)}"
+                    + (
+                        f"; FY{prev} as printed in the FY{cur} filing, "
+                        f"originally reported as {_fmt(original)}"
+                        if a != original
+                        else ""
+                    ),
                 )
             )
             break

@@ -102,21 +102,83 @@ def replace_sections(filing_id: int, sections: list[Any]) -> int:
     return len(rows)
 
 
+_INSERT_FACTS = """
+    INSERT INTO xbrl_facts (cik, taxonomy, tag, unit, fiscal_year, fiscal_period,
+                            period_start, period_end, value, accession, form,
+                            prior_year_value)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+"""
+
+
 def upsert_facts(facts: list[Any]) -> int:
     rows = to_rows(facts)
     if not rows:
         return 0
     db.execute_many(
-        """
-        INSERT INTO xbrl_facts (cik, taxonomy, tag, unit, fiscal_year, fiscal_period,
-                                period_start, period_end, value, accession, form)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        _INSERT_FACTS
+        + """
         ON CONFLICT (cik, taxonomy, tag, unit, fiscal_year, fiscal_period)
         DO NOTHING
         """,
         rows,
     )
     return len(rows)
+
+
+def replace_facts(cik: str, facts: list[Any]) -> int:
+    """Swap one company's facts for a fresh extraction, in one transaction.
+
+    `upsert_facts` never overwrites a key, so a change to how facts are derived
+    cannot reach rows it already wrote: after the D13 fix, JNJ's "2023" would
+    have kept its fiscal-2022 value. Deleting first is the only way a
+    corrected extraction lands, and doing both in one transaction means a
+    failed fetch cannot leave the company with no facts.
+    """
+    rows = to_rows(facts)
+    with db.connection() as conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM xbrl_facts WHERE cik = %s", (cik,))
+        if rows:
+            cur.executemany(_INSERT_FACTS, rows)
+    return len(rows)
+
+
+def refresh_facts(
+    tickers: list[str] | None = None,
+    forms: list[str] | None = None,
+    progress=None,
+) -> IngestStats:
+    """Re-derive XBRL facts for companies already ingested, and nothing else.
+
+    `ingest run` cannot do this safely. It re-parses every filing, replacing
+    its sections, and `chunks.section_id` cascades on delete -- so the
+    embedded index goes with them, and every chunk id the golden set's
+    evidence points at changes. A ground-truth fix must not move the corpus
+    it is graded against.
+    """
+    s = get_settings()
+    forms = forms or s.forms
+    wanted = {t.upper() for t in tickers} if tickers else None
+    companies = [
+        r
+        for r in db.query("SELECT cik, ticker FROM companies ORDER BY ticker")
+        if wanted is None or (r["ticker"] or "").upper() in wanted
+    ]
+
+    stats = IngestStats(errors=[])
+    with EdgarClient() as client:
+        for company in companies:
+            if progress:
+                progress(f"{company['ticker']} companyfacts")
+            try:
+                facts = extract_facts(
+                    company["cik"], client.company_facts(company["cik"]), forms=tuple(forms)
+                )
+            except Exception as exc:
+                stats.errors.append(f"{company['ticker']}: companyfacts failed: {exc}")
+                continue
+            stats.facts += replace_facts(company["cik"], facts)
+            stats.companies += 1
+    return stats
 
 
 def ingest_universe(
@@ -238,6 +300,7 @@ def load_fixture(path: str) -> IngestStats:
             f["value"],
             f.get("accession"),
             f.get("form", "10-K"),
+            f.get("prior_year_value"),
         )
         for f in payload.get("facts", [])
     ]
@@ -245,8 +308,9 @@ def load_fixture(path: str) -> IngestStats:
         db.execute_many(
             """
             INSERT INTO xbrl_facts (cik, taxonomy, tag, unit, fiscal_year, fiscal_period,
-                                    period_start, period_end, value, accession, form)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                    period_start, period_end, value, accession, form,
+                                    prior_year_value)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (cik, taxonomy, tag, unit, fiscal_year, fiscal_period)
             DO NOTHING
             """,

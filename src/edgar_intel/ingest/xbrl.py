@@ -52,6 +52,10 @@ class Fact:
     value: float
     accession: str | None
     form: str | None
+    # The year before, as this same filing prints it. Year-over-year changes
+    # are computed from this, not from the prior year's own `value`. See
+    # `extract_facts`, subtlety 4.
+    prior_year_value: float | None = None
 
     def label(self) -> str:
         return CORE_TAGS.get(self.tag, self.tag)
@@ -164,7 +168,7 @@ def extract_facts(
 ) -> list[Fact]:
     """Flatten companyfacts JSON into one Fact per (tag, unit, fiscal year).
 
-    Three subtleties, each of which silently corrupts the ground truth:
+    Four subtleties, each of which silently corrupts the ground truth:
 
     1. `fy`/`fp` describe the *report*, not the fact. See `fiscal_year_of`.
     2. The same (tag, period) appears in several filings -- once as the current
@@ -178,6 +182,17 @@ def extract_facts(
        those must not be filed as annual. They are kept only when their date is
        a fiscal year-end -- established from the duration facts of this same
        company, so the filter is derived from the data rather than guessed.
+    4. Subtlety 2 is right for one year and wrong for a comparison between
+       two. Each year's earliest figure comes from a different filing, and a
+       later filing can restate the earlier year on a new basis. NVIDIA's
+       FY2024 10-K reported diluted EPS of $11.93. After the June 2024 10-for-1
+       split, its FY2025 10-K printed FY2024 as $1.19 beside FY2025's $2.94.
+       Pairing $11.93 with $2.94 made the golden set expect "EPS decreased
+       75.4%" when it rose 147%, and "shares increased 893%" when they fell
+       0.7% (D12 in docs/METRICS.md). So each fact also carries
+       `prior_year_value`, the year before as printed in the same filing, and
+       comparisons use it. A filing never compares two years on different
+       bases.
     """
     tags = tags or CORE_TAGS
     facts_root = company_facts.get("facts", {})
@@ -205,8 +220,10 @@ def extract_facts(
     }
     year_ends.discard(None)
 
-    # Pass 2: keep annual facts only, keyed by the year they describe.
+    # Pass 2: keep annual facts only, keyed by the year they describe, and
+    # remember what each filing printed for each year (for pass 3).
     out: dict[tuple, Fact] = {}
+    as_printed: dict[tuple, float] = {}
     for taxonomy, tag, unit, entry in raw:
         period_start = _parse_date(entry.get("start"))
         period_end = _parse_date(entry.get("end"))
@@ -238,6 +255,13 @@ def extract_facts(
         existing = out.get(key)
         if existing is None or _is_earlier(candidate, existing):
             out[key] = candidate
+        as_printed.setdefault((taxonomy, tag, unit, candidate.accession, fiscal_year), candidate.value)
+
+    # Pass 3: the prior year as each fact's own filing printed it.
+    for (taxonomy, tag, unit, fiscal_year), fact in out.items():
+        fact.prior_year_value = as_printed.get(
+            (taxonomy, tag, unit, fact.accession, fiscal_year - 1)
+        )
     return list(out.values())
 
 
@@ -381,6 +405,7 @@ def to_rows(facts: list[Fact]) -> list[tuple]:
             f.value,
             f.accession,
             f.form,
+            f.prior_year_value,
         )
         for f in facts
     ]

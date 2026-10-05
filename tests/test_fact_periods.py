@@ -452,3 +452,206 @@ class TestMislabelledYearsAreDetected:
         revenue = _series([(2022, date(2022, 1, 3), date(2023, 1, 1), 1.0)])
         assert misdated_years(rd + revenue) == []
         assert missing_years(rd + revenue) == []
+
+
+NVDA = "0001045810"
+NVDA_FY2023_10K = "0001045810-23-000017"
+NVDA_FY2024_10K = "0001045810-24-000029"
+NVDA_FY2025_10K = "0001045810-25-000023"  # first filing after the June 2024 10-for-1 split
+
+# Diluted EPS exactly as `companyfacts` reports it in each 10-K.
+NVDA_EPS = [
+    {"fy": 2023, "fp": "FY", "form": "10-K", "val": 1.74,
+     "start": "2022-01-31", "end": "2023-01-29", "accn": NVDA_FY2023_10K},
+    {"fy": 2024, "fp": "FY", "form": "10-K", "val": 1.74,
+     "start": "2022-01-31", "end": "2023-01-29", "accn": NVDA_FY2024_10K},
+    {"fy": 2024, "fp": "FY", "form": "10-K", "val": 11.93,
+     "start": "2023-01-30", "end": "2024-01-28", "accn": NVDA_FY2024_10K},
+    {"fy": 2025, "fp": "FY", "form": "10-K", "val": 0.17,
+     "start": "2022-01-31", "end": "2023-01-29", "accn": NVDA_FY2025_10K},
+    {"fy": 2025, "fp": "FY", "form": "10-K", "val": 1.19,
+     "start": "2023-01-30", "end": "2024-01-28", "accn": NVDA_FY2025_10K},
+    {"fy": 2025, "fp": "FY", "form": "10-K", "val": 2.94,
+     "start": "2024-01-29", "end": "2025-01-26", "accn": NVDA_FY2025_10K},
+]
+
+
+class TestComparisonsStayOnOneFilingsBasis:
+    """D12: a year-over-year change must not straddle a stock split.
+
+    Each year keeps its earliest filing's figure, so FY2024 EPS is the $11.93
+    the FY2024 10-K reported. After the split, the FY2025 10-K printed FY2024
+    as $1.19 beside FY2025's $2.94. Pairing $11.93 with $2.94 expected
+    "decreased 75.4%" for a rise of 147%.
+    """
+
+    def test_each_fact_carries_its_own_filings_prior_year(self):
+        facts = {
+            f.fiscal_year: f
+            for f in extract_facts(NVDA, _payload(NVDA_EPS, "EarningsPerShareDiluted", "USD/shares"))
+        }
+        # one year asked on its own: the figure as first reported
+        assert {y: f.value for y, f in facts.items()} == {2023: 1.74, 2024: 11.93, 2025: 2.94}
+        # the year before, as each of those filings printed it
+        assert facts[2025].prior_year_value == 1.19
+        assert facts[2024].prior_year_value == 1.74
+        # the FY2023 10-K's FY2022 is not in the payload
+        assert facts[2023].prior_year_value is None
+
+    def test_balance_sheet_prior_year_comes_from_the_same_filing(self):
+        payload = _payload(NVDA_EPS, "EarningsPerShareDiluted", "USD/shares")
+        payload["facts"]["us-gaap"]["CommonStockSharesOutstanding"] = {"units": {"shares": [
+            {"fy": 2024, "fp": "FY", "form": "10-K", "val": 2_464_000_000,
+             "end": "2024-01-28", "accn": NVDA_FY2024_10K},
+            {"fy": 2025, "fp": "FY", "form": "10-K", "val": 24_643_000_000,
+             "end": "2024-01-28", "accn": NVDA_FY2025_10K},
+            {"fy": 2025, "fp": "FY", "form": "10-K", "val": 24_477_000_000,
+             "end": "2025-01-26", "accn": NVDA_FY2025_10K},
+        ]}}
+        shares = {
+            f.fiscal_year: f
+            for f in extract_facts(NVDA, payload)
+            if f.tag == "CommonStockSharesOutstanding"
+        }
+        assert shares[2024].value == 2_464_000_000
+        assert shares[2025].value == 24_477_000_000
+        assert shares[2025].prior_year_value == 24_643_000_000
+
+    def test_golden_yoy_case_uses_the_current_filings_comparative(self):
+        import random
+
+        from edgar_intel.evals.goldenset import _yoy_cases
+
+        rows = [
+            {"cik": NVDA, "tag": "EarningsPerShareDiluted", "unit": "USD/shares",
+             "fiscal_year": 2024, "fiscal_period": "FY", "value": 11.93,
+             "prior_year_value": 1.74},
+            {"cik": NVDA, "tag": "EarningsPerShareDiluted", "unit": "USD/shares",
+             "fiscal_year": 2025, "fiscal_period": "FY", "value": 2.94,
+             "prior_year_value": 1.19},
+        ]
+        [case] = _yoy_cases(rows, "NVIDIA CORP", "NVDA", NVDA, random.Random(7))
+        assert case.case_id == "yoy-NVDA-EarningsPerShareDiluted-2024-2025"
+        assert case.expected == "increased 147.1%"
+        assert case.expected_value == round((2.94 - 1.19) / 1.19 * 100, 4)
+        assert case.notes.startswith("FY2024=1.19, FY2025=2.94")
+        assert "originally reported as 11.93" in case.notes
+
+    def test_golden_yoy_case_without_a_printed_prior_uses_that_years_value(self):
+        """Rows ingested before the column existed, or a filing that printed no
+        prior year: nothing to correct, so the old pairing stands."""
+        import random
+
+        from edgar_intel.evals.goldenset import _yoy_cases
+
+        rows = [
+            {"cik": "c", "tag": "Revenues", "unit": "USD", "fiscal_year": y,
+             "fiscal_period": "FY", "value": v, "prior_year_value": None}
+            for y, v in ((2024, 100.0), (2025, 110.0))
+        ]
+        [case] = _yoy_cases(rows, "X", "X", "c", random.Random(7))
+        assert case.expected == "increased 10.0%"
+        assert case.notes == "FY2024=100.00, FY2025=110.00"
+
+    def test_agent_compare_fact_across_the_split(self, monkeypatch):
+        from edgar_intel.agent import tools
+
+        rows = [
+            {"fiscal_year": 2024, "value": 11.93, "unit": "USD/shares", "prior_year_value": 1.74},
+            {"fiscal_year": 2025, "value": 2.94, "unit": "USD/shares", "prior_year_value": 1.19},
+        ]
+        monkeypatch.setattr(tools.db, "query", lambda sql, params=None: rows)
+        forward = tools.compare_fact(
+            tools.CompareFactArgs(ticker="NVDA", tag="EarningsPerShareDiluted",
+                                  year_a=2024, year_b=2025)
+        )
+        assert forward.data["year_a"] == 1.19
+        assert forward.data["pct_change"] == round((2.94 - 1.19) / 1.19 * 100, 4)
+        backward = tools.compare_fact(
+            tools.CompareFactArgs(ticker="NVDA", tag="EarningsPerShareDiluted",
+                                  year_a=2025, year_b=2024)
+        )
+        assert backward.data["year_b"] == 1.19
+
+
+class TestFactsOnlyRefresh:
+    """The rebuild path: corrected facts must replace stale ones, and nothing
+    else may move. `upsert_facts` skips existing keys and `ingest run`
+    deletes the chunk index through `chunks.section_id`."""
+
+    @staticmethod
+    def _fake_connection(monkeypatch, log):
+        from contextlib import contextmanager
+
+        from edgar_intel.ingest import pipeline
+
+        class Cursor:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def execute(self, sql, params=None):
+                log.append((" ".join(sql.split()), params))
+
+            def executemany(self, sql, rows):
+                log.append((" ".join(sql.split()), list(rows)))
+
+        class Conn:
+            def cursor(self):
+                return Cursor()
+
+        @contextmanager
+        def connection():
+            log.append("begin")
+            yield Conn()
+            log.append("commit")
+
+        monkeypatch.setattr(pipeline.db, "connection", connection)
+
+    def test_replace_deletes_then_inserts_in_one_transaction(self, monkeypatch):
+        from edgar_intel.ingest.pipeline import replace_facts
+
+        log = []
+        self._fake_connection(monkeypatch, log)
+        facts = extract_facts(NVDA, _payload(NVDA_EPS, "EarningsPerShareDiluted", "USD/shares"))
+        assert replace_facts(NVDA, facts) == 3
+        assert log[0] == "begin" and log[-1] == "commit"
+        assert log[1] == ("DELETE FROM xbrl_facts WHERE cik = %s", (NVDA,))
+        assert log[2][0].startswith("INSERT INTO xbrl_facts")
+        inserted = log[2][1]
+        assert {(r[4], r[8], r[11]) for r in inserted} == {
+            (2023, 1.74, None), (2024, 11.93, 1.74), (2025, 2.94, 1.19),
+        }
+
+    def test_refresh_touches_only_facts(self, monkeypatch):
+        from edgar_intel.ingest import pipeline
+
+        log = []
+        self._fake_connection(monkeypatch, log)
+        monkeypatch.setattr(
+            pipeline.db, "query",
+            lambda sql, params=None: [{"cik": NVDA, "ticker": "NVDA"}, {"cik": JNJ, "ticker": "JNJ"}],
+        )
+
+        class Client:
+            fetched: list[str] = []
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def company_facts(self, cik):
+                self.fetched.append(cik)
+                return _payload(NVDA_EPS, "EarningsPerShareDiluted", "USD/shares")
+
+        monkeypatch.setattr(pipeline, "EdgarClient", Client)
+        stats = pipeline.refresh_facts(["nvda"])
+        assert Client.fetched == [NVDA]
+        assert (stats.companies, stats.facts, stats.filings, stats.sections) == (1, 3, 0, 0)
+        assert [e for e in log if isinstance(e, tuple) and "DELETE" in e[0]] == [
+            ("DELETE FROM xbrl_facts WHERE cik = %s", (NVDA,))
+        ]

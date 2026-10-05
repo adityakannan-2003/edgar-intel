@@ -184,7 +184,7 @@ def get_fact(args: GetFactArgs) -> ToolResult:
 def compare_fact(args: CompareFactArgs) -> ToolResult:
     rows = db.query(
         """
-        SELECT x.fiscal_year, x.value, x.unit
+        SELECT x.fiscal_year, x.value, x.unit, x.prior_year_value
           FROM xbrl_facts x JOIN companies co ON co.cik = x.cik
          WHERE co.ticker = %s AND x.tag = %s
            AND x.fiscal_year = ANY(%s) AND x.fiscal_period = 'FY'
@@ -199,6 +199,13 @@ def compare_fact(args: CompareFactArgs) -> ToolResult:
             summary=f"Missing {args.tag} for {args.ticker} in {missing}.",
             data={"have": sorted(by_year)},
         )
+    # Adjacent years go on the later year's basis -- its filing's own figure
+    # for the year before -- so a stock split or restatement between the two
+    # filings does not read as a change (D12).
+    earlier, later = sorted((args.year_a, args.year_b))
+    printed = {int(r["fiscal_year"]): r["prior_year_value"] for r in rows}
+    if later - earlier == 1 and printed.get(later) is not None:
+        by_year[earlier] = float(printed[later])
     a, b = by_year[args.year_a], by_year[args.year_b]
     if a == 0:
         return ToolResult(ok=False, summary="Base year value is zero; percentage change undefined.")

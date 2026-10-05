@@ -153,14 +153,18 @@ comparative cases went from 5/48 to 33/48, single-hop was untouched at 124/160.
 Every flip is listed in `reports/regrade-baseline-v5-2943b37a.json`, and each
 states both XBRL values exactly.
 
-**Known and not yet fixed (D12):** two NVIDIA year-over-year cases compare across
-the June 2024 10-for-1 split, because each year's value comes from its own
-earliest filing — "EPS decreased 75.4%" (11.93 → 2.94) and "shares increased
-893.4%" (2,464M → 24,477M). The model's split-adjusted answers are the right
-ones. They are fixed with the next golden-set rebuild, not by re-grading.
+**Fixed in code, not yet in the golden set (D12):** two NVIDIA year-over-year
+cases compare across the June 2024 10-for-1 split, because each year's value
+comes from its own earliest filing — "EPS decreased 75.4%" (11.93 → 2.94) and
+"shares increased 893.4%" (2,464M → 24,477M). The model's split-adjusted answers
+are the right ones. Each fact now also stores the prior year as its own filing
+printed it (`prior_year_value`), and comparisons use that: "EPS increased
+147.1%" (1.19 → 2.94) and "shares decreased 0.7%" (24,643M → 24,477M). The
+other 46 comparative cases already matched their filings and do not move. The
+agent's `compare_fact` now uses the same basis.
 
-**Known and not yet fixed (D13):** twelve JNJ cases grade fiscal 2023 against
-fiscal 2022. JNJ's year ends on the Sunday nearest December 31, so fiscal 2022
+**Fixed in code, not yet in the golden set (D13):** twelve JNJ cases grade
+fiscal 2023 against fiscal 2022. JNJ's year ends on the Sunday nearest December 31, so fiscal 2022
 ended 2023-01-01. The year-of-period-end rule filed it as 2023, where, as the
 earlier filing, it displaced the real fiscal 2023. The six `num-JNJ-*-2023` cases
 and six `yoy-JNJ-*-2023-2024` cases all expect fiscal-2022 figures: diluted EPS
@@ -169,12 +173,23 @@ where they rose 7.5%. All twelve failed in both `baseline-v6` runs, and in each
 run six of the stored answers are the real fiscal-2023 figure. The ingest rule
 is fixed (a year ending in the first week of January belongs to the year
 before) and matches the filings' own `fy` on all eight JNJ year-ends that fall
-there. The facts are not re-ingested, because that is a rebuild. When they are,
-JNJ's rows must be deleted first: `upsert_facts` never overwrites a key, and
-`verify-facts` fails until they are gone. Simulated
-against current `companyfacts`, the rebuild keeps every case id and question and
-changes only these twelve expected values. It goes with D12, which needs a
-generator fix first: a rebuild today reproduces both split cases unchanged.
+there.
+
+**The rebuild that lands both** changes these fourteen expected values and one
+question: `nar-UNH-supply-concentration` picks up the override added on 24 Sep
+(`ecd0d94`), after the current set was built. All 232 case ids stay. That was
+simulated end to end against current `companyfacts` and the live index. It
+must refresh the facts without re-ingesting filings.
+`ingest run` never overwrites an existing fact, and re-parsing a filing deletes
+its chunks through `chunks.section_id`, which would move the corpus the set is
+graded against. It is a new exam: accuracy before and after it does not compare.
+
+```bash
+edgar-intel init --schema sql/004_fact_prior_year_value.sql  # just the new column
+edgar-intel ingest facts          # facts only; filings, sections, chunks untouched
+edgar-intel ingest verify-facts   # must pass before the build
+edgar-intel eval build --numeric 20 --narrative 3
+```
 
 That is the bullet an interviewer remembers, because almost nobody has debugged
 their own ground truth.
@@ -481,8 +496,8 @@ in the repo.
 | judge-adoption gate vetoed a rubric on one false negative | ✅ measured |
 | bounded agent: mechanism | ✅ shipped |
 | narrative pass rate | ⚠️ 0.50 by human label on 24 cases; the judge's 0.79 (v5) and 0.75 (v6) are not usable |
-| two NVIDIA yoy cases compare across a stock split (D12) | ⚠️ known; fixed at the next golden-set rebuild |
-| twelve JNJ cases expect fiscal-2022 figures under a 2023 label (D13) | ⚠️ known; ingest rule fixed, facts and golden set wait for the D12 rebuild |
+| two NVIDIA yoy cases compare across a stock split (D12) | ⚠️ generator fixed; golden set waits for the rebuild |
+| twelve JNJ cases expect fiscal-2022 figures under a 2023 label (D13) | ⚠️ ingest rule fixed; golden set waits for the rebuild |
 | four-strategy chunking comparison | ⛔ **blocked** — the embedder-window test that isolates truncation has not run (§1) |
 | agent escalation rate | ❌ never run |
 | concurrency / throughput sweep | ❌ needs a deployed instance |

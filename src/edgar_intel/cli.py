@@ -111,6 +111,33 @@ def ingest_run(
     console.print_json(json.dumps(stats.as_dict(), indent=2))
 
 
+@ingest_app.command("facts")
+def ingest_facts(
+    tickers: str = typer.Option("", help="Comma-separated tickers; default is every ingested company."),
+    forms: str = typer.Option("10-K"),
+) -> None:
+    """Re-derive XBRL facts without touching filings, sections or chunks.
+
+    Use this after changing how facts are extracted, then run `ingest
+    verify-facts`. `ingest run` is the wrong tool for it: it never overwrites
+    an existing fact, and it re-parses every filing, which deletes the embedded
+    index through `chunks.section_id`. This replaces each company's facts in
+    one transaction and leaves the corpus alone.
+    """
+    from .ingest.pipeline import refresh_facts
+
+    ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()] or None
+    with console.status("fetching companyfacts from EDGAR..."):
+        stats = refresh_facts(
+            ticker_list,
+            [f.strip() for f in forms.split(",")],
+            progress=lambda msg: console.log(msg),
+        )
+    console.print_json(json.dumps(stats.as_dict(), indent=2))
+    if stats.errors:
+        raise typer.Exit(1)
+
+
 @ingest_app.command("doctor")
 def ingest_doctor(
     tickers: str = typer.Option("", help="Comma-separated tickers; default is the universe."),

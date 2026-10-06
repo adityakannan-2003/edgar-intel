@@ -73,14 +73,16 @@ numbers from a corpus the instance is no longer serving.
 
 ### 2a. Before the copy
 
-- **Exercise `/ask` locally.** The agent has run end to end outside the tests
-  only twice (`agent_traces` holds 2 manual runs from 28 Sep, one of which
-  found the revenue-tag bug). A few `edgar-intel agent ask "…"` calls against
-  the local database cost cents, show whether it works before the internet can
-  call it, and leave traces that the copy then carries to `/stats/agent`.
+- **Exercise `/ask` locally.** The agent has been measured on the full golden
+  set (`eval agent`, `docs/METRICS.md` §6), but those runs do not write
+  `agent_traces`, which still holds only 2 manual runs from 28 Sep. A few
+  `edgar-intel agent ask "…"` calls against the local database cost cents and
+  leave traces that the copy then carries to `/stats/agent`. Deploy at or after
+  `c4a7424`: before it, a citation-format bug escalated 48% of questions.
 - **Record no evaluation run after the one you mean to publish.** `/stats/eval`
-  serves the most recently *finished* run — today
+  serves the most recently *finished* retrieve-then-answer run — today
   `exp-prompt-conventions-c0f6e105`, the reference run in `docs/METRICS.md`.
+  Agent runs carry `pipeline: agent` and are skipped.
 
 ### 2b. Make a trimmed copy
 

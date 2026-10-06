@@ -18,6 +18,7 @@ on the ones that have not been.
 | Prompt control | `baseline-v8-7ae05834`, 6 Oct, `c152a61`: an identical config with the earlier answering prompt. The run config does not record the prompt, so the `git_sha` is the record. |
 | Same-config re-run | `exp-ctx20k-834a873e`, 5 Oct, `0e96e20`: the context-cap experiment's arm, with the same config and prompt as `baseline-v8`. 175/208 against v8's 174/208, so read 1–2 cases as run-to-run noise. |
 | Context-cap control | `baseline-v7-99204312`, 5 Oct, `47251c1`: the same set, index and config with the old 12,000-character cap, against `exp-ctx20k`. The single-variable comparison in §5. |
+| Agent runs (§6) | `agent-as-deployed-7a4e5c17`, 6 Oct, `274419a`: the tool-calling agent `/ask` serves, on the same set and grader. `agent-citation-fix-c3da771e` (`c4a7424`) differs only in `get_fact`'s printed citation; `agent-citation-fix-dns-retry-387b41f9` re-ran the 7 cases a DNS outage errored in it. All carry `pipeline: agent`, so `/stats/eval` does not serve them. |
 | Pre-rebuild reference | `baseline-v6-no-rerank-7362c6c7`, 26 Sep, `cc0a69c`, on the pre-rebuild set (archived locally as `evalset/golden-baseline-v6.json`). Same config as v7. It graded a different exam, and §2 shows exactly where the two differ. |
 | Rerank control | `baseline-v6-rerank-8d0eb06a`: v6's config with `use_rerank=true`, on the v6 set. Not re-run on the v7 set. |
 | Re-grade of an earlier reference | `reports/regrade-baseline-v5-2943b37a.json`: `baseline-v5`'s stored answers re-marked by the fixed grader, no model calls |
@@ -27,11 +28,13 @@ on the ones that have not been.
 
 Two standing cautions, both earned the hard way:
 
-- **The evaluation measures retrieve-then-answer, not `/ask`.** Every accuracy
-  figure here comes from `eval run`: hybrid retrieval, then one answering call
-  with `ANSWER_SYSTEM`. The deployed `/ask` runs the tool-calling agent, with
-  its own prompts and direct XBRL tools, and the agent has never been run on
-  the golden set (§6). The two share retrieval and the corpus, not the answering step.
+- **Outside §6, the evaluation measures retrieve-then-answer, not `/ask`.**
+  Every accuracy figure in §1–§5 comes from `eval run`: hybrid retrieval, then
+  one answering call with `ANSWER_SYSTEM`. The deployed `/ask` runs the
+  tool-calling agent, with its own prompts and direct XBRL tools. §6 measures
+  it on the same set with the same grader (`eval agent`), and it scores
+  differently: **0.7115** numeric accuracy after a citation fix, 0.4135 as
+  deployed, against 0.8606. Never quote one pipeline's figure as the other's.
 - **Read the `config` block before the numbers.** Four runs so far carried a
   provider, setting or `git_sha` that did not match intent. One recorded
   `overall_score: 0.0` on 232 consecutive HTTP 401s.
@@ -706,8 +709,9 @@ measured on the same set, so the effect on unseen questions is probably smaller.
 The absence of any regression among the other 223 is the evidence that they
 are general. The prompt is not tuned further against the remaining five, since
 that would be fitting the test. For noncontrolling interests, the structural fix
-is the agent's XBRL tools, which read `NetIncomeLoss` directly. This prompt
-serves the evaluation path only; `/ask` runs the agent.
+is the agent's XBRL tools, which read `NetIncomeLoss` directly. Measured in §6,
+the agent passes all three once its citation bug is fixed. This prompt serves
+the evaluation path only; `/ask` runs the agent.
 
 > Separated generation misses from retrieval misses by searching each answer's
 > own context for the expected figure: 9 of 34 numeric failures had the evidence
@@ -722,32 +726,172 @@ serves the evaluation path only; `/ask` runs the agent.
 **Produce it**
 
 ```bash
-edgar-intel agent stats
+edgar-intel eval agent --label agent-<what>   # the golden set through run_agent, graded as eval run grades
+edgar-intel agent stats                       # live traffic in agent_traces; eval runs are not written there
 ```
 
-**Status: NOT MEASURED. `agent_traces` holds 2 rows, both manual runs on 28 Sep.
-Do not claim numbers, and expect `/stats/agent` to show nothing meaningful on a
-deployed instance.** The agent is what `/ask` serves, and none of the accuracy
-figures in §2 and §5 measure it. They measure the retrieve-then-answer path.
+**Status: measured 6 Oct on all 232 cases, twice: the agent as deployed, and
+with a one-line citation fix.** `/ask` serves the agent, so these are the first
+accuracy figures for what the deployed service answers. One run per arm; the
+agent's run-to-run noise is not measured, and it is larger than the
+retrieve-then-answer path's (below).
 
-One of the two runs escalated "What was Apple's revenue in FY2024?" although the
-figure was in the database. The model had passed the word "revenue" to
-`get_fact` as the XBRL tag, and no fact is tagged with it. The tag alias
-(`56268a8`) resolves the word to the revenue tag each company reports, and the
-same lookup now returns $391.04B. Two runs are a bug report, not a rate.
+**How it is graded.** `eval agent` (`274419a`) calls `run_agent` on each case
+and grades the answer with `build_result`, the function `eval run` uses, so
+tolerance, parsing and abstention detection are identical. The narrative judge
+reads the agent's tool outputs where `eval run` hands it the retrieved passages.
+One rule is new: only what `/ask` returns as an answer is graded as one. An
+escalated or exhausted run is scored as declined: not passed, counted as an
+abstention, never as a hallucination. A confidence-floor escalation's held-back
+draft is graded separately, to test the floor, and never counts as a pass. Runs
+are recorded with `pipeline: agent`, and `latest_run` filters on it, so
+`/stats/eval` and `eval gate` keep reading the retrieve-then-answer reference.
+Each case keeps its outcome, steps, tools, the agent/judge cost split and the
+trace (`eval_results.agent`, `sql/005`). Traces are not written to
+`agent_traces`, which describes traffic.
 
-**Bullet shape — mechanism only, which is defensible today**
+| run | sha | what |
+|---|---|---|
+| `agent-pilot-8af9d907` | `274419a` | 20 cases, a seeded draw stratified by kind, $0.014; found the bug and projected $0.15 for the full run |
+| `agent-as-deployed-7a4e5c17` | `274419a` | all 232, the agent as `/ask` served it |
+| `agent-citation-fix-c3da771e` | `c4a7424` | all 232; differs from the run above only in `get_fact`'s printed citation |
+| `agent-citation-fix-dns-retry-387b41f9` | `c4a7424` | the 7 cases a DNS outage errored in the run above, re-run at the same sha |
 
-> Engineered a bounded tool-calling agent over 6 typed tools with an 8-step
-> ceiling, retry-with-backoff, loop detection and a confidence-floor escalation
-> path.
+Predictions for both full runs were written before either, informed by the
+pilot (`reports/agent-eval-predictions-20261006.json`, 19:45 UTC).
 
-Fill in the run count, answered % and escalated % only after `agent stats`
-returns them.
+**The bug: 48% of questions escalated over how a citation was spelled.**
+`get_fact` printed its source as `XBRL 0000080424-24-000083` and registered the
+citation `xbrl:0000080424-24-000083`. The model cited what it read, and the
+citation check rejected an id no tool had returned. The model then re-called
+`get_fact` to get a citation, loop detection refused the third identical call,
+and the agent escalated while holding the right figure. 126 of 232 runs hit the
+rejection, and it ended 65 of the 115 that did not answer. It also produced
+wrong answers. For UNH's FY2023 net income and revenue, `get_fact` returned the
+correct figures; after two refusals the model fell back to text search and
+answered the wrong line. The existing end-to-end test missed it because its
+scripted model cited the registered form, which its author knew and the model
+could not. `c4a7424` prints the id as registered, and a test now pins a model
+that copies the id from the tool output.
 
-**Expect to be asked:** what your escalation rate is and whether it is right. A
-0% escalation rate is not a good sign — it usually means the confidence floor is
-too low and the agent is answering things it should hand off.
+| | retrieve-then-answer (reference) | agent as deployed | **agent, citation fix** |
+|---|---|---|---|
+| numeric accuracy | 0.8606 (179/208) | 0.4135 (86/208) | **0.7115 (148/208)** |
+| single-hop | 137/160 | 56/160 | 118/160 |
+| comparative | 42/48 | 30/48 | 30/48 |
+| narrative, by the uncalibrated judge (not usable) | 21/24 | 16/24 | 15/24 |
+| escalated | — | **112 (48.3%)** | **52 (22.4%)** |
+| not answered (escalated or step ceiling) | — | 115 | 53 |
+| numeric answers that were right | 179 of 190 (0.942) | 86 of 98 (0.878) | 148 of 159 (0.931) |
+| abstention / hallucination (numeric) | 0.087 / 0.053 | 0.543 / 0.043 | 0.255 / 0.034 |
+| the three NCI net-income cases | 0/3 | 2/3 | **3/3** |
+| mean model calls per question | 1 | 3.76 | 2.68 |
+| mean prompt tokens per question | 4,996 | 2,824 | 2,029 |
+| cost per full run (judge included) | $0.181 | $0.137 | $0.098 |
+| p50 / p95 | 1230 / 2936 ms | 5304 / 10360 ms | 3632 / 9288 ms |
+
+The fixed run as recorded scores 0.6875 (143/208). Mid-run, seven UNH cases
+failed on a DNS lookup error, and an errored case grades as a fail on both
+pipelines. The 0.7115 replaces those seven with a re-run at the same sha, in
+which 5 passed. Both runs are stored. The outage exposed a harness gap: the
+void-run detector knew Linux's DNS wording but not macOS's, so the seven were
+never counted as infrastructure failures. `59e0e5b` fixes that, for `eval run`
+too.
+
+**What the fix measured: +70 / −9 cases.** 57 of the 70 gains are runs the
+citation rejection had ended. 8 of the 9 losses never touched a citation:
+different tool paths, two low-confidence escalations, two narrative verdicts. So
+the agent moves several cases between runs for reasons other than the change,
+far more than retrieve-then-answer's 1–2. The net gain of 62 cases is well
+outside that, and the fix is single-variable on one exam. It was found on this
+set, but it is a bug fix (printed and registered ids now match), not a rule
+fitted to cases.
+
+**Against retrieve-then-answer, the agent loses by 31 cases, and the loss is in
+declining, not in being wrong.**
+- **When it answers, it is as accurate.** 148 of its 159 numeric answers were
+  right (0.931) against 179 of 190 (0.942), and it gave fewer wrong figures
+  (7 against 11). It declined 53 numeric questions against 18.
+- **It passes 20 of the reference's 29 numeric failures** and declines the
+  other 9, answering none of them wrongly. Most were retrieval misses, which a
+  fact lookup does not depend on. Flips: +20 / −51 numeric.
+- **All three NCI cases pass.** `get_fact` reads `NetIncomeLoss`, the
+  attributable figure, which the prompt conventions could not get the
+  retrieve-then-answer model to pick (§5). As deployed, the third escalated on
+  the citation bug.
+- **Comparisons are its weakest kind**: 30/48 in both runs, against 42/48. The
+  model guesses tags (`CashAndCashEquivalents` 17 failed calls, `epsDiluted` 12
+  in the fixed run), and `compare_fact`'s miss, unlike `get_fact`'s, does not
+  list the tags that exist.
+
+**Escalation: the rate, and where it lands.**
+- **48.3% as deployed, 22.4% after the fix.** Not the 0% this section warned
+  about. But 41 of the 52 remaining escalations are questions the
+  retrieve-then-answer path answered correctly. 11 are questions it also
+  failed, and escalating those is the right behaviour. As deployed, 93 of 112
+  escalations were on questions it answered.
+- **The confidence floor is not the cause.** 46 of the 52 are the model calling
+  `escalate_to_human`. The other 6 are floor escalations, and all 6 held-back
+  drafts were wrong, so the floor kept six wrong answers from users and cost no
+  right ones. As deployed: 5 drafts, 1 right.
+- **The largest remaining pattern is the calendar.** Non-answers fall on 2 of 32
+  FY2023 questions, 12 of 87 FY2024, 28 of 70 FY2025 and 7 of 19 FY2026. 19
+  non-answers say the figure is "not available" or not yet filed, 17 of them
+  for FY2025–26, sometimes right after `list_coverage` listed that year's 10-K.
+  The model's sense of today's date overrides its own tool's output.
+- By cause, the fixed run's 53 non-answers are: 27 escalations the model chose
+  after coverage or a text search (most of the calendar cases), 14 after a tool
+  call came back empty (mostly a fact lookup on a guessed tag), 6 on the
+  confidence floor, 4 residual citation rejections (the model still sometimes
+  strips the `xbrl:` prefix), one step ceiling and one loop refusal.
+
+**Cost and latency: cheaper, and slower.** $0.098 per full run against $0.181:
+2,029 prompt tokens per question against 4,996, because a fact lookup is short
+and the agent never reads a 20,000-character context. p50 3.6 s and p95 9.3 s
+against 1.2 s and 2.9 s, because it makes 2.7 model calls per question, one after
+another.
+
+**Caveats, in order of weight.**
+- **The numeric set is generated from `xbrl_facts`, and `get_fact` reads that
+  table.** On numeric questions the agent's lookup is close to reading the
+  answer key, so its misses are tag choice, year and guardrails, not reading
+  comprehension. Retrieve-then-answer has to find the figure in text. The
+  comparison describes the two pipelines on this exam. It is not a test of
+  reading.
+- One run per arm, and the agent's noise is unmeasured but at least several
+  cases.
+- The narrative judge is uncalibrated (κ 0.42, §3), so none of the 21, 16 or 15
+  of 24 is usable.
+- Not changed, deliberately: the tag vocabulary, `compare_fact`'s miss message
+  and the calendar prior. Each is the next candidate, each needs its own
+  single-variable run, and a fix shaped on these cases would be tuned on the
+  test.
+
+**Predictions against outcome.** As deployed, 10 of 15 ranges held: escalation
+0.483 in [0.45, 0.65], numeric 0.41 in [0.30, 0.45], NCI 2 of 3, cost, steps and
+p50. It was wronger than predicted when it answered (hallucination 0.043 above
+[0, 0.03]; answers right 0.878 below [0.90, 1.0]), and faster at p95. For the
+fix, 3 of 9 held: escalation 0.224, NCI 3/3, steps 2.68. **Numeric accuracy was
+predicted at 0.82–0.94, and "more likely than not" to beat retrieve-then-answer.
+It came in at 0.71 and lost by 31 cases.** The pilot showed the bug clearly and
+hid what was behind it.
+
+**Bullet shape — usable now**
+
+> Evaluated the production tool-calling agent on the same 232-case set and
+> grader as the retrieve-then-answer pipeline, the first measurement of what
+> the deployed `/ask` serves. Found a citation-format mismatch that escalated
+> 48% of questions. The one-line fix cut escalations to 22% and raised numeric
+> accuracy 0.41 → 0.71. At 46% lower cost per question than the RAG path, it
+> still trailed that path's 0.86, almost entirely by declining (93% of its
+> answers were right). The remaining escalations trace to tag-name misses and to
+> the model treating fiscal 2025–26 as not yet reported.
+
+**Expect to be asked:** whether 22% is the right escalation rate. It is not.
+41 of the 52 escalations were answerable, and the confidence floor, which is the
+usual suspect, caused only 6, all correctly. And why the agent's numeric accuracy
+is not a fair test of reading filings: it looks the answer up in the table the
+answer key came from.
 
 ---
 
@@ -800,6 +944,11 @@ the price that bought nothing (§1).
 > retrieval, generation and judging: p50 ≈ 1.0–1.2 s / p95 ≈ 2.4–2.9 s end to
 > end across clean runs, at $0.18 per full 232-case evaluation and $0.78 per 1k
 > requests.
+
+The agent that `/ask` serves is slower and cheaper (§6). After the citation
+fix it measured p50 3.6 s and p95 9.3 s at 2.7 model calls per question, and
+$0.098 per full run, because its prompts carry fact lookups rather than a
+20,000-character context.
 
 These are local figures on a warm process. A deployed instance's numbers come
 from `bench sweep` against its URL, not from here.
@@ -854,14 +1003,16 @@ in the repo.
 | p50 ≈ 1.0–1.2 s / p95 ≈ 2.4–2.9 s, $0.78 per 1k — local, two clean runs | ✅ measured |
 | Cohen's κ = 0.42, below the floor, gate suppressed a wrong 79% | ✅ measured |
 | judge-adoption gate vetoed a rubric on one false negative | ✅ measured |
-| bounded agent: mechanism | ✅ shipped |
+| bounded agent: mechanism | ✅ shipped; measured in §6 |
 | narrative pass rate | ⚠️ 0.50 by human label on 24 cases; the judge's 0.79 (v5), 0.75 (v6), 0.79 (v7) and 0.875 (exp-ctx20k, v8, current) are not usable |
 | two NVIDIA yoy cases compared across a stock split (D12) | ✅ fixed, in the golden set since 5 Oct |
 | twelve JNJ cases expected fiscal-2022 figures under a 2023 label (D13) | ✅ fixed, in the golden set since 5 Oct |
 | embedder window (D8): a 512 window lifts hybrid hit@5 0.762 → 0.805 but not accuracy (0.841 → 0.837); declined | ✅ measured, single variable (§1) |
 | four chunking strategies at an equal 512 ceiling: fixed / recursive / section-aware tie (0.784–0.789), semantic 0.745 | ✅ measured, end to end (§1) |
 | chunk size over strategy: 512 → 600 tokens recovers 7 of the 11 cases to the shipped index (0.784 → 0.817 vs 0.837) | ✅ measured (§1) |
-| agent escalation rate | ❌ never measured — 2 manual traces, one of which found the revenue-tag bug |
+| agent (what `/ask` serves), numeric accuracy: **0.4135** as deployed → **0.7115** after a one-line citation fix, against 0.8606 for retrieve-then-answer; 93% of its numeric answers right; 3/3 NCI cases | ✅ measured (§6), same set and grader; fix single-variable but found on this set; one run per arm, agent noise unmeasured and above RAG's |
+| agent escalation rate: **48.3%** as deployed → **22.4%** after the fix; 41 of the 52 remaining escalations were questions RAG answered; the confidence floor caused 6, all with wrong drafts | ✅ measured (§6) |
+| "the agent is more accurate than RAG" | ❌ **not true** on this set: −31 cases, and its numeric lookups read the table the answer key came from |
 | concurrency / throughput sweep | ❌ needs a deployed instance |
 | regression gate in CI | ✅ running since 5 Oct against a committed baseline; fails on a deliberate regression; nothing caught yet (§4) |
 | LoRA fine-tune comparison | ❌ never run |

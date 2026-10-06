@@ -760,6 +760,12 @@ def link_evidence(
     reference answer. We intentionally do not search using the question itself,
     because doing that would make the retriever help construct its own relevance
     labels and artificially inflate retrieval metrics.
+
+    Every label comes from the filing search can reach: `search` filters on the
+    case's fiscal year, so a chunk in any other filing can never be retrieved.
+    Numeric cases used to accept that year or any later one, because later
+    10-Ks reprint earlier years as comparatives. 19% of labels sat out of reach,
+    and recall@k counted them as misses (D15).
     """
     for case in cases:
 
@@ -849,7 +855,6 @@ def link_evidence(
             source_facts = _comparative_source_facts(case.notes)
 
             if len(source_facts) >= 2:
-                source_years = [year for year, _ in source_facts]
                 source_values = [value for _, value in source_facts]
 
                 first_needles = _numeric_value_needles(source_values[0])
@@ -858,7 +863,8 @@ def link_evidence(
                 chunk_ids: list[str] = []
 
                 # First try to find a chunk containing BOTH source values.
-                # For a 2023→2024 comparison, prefer the 2024 filing or later.
+                # Only the case's own filing: for a 2023→2024 comparison, the 2024
+                # 10-K, which prints both years. It is the one search can reach.
                 for first in first_needles:
                     for second in second_needles:
                         rows = db.query(
@@ -873,18 +879,16 @@ def link_evidence(
                             ON co.cik = f.cik
                             WHERE c.strategy = %s
                             AND co.ticker = %s
-                            AND f.fiscal_year >= %s
+                            AND f.fiscal_year = %s
                             AND c.body ILIKE %s
                             AND c.body ILIKE %s
-                            ORDER BY
-                                f.fiscal_year ASC,
-                                c.id
+                            ORDER BY c.id
                             LIMIT %s
                             """,
                             (
                                 strategy,
                                 case.ticker,
-                                max(source_years),
+                                case.fiscal_year,
                                 f"%{first}%",
                                 f"%{second}%",
                                 k,
@@ -900,7 +904,7 @@ def link_evidence(
 
                 # Fallback: find evidence for each source value separately.
                 if not chunk_ids:
-                    for source_year, source_value in source_facts:
+                    for _, source_value in source_facts:
                         for needle in _numeric_value_needles(source_value):
                             rows = db.query(
                                 """
@@ -914,23 +918,16 @@ def link_evidence(
                                 ON co.cik = f.cik
                                 WHERE c.strategy = %s
                                 AND co.ticker = %s
-                                AND f.fiscal_year >= %s
+                                AND f.fiscal_year = %s
                                 AND c.body ILIKE %s
-                                ORDER BY
-                                    CASE
-                                        WHEN f.fiscal_year = %s THEN 0
-                                        ELSE 1
-                                    END,
-                                    f.fiscal_year ASC,
-                                    c.id
+                                ORDER BY c.id
                                 LIMIT %s
                                 """,
                                 (
                                     strategy,
                                     case.ticker,
-                                    source_year,
+                                    case.fiscal_year,
                                     f"%{needle}%",
-                                    source_year,
                                     k,
                                 ),
                             )
@@ -960,15 +957,9 @@ def link_evidence(
                     ON co.cik = f.cik
                     WHERE c.strategy = %s
                     AND co.ticker = %s
-                    AND f.fiscal_year >= %s
+                    AND f.fiscal_year = %s
                     AND c.body ILIKE %s
-                    ORDER BY
-                        CASE
-                            WHEN f.fiscal_year = %s THEN 0
-                            ELSE 1
-                        END,
-                        f.fiscal_year ASC,
-                        c.id
+                    ORDER BY c.id
                     LIMIT %s
                     """,
                     (
@@ -976,7 +967,6 @@ def link_evidence(
                         case.ticker,
                         case.fiscal_year,
                         f"%{needle}%",
-                        case.fiscal_year,
                         k,
                     ),
                 )

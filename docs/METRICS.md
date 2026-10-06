@@ -18,7 +18,7 @@ on the ones that have not been.
 | Prompt control | `baseline-v8-7ae05834`, 6 Oct, `c152a61`: an identical config with the earlier answering prompt. The run config does not record the prompt, so the `git_sha` is the record. |
 | Same-config re-run | `exp-ctx20k-834a873e`, 5 Oct, `0e96e20`: the context-cap experiment's arm, with the same config and prompt as `baseline-v8`. 175/208 against v8's 174/208, so read 1–2 cases as run-to-run noise. |
 | Context-cap control | `baseline-v7-99204312`, 5 Oct, `47251c1`: the same set, index and config with the old 12,000-character cap, against `exp-ctx20k`. The single-variable comparison in §5. |
-| Agent runs (§6) | `agent-as-deployed-7a4e5c17`, 6 Oct, `274419a`: the tool-calling agent `/ask` serves, on the same set and grader. `agent-citation-fix-c3da771e` (`c4a7424`) differs only in `get_fact`'s printed citation; `agent-citation-fix-dns-retry-387b41f9` re-ran the 7 cases a DNS outage errored in it. All carry `pipeline: agent`, so `/stats/eval` does not serve them. |
+| Agent runs (§6) | `agent-as-deployed-7a4e5c17`, 6 Oct, `274419a`: the tool-calling agent `/ask` serves, on the same set and grader. `agent-citation-fix-c3da771e` (`c4a7424`) differs only in `get_fact`'s printed citation; `agent-citation-fix-dns-retry-387b41f9` re-ran the 7 cases a DNS outage errored in it; `agent-citation-fix-rerun-65631f87` (`6451ac4`) repeats it unchanged to measure noise. All carry `pipeline: agent`, so `/stats/eval` does not serve them. |
 | Pre-rebuild reference | `baseline-v6-no-rerank-7362c6c7`, 26 Sep, `cc0a69c`, on the pre-rebuild set (archived locally as `evalset/golden-baseline-v6.json`). Same config as v7. It graded a different exam, and §2 shows exactly where the two differ. |
 | Rerank control | `baseline-v6-rerank-8d0eb06a`: v6's config with `use_rerank=true`, on the v6 set. Not re-run on the v7 set. |
 | Re-grade of an earlier reference | `reports/regrade-baseline-v5-2943b37a.json`: `baseline-v5`'s stored answers re-marked by the fixed grader, no model calls |
@@ -732,9 +732,9 @@ edgar-intel agent stats                       # live traffic in agent_traces; ev
 
 **Status: measured 6 Oct on all 232 cases, twice: the agent as deployed, and
 with a one-line citation fix.** `/ask` serves the agent, so these are the first
-accuracy figures for what the deployed service answers. One run per arm; the
-agent's run-to-run noise is not measured, and it is larger than the
-retrieve-then-answer path's (below).
+accuracy figures for what the deployed service answers. The fixed agent was
+then run a second time with nothing changed. Its totals agree within one case,
+but 14 cases flip each way between the two runs (below).
 
 **How it is graded.** `eval agent` (`274419a`) calls `run_agent` on each case
 and grades the answer with `build_result`, the function `eval run` uses, so
@@ -756,6 +756,7 @@ trace (`eval_results.agent`, `sql/005`). Traces are not written to
 | `agent-as-deployed-7a4e5c17` | `274419a` | all 232, the agent as `/ask` served it |
 | `agent-citation-fix-c3da771e` | `c4a7424` | all 232; differs from the run above only in `get_fact`'s printed citation |
 | `agent-citation-fix-dns-retry-387b41f9` | `c4a7424` | the 7 cases a DNS outage errored in the run above, re-run at the same sha |
+| `agent-citation-fix-rerun-65631f87` | `6451ac4` | all 232 again, nothing changed, to measure noise. `6451ac4` differs from `c4a7424` only in the void-run detector's regex, tests and docs |
 
 Predictions for both full runs were written before either, informed by the
 pilot (`reports/agent-eval-predictions-20261006.json`, 19:45 UTC).
@@ -800,12 +801,31 @@ too.
 
 **What the fix measured: +70 / −9 cases.** 57 of the 70 gains are runs the
 citation rejection had ended. 8 of the 9 losses never touched a citation:
-different tool paths, two low-confidence escalations, two narrative verdicts. So
-the agent moves several cases between runs for reasons other than the change,
-far more than retrieve-then-answer's 1–2. The net gain of 62 cases is well
-outside that, and the fix is single-variable on one exam. It was found on this
-set, but it is a bug fix (printed and registered ids now match), not a rule
-fitted to cases.
+different tool paths, two low-confidence escalations, two narrative verdicts.
+That is the agent's ordinary churn, measured below at 14 cases each way between
+identical runs. The net gain of 62 cases is far outside it, and the fix is
+single-variable on one exam. It was found on this set, but it is a bug fix
+(printed and registered ids now match), not a rule fitted to cases.
+
+**Run-to-run noise, measured: totals hold, cases do not.** The fixed agent, run
+twice with nothing changed:
+
+| | run B (`c3da771e`, with the retry) | run C (`65631f87`) |
+|---|---|---|
+| numeric accuracy | 0.7115 (148/208) | 0.7067 (147/208) |
+| single-hop / comparative | 118 / 30 | 116 / 31 |
+| escalated | 52 | 52 |
+| wrong numeric answers | 7 | 10 |
+| the three NCI cases | 3/3 | 3/3 |
+| cost · p50 / p95 | $0.098 · 3.6 / 9.3 s | $0.100 · 3.4 / 7.6 s |
+
+Between the two, 14 cases went from fail to pass and 14 from pass to fail (13
+and 14 numeric), and 27 switched between answered and declined.
+Retrieve-then-answer moves about one case each way. So for the agent, an
+aggregate difference of a couple of cases is noise, as it is for the other
+path. A claim that a change fixed particular cases has to beat chance: about
+22% of one run's numeric failures pass in the next, and about 10% of its passes
+fail.
 
 **Against retrieve-then-answer, the agent loses by 31 cases, and the loss is in
 declining, not in being wrong.**
@@ -858,8 +878,9 @@ another.
   comprehension. Retrieve-then-answer has to find the figure in text. The
   comparison describes the two pipelines on this exam. It is not a test of
   reading.
-- One run per arm, and the agent's noise is unmeasured but at least several
-  cases.
+- Case-level churn is high: 14 each way between identical runs. Totals are
+  stable to about one case, but any per-case attribution has to clear the 22%
+  of failures that pass by chance.
 - The narrative judge is uncalibrated (κ 0.42, §3), so none of the 21, 16 or 15
   of 24 is usable.
 - Not changed, deliberately: the tag vocabulary, `compare_fact`'s miss message
@@ -1010,7 +1031,7 @@ in the repo.
 | embedder window (D8): a 512 window lifts hybrid hit@5 0.762 → 0.805 but not accuracy (0.841 → 0.837); declined | ✅ measured, single variable (§1) |
 | four chunking strategies at an equal 512 ceiling: fixed / recursive / section-aware tie (0.784–0.789), semantic 0.745 | ✅ measured, end to end (§1) |
 | chunk size over strategy: 512 → 600 tokens recovers 7 of the 11 cases to the shipped index (0.784 → 0.817 vs 0.837) | ✅ measured (§1) |
-| agent (what `/ask` serves), numeric accuracy: **0.4135** as deployed → **0.7115** after a one-line citation fix, against 0.8606 for retrieve-then-answer; 93% of its numeric answers right; 3/3 NCI cases | ✅ measured (§6), same set and grader; fix single-variable but found on this set; one run per arm, agent noise unmeasured and above RAG's |
+| agent (what `/ask` serves), numeric accuracy: **0.4135** as deployed → **0.7115** after a one-line citation fix, against 0.8606 for retrieve-then-answer; 93% of its numeric answers right; 3/3 NCI cases | ✅ measured (§6), same set and grader; fix single-variable but found on this set; a same-config re-run scored 0.7067, so totals hold to ±1 case, while 14 cases flip each way |
 | agent escalation rate: **48.3%** as deployed → **22.4%** after the fix; 41 of the 52 remaining escalations were questions RAG answered; the confidence floor caused 6, all with wrong drafts | ✅ measured (§6) |
 | "the agent is more accurate than RAG" | ❌ **not true** on this set: −31 cases, and its numeric lookups read the table the answer key came from |
 | concurrency / throughput sweep | ❌ needs a deployed instance |

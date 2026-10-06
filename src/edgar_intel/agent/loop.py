@@ -107,6 +107,13 @@ class AgentRun:
     total_cost_usd: float
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    # Every tool output the model read, sanitised and in call order. The
+    # golden-set evaluation hands it to the narrative judge as the source
+    # context, the way `eval run` hands over its retrieved passages.
+    evidence: list[str] = field(default_factory=list)
+    # The answer held back when a run escalated on the confidence floor; empty
+    # otherwise. Kept apart from `answer` so a draft is never mistaken for one.
+    draft_answer: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -197,7 +204,8 @@ def run_agent(
             )
             return _finish(trace_id, question, "exhausted",
                            "Stopped: cost ceiling reached before an answer was reached.",
-                           [], 0.0, steps, started, p_tok, c_tok, persist)
+                           [], 0.0, steps, started, p_tok, c_tok, persist,
+                           evidence=tool_outputs)
 
         # ---- parse the action
         try:
@@ -213,7 +221,8 @@ def run_agent(
             if retries > max_retries:
                 return _finish(trace_id, question, "failed",
                                "Model did not return valid JSON within the retry budget.",
-                               [], 0.0, steps, started, p_tok, c_tok, persist)
+                               [], 0.0, steps, started, p_tok, c_tok, persist,
+                               evidence=tool_outputs)
             transcript.append(
                 f"ERROR: your last reply was not valid JSON ({exc}). "
                 "Reply with a single JSON object."
@@ -235,7 +244,8 @@ def run_agent(
                 if retries > max_retries:
                     return _finish(trace_id, question, "escalated",
                                    f"Answer rejected: {why}", citations, confidence,
-                                   steps, started, p_tok, c_tok, persist)
+                                   steps, started, p_tok, c_tok, persist,
+                                   evidence=tool_outputs)
                 transcript.append(f"ERROR: {why}")
                 continue
 
@@ -248,7 +258,8 @@ def run_agent(
                 if retries > max_retries:
                     return _finish(trace_id, question, "escalated",
                                    f"Answer rejected: {why_num}", citations, confidence,
-                                   steps, started, p_tok, c_tok, persist)
+                                   steps, started, p_tok, c_tok, persist,
+                                   evidence=tool_outputs)
                 transcript.append(
                     f"ERROR: {why_num}. Re-check those figures with get_fact, or "
                     "state that the evidence is missing."
@@ -264,11 +275,13 @@ def run_agent(
                     trace_id, question, "escalated",
                     f"Low confidence ({confidence:.2f}). Draft answer, needs review: {answer}",
                     citations, confidence, steps, started, p_tok, c_tok, persist,
+                    evidence=tool_outputs, draft_answer=answer,
                 )
 
             steps.append(Step(n=step_n, kind="answer", thought=thought, ok=True))
             return _finish(trace_id, question, "answered", answer, citations, confidence,
-                           steps, started, p_tok, c_tok, persist)
+                           steps, started, p_tok, c_tok, persist,
+                           evidence=tool_outputs)
 
         # ---- tool call
         tool_name = str(action.get("tool", ""))
@@ -321,7 +334,8 @@ def run_agent(
 
         if tool_name == "escalate_to_human":
             return _finish(trace_id, question, "escalated", summary, [], 0.0,
-                           steps, started, p_tok, c_tok, persist)
+                           steps, started, p_tok, c_tok, persist,
+                           evidence=tool_outputs)
 
         transcript.append(
             f"TOOL {tool_name}({json.dumps(raw_args)}) -> "
@@ -333,13 +347,14 @@ def run_agent(
         trace_id, question, "exhausted",
         f"No confident answer within {max_steps} steps. What was found is in the trace.",
         sorted(available_citations)[:10], 0.0, steps, started, p_tok, c_tok, persist,
+        evidence=tool_outputs,
     )
 
 
 def _finish(
     trace_id: str, question: str, outcome: str, answer: str, citations: list[str],
     confidence: float, steps: list[Step], started: float, p_tok: int, c_tok: int,
-    persist: bool,
+    persist: bool, evidence: list[str] | None = None, draft_answer: str = "",
 ) -> AgentRun:
     s = get_settings()
     run = AgentRun(
@@ -354,6 +369,8 @@ def _finish(
         total_cost_usd=round(s.cost_usd(p_tok, c_tok), 6),
         prompt_tokens=p_tok,
         completion_tokens=c_tok,
+        evidence=list(evidence or []),
+        draft_answer=draft_answer,
     )
     if persist:
         _persist(run)

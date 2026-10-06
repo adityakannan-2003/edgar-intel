@@ -585,6 +585,65 @@ def eval_run(
     console.print_json(json.dumps(summary.as_dict(), indent=2))
 
 
+@eval_app.command("agent")
+def eval_agent(
+    path: str = typer.Option("evalset/golden.json"),
+    label: str = typer.Option("agent"),
+    limit: int = typer.Option(0, help="Run only the first N cases."),
+    case_ids: str = typer.Option("", help="Comma-separated case ids; run only these, in set order."),
+    git_sha: str = typer.Option(""),
+    persist_traces: bool = typer.Option(
+        False, "--persist-traces", help="Also write each run to agent_traces (/stats/agent)."
+    ),
+) -> None:
+    """Run the golden set through the agent `/ask` serves, graded as `eval run` grades.
+
+    Marks: . passed, ~ abstained, E escalated, X exhausted or failed, F wrong.
+    The run is recorded with `pipeline: agent`, so `/stats/eval` and `eval gate`
+    keep reading the latest retrieve-then-answer run.
+    """
+    from .evals.agent_eval import run_agent_suite
+    from .evals.goldenset import load
+    from .evals.runner import RunAborted
+
+    cases = load(path)
+    if case_ids:
+        wanted = {c.strip() for c in case_ids.split(",") if c.strip()}
+        unknown = wanted - {c.case_id for c in cases}
+        if unknown:
+            console.print(f"[red]not in {path}:[/red] {', '.join(sorted(unknown))}")
+            raise typer.Exit(2)
+        cases = [c for c in cases if c.case_id in wanted]
+    if limit:
+        cases = cases[:limit]
+
+    def progress(i: int, total: int, result, record) -> None:
+        outcome = record["outcome"]
+        if result.passed:
+            mark = "."
+        elif outcome == "escalated":
+            mark = "E"
+        elif outcome != "answered":
+            mark = "X"
+        else:
+            mark = "~" if result.abstained else "F"
+        console.print(mark, end="")
+        if i % 50 == 0 or i == total:
+            console.print(f" {i}/{total}")
+
+    try:
+        _, summary = run_agent_suite(
+            cases, label=label, sha=git_sha, progress=progress, persist_traces=persist_traces
+        )
+    except RunAborted as exc:
+        console.print()
+        console.print(f"[red]run aborted[/red] {exc}")
+        raise typer.Exit(2) from exc
+
+    console.print()
+    console.print_json(json.dumps(summary, indent=2, default=str))
+
+
 @eval_app.command("gate")
 def eval_gate(
     max_regression: float = typer.Option(0.03),

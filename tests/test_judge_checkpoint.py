@@ -374,4 +374,5 @@ class TestMigrationNumbering:
         names = sorted(p.name for p in pathlib.Path("sql").glob("*.sql"))
         assert names == ["001_schema.sql", "002_fact_period_uniqueness.sql",
                          "003_eval_result_replay_context.sql",
-                         "004_fact_prior_year_value.sql"]
+                         "004_fact_prior_year_value.sql",
+                         "005_eval_result_agent.sql"]

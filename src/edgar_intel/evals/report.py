@@ -56,13 +56,22 @@ class GateResult:
         return "\n".join(lines)
 
 
-def latest_run(label: str | None = None) -> dict[str, Any] | None:
+def latest_run(label: str | None = None, pipeline: str = "rag") -> dict[str, Any] | None:
+    """The most recently finished run of one pipeline.
+
+    `rag` is retrieve-then-answer (`eval run`), whose runs carry no `pipeline`
+    key; `agent` is the tool-calling agent (`eval agent`). The default keeps an
+    agent run from becoming what `/stats/eval` serves and what `eval gate`
+    compares against a retrieve-then-answer baseline: it has no retrieval
+    metrics, and the gate would be comparing two pipelines, not two commits.
+    """
     sql = """
         SELECT id, run_key, label, git_sha, summary, finished_at
           FROM eval_runs
          WHERE summary IS NOT NULL
+           AND COALESCE(config->>'pipeline', 'rag') = %s
     """
-    params: list[Any] = []
+    params: list[Any] = [pipeline]
     if label:
         sql += " AND label = %s"
         params.append(label)

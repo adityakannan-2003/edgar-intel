@@ -462,7 +462,13 @@ def search(
     )
 
 
-DEFAULT_CONTEXT_MAX_CHARS = 12000
+# Room for all eight passages `top_n` selects. section_aware chunks run about
+# 2,000-2,350 characters, and 12,000 admitted a median of six: in 16 cases on
+# the golden set it cut the only evidence retrieval had found. At 20,000 the
+# largest top-8 context measured (18,075) fits. Raising it lifted numeric
+# accuracy 0.7788 -> 0.8413 with nothing else changed (exp-ctx20k-834a873e
+# against baseline-v7-99204312; docs/METRICS.md §5).
+DEFAULT_CONTEXT_MAX_CHARS = 20000
 
 
 @dataclass(slots=True)

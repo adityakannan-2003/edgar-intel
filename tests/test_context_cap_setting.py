@@ -1,10 +1,10 @@
 """`eval run --context-max-chars` changes the cap, and the run records the cap that ran.
 
-The answering context is capped at 12,000 characters, which admits about six of
-the eight passages `top_n` selects. Measuring a larger cap needs the run to use
-it and to say so. Before this option, the config recorded the 12,000 constant
-whatever the run did, so an experiment that changed the cap would have been
-written down as one that did not.
+The answering context used to be capped at 12,000 characters, which admitted
+about six of the eight passages `top_n` selects. Measuring a larger cap needed
+the run to use it and to say so: before this option, the config recorded the
+constant whatever the run did, so an experiment that changed the cap would have
+been written down as one that did not. The shipped cap is now 20,000.
 """
 
 from __future__ import annotations
@@ -57,18 +57,18 @@ def one_case():
 class TestTheRunRecordsTheCap:
     def test_an_unflagged_run_records_the_shipped_cap(self, monkeypatch):
         config, _ = _run(monkeypatch)
-        assert config["context_max_chars"] == DEFAULT_CONTEXT_MAX_CHARS == 12000
+        assert config["context_max_chars"] == DEFAULT_CONTEXT_MAX_CHARS == 20000
 
     def test_an_explicit_cap_is_recorded_as_given(self, monkeypatch):
-        config, _ = _run(monkeypatch, context_max_chars=20000)
-        assert config["context_max_chars"] == 20000
+        config, _ = _run(monkeypatch, context_max_chars=12000)
+        assert config["context_max_chars"] == 12000
 
 
 class TestTheCapReachesTheAnswer:
     def test_the_explicit_cap_is_what_each_case_is_answered_under(self, monkeypatch, one_case):
-        _, caps = _run(monkeypatch, one_case, context_max_chars=20000)
-        assert caps == [20000]
+        _, caps = _run(monkeypatch, one_case, context_max_chars=12000)
+        assert caps == [12000]
 
     def test_the_default_reaches_it_too(self, monkeypatch, one_case):
         _, caps = _run(monkeypatch, one_case)
-        assert caps == [12000]
+        assert caps == [20000]

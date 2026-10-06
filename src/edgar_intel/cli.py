@@ -533,7 +533,7 @@ def eval_run(
     ),
     top_n: int = typer.Option(0, help="Passages placed in the answering context. 0 = configured default."),
     context_max_chars: int = typer.Option(
-        0, help="Character cap on the answering context. 0 = the shipped default (12000)."
+        0, help="Character cap on the answering context. 0 = the shipped default (20000)."
     ),
     limit: int = typer.Option(0, help="Run only the first N cases."),
     git_sha: str = typer.Option(""),
@@ -713,7 +713,7 @@ def eval_context_probe(
     rerank: str = typer.Option("on,off", help="Which rerank settings to test."),
     repeats: int = typer.Option(1, help="Repeats per arm; >1 tests reliability, not just pass/fail."),
     item_boost: float = typer.Option(-1.0, help="Override item_boost_weight. -1 = use configured value."),
-    context_max_chars: int = typer.Option(12000, help="build_context character cap."),
+    context_max_chars: int = typer.Option(20000, help="build_context character cap (shipped: 20000)."),
     context_packing: str = typer.Option(
         "greedy-stop", help="greedy-stop (shipped) | skip-oversized"
     ),

@@ -132,7 +132,7 @@ class TestContextCap:
     """
 
     def test_cap_binds_and_is_reported(self):
-        # 1,900-char bodies plus a tag; six fit in 12,000 chars, the rest do not.
+        # 1,900-char bodies plus a tag; ten fit in 20,000 chars, the rest do not.
         report = build_context_report([hit(str(i)) for i in range(20)])
         assert report.cap_binding
         assert report.n_selected == 20
@@ -141,12 +141,25 @@ class TestContextCap:
         assert report.chars_before_cap > DEFAULT_CONTEXT_MAX_CHARS
 
     def test_included_count_is_flat_across_top_n_once_the_cap_binds(self):
-        """Why raising top_n bought nothing: the prompt stops in the same place."""
+        """Why raising top_n bought nothing at 12,000: the prompt stopped in the
+        same place. At 20,000 it binds from ten 1,900-char passages up."""
         counts = {
             n: build_context_report([hit(str(i)) for i in range(n)]).n_included
-            for n in (8, 12, 16, 20)
+            for n in (12, 16, 20)
         }
         assert len(set(counts.values())) == 1, counts
+        old = {
+            n: build_context_report([hit(str(i)) for i in range(n)], max_chars=12000).n_included
+            for n in (8, 12, 16, 20)
+        }
+        assert len(set(old.values())) == 1, old
+
+    def test_the_shipped_cap_admits_all_eight_of_the_longest_chunks(self):
+        """section_aware chunks top out near 2,350 characters. At 12,000 a top-8
+        context of them lost two or three passages; the shipped cap keeps all eight."""
+        eight = [hit(str(i), body="x" * 2352) for i in range(8)]
+        assert build_context_report(eight).n_included == 8
+        assert build_context_report(eight, max_chars=12000).n_included == 5
 
     def test_every_dropped_passage_is_accounted_for(self):
         report = build_context_report([hit(str(i)) for i in range(20)])
@@ -176,7 +189,8 @@ class TestContextCap:
         """The sharp edge in the shipped policy: one long passage ends the loop."""
         hits = [
             hit("small-1", body="a" * 100),
-            hit("huge", body="b" * 11_950),
+            # Nearly the whole cap, whatever the cap is.
+            hit("huge", body="b" * (DEFAULT_CONTEXT_MAX_CHARS - 50)),
             hit("small-2", body="c" * 100),
         ]
         greedy = build_context_report(hits, packing="greedy-stop")
@@ -187,7 +201,8 @@ class TestContextCap:
     def test_skip_oversized_keeps_the_later_short_passage(self):
         hits = [
             hit("small-1", body="a" * 100),
-            hit("huge", body="b" * 11_950),
+            # Nearly the whole cap, whatever the cap is.
+            hit("huge", body="b" * (DEFAULT_CONTEXT_MAX_CHARS - 50)),
             hit("small-2", body="c" * 100),
         ]
         skipped = build_context_report(hits, packing="skip-oversized")

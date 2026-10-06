@@ -28,11 +28,35 @@ from .judge import build_result, calibration_pairs, compute_kappa, kappa_verdict
 from .judge_contracts import get_contract
 from .schemas import ANSWER_SCHEMA, CaseResult, EvalCase, RunSummary
 
+# The reading conventions below are standard financial-statement definitions,
+# and they are the concepts the golden set grades against (XBRL NetIncomeLoss,
+# CashAndCashEquivalentsAtCarryingValue, ...). They were added after
+# baseline-v8 showed 9 answers that had every needed figure in front of the
+# model and still picked the wrong line: earnings before noncontrolling
+# interests, cash including restricted cash, a segment row beside the total,
+# "Worldwide" not read as revenue, a change given without its percentage.
+# Measured on the same set they came from, so the gain is in-sample
+# (docs/METRICS.md §5).
 ANSWER_SYSTEM = (
     "You answer questions about SEC filings using only the supplied context. "
     "Cite the bracketed passage numbers you used. If the context does not "
     "contain the answer, say so plainly rather than guessing -- an admission "
     "of missing evidence is correct behaviour, a fabricated figure is not. "
+    "Read figures the way an analyst reads a 10-K: "
+    "(1) for a company-wide figure, prefer the consolidated financial statements "
+    "(balance sheet, statement of earnings, cash flows) over notes, segment "
+    "tables or narrative; "
+    "(2) when a table lists segments or components and a total, the company "
+    "figure is the total row, which may be labelled Total, Consolidated, "
+    "Segments total or Worldwide; "
+    "(3) net income means net income attributable to the company, after "
+    "noncontrolling interests, when both lines are shown; "
+    "(4) cash and cash equivalents is the balance-sheet line, excluding "
+    "restricted cash and marketable securities; "
+    "(5) revenue may be labelled revenues, net sales, total net sales or sales "
+    "to customers; "
+    "(6) for a change between two years, give both figures as printed and the "
+    "percentage change. "
     "Reply with JSON only."
 )
 

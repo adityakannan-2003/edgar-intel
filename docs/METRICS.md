@@ -13,9 +13,10 @@ on the ones that have not been.
 
 | | |
 |---|---|
-| Reference run | `exp-ctx20k-834a873e`, 5 Oct 2026, `git_sha` `0e96e20`, clean tree, run with `--context-max-chars 20000`, the shipped default since the commit after it (§5) |
-| Report | `reports/exp-ctx20k-834a873e.json` |
-| Context-cap control | `baseline-v7-99204312`, 5 Oct, `47251c1`: the same set, index and config with the old 12,000-character cap. The single-variable comparison in §5. |
+| Reference run | `baseline-v8-7ae05834`, 6 Oct 2026, `git_sha` `c152a61`, clean tree, the shipped configuration (20,000-character context), on the D15 labels |
+| Report | `reports/baseline-v8-7ae05834.json` |
+| Same-config re-run | `exp-ctx20k-834a873e`, 5 Oct, `0e96e20`: the context-cap experiment's arm, with an identical config. 175/208 against v8's 174/208, so read 1–2 cases as run-to-run noise. |
+| Context-cap control | `baseline-v7-99204312`, 5 Oct, `47251c1`: the same set, index and config with the old 12,000-character cap, against `exp-ctx20k`. The single-variable comparison in §5. |
 | Pre-rebuild reference | `baseline-v6-no-rerank-7362c6c7`, 26 Sep, `cc0a69c`, on the pre-rebuild set (archived locally as `evalset/golden-baseline-v6.json`). Same config as v7. It graded a different exam, and §2 shows exactly where the two differ. |
 | Rerank control | `baseline-v6-rerank-8d0eb06a`: v6's config with `use_rerank=true`, on the v6 set. Not re-run on the v7 set. |
 | Re-grade of an earlier reference | `reports/regrade-baseline-v5-2943b37a.json`: `baseline-v5`'s stored answers re-marked by the fixed grader, no model calls |
@@ -57,11 +58,10 @@ is hit@8:
 
 The hit@k and MRR figures are identical in `baseline-v7` (apart from timing),
 because raising the context cap changes what the model reads, not what
-retrieval returns. recall@5 and nDCG@10 are from the free sweep on the D15
-labels (`reports/retrieval_d15_20261005.json`). That sweep reproduces a run's
-retrieval block exactly. The reference run's stored summary, and so a deployed
-`/stats/eval`, still carries the pre-D15 recall@5 of 0.320 until the next paid
-run.
+retrieval returns. The reference run was made after D15, so its stored summary,
+which a deployed `/stats/eval` serves, carries these figures, recall@5 0.408
+included. The free D15 sweep (`reports/retrieval_d15_20261005.json`) gives the
+same numbers.
 
 **D15, fixed 5 Oct: labels search could never reach.** 178 of the 919 label
 references (19%) pointed at chunks in a filing other than the case's fiscal
@@ -111,30 +111,66 @@ and the ceiling gap, measured on the same labels as the reference run:
 > by `top_n` truncation rather than never found — which moved the work from
 > prompt tuning to context selection.
 
-**Bullet shape — blocked on `eval compare`, and `eval compare` is blocked**
+**Bullet shape — not yet measured: `eval compare` has never run**
 
 > ~~Benchmarked four chunking strategies…~~ Do not write this until
 > `eval compare` runs. All four strategies are chunked and fully embedded
 > (23,499 chunks); none has been evaluated against the others.
 
-> ⚠️ **The embedder window is still unsettled (D8).** `all-MiniLM-L6-v2` reads 256
-> word-pieces and `section_aware` chunks average 473 `token_est`, and
-> `edgar-intel index embed-window` confirmed truncation: it put the ceiling that
-> fits the window at **144 `token_est`**. Re-chunking to that ceiling
-> (`section_aware_t144`, 32,171 chunks, `reports/retrieval_section_aware_t144_d8.json`)
-> made every figure worse on the v6 labels — hit@5 0.660 → 0.330, recall@5 0.275 → 0.104, MRR
-> 0.474 → 0.217 — **and lexical-only fell as far as dense-only** (0.836 → 0.552 at
-> depth), which the embedder's window cannot touch. So that experiment measured
-> chunk granularity and re-derived labels, not truncation; it is not shipped.
->
-> The clean test keeps the chunks and their labels fixed and changes only the
-> window: the same `section_aware` chunks re-embedded, beside the current index
-> (`index build --suffix`), by a 384-d model that reads 512 tokens. Until then the
-> four-strategy comparison would still rank four runners handicapped the same
-> way. Two fixes it will need are already in: every strategy now treats
-> `target_tokens` as a ceiling (D9), and each arm is graded on labels derived for
-> its own index (D11) — without which three of the four would have scored
-> hit@k = 0 by construction.
+**D8, settled 5–6 Oct: the embedder window.** `all-MiniLM-L6-v2` reads 256
+word-pieces, and 93% of `section_aware` chunks are longer than that (median
+380, p90 875). In **51%** of the labelled numeric evidence, the expected figure
+sits past word-piece 256, where the dense embedder never sees it; at a 512
+window, 12% would be out of view. An earlier attempt re-chunked to fit the
+window (`section_aware_t144`), which made every figure worse, lexical-only
+included. That measured chunk granularity, not truncation, and is not shipped.
+
+The clean test kept the chunks fixed. Every `section_aware` row was copied
+byte-for-byte and embedded with `BAAI/bge-small-en-v1.5` (384-d), at a 256 and a
+512 window. The control re-ran MiniLM afterwards, and its numbers were identical
+to before. Free sweeps, on the D15 labels
+(`reports/retrieval_d8_{minilm_control,bge256,bge512}_20261005.json`):
+
+| shipped hybrid | hit@1 | hit@5 | recall@5 | MRR | nDCG@10 | dense-only hit@5 |
+|---|---|---|---|---|---|---|
+| MiniLM, 256 (shipped) | 0.403 | 0.762 | 0.408 | 0.555 | 0.429 | 0.701 |
+| bge-small, 256 | 0.390 | 0.784 | 0.407 | 0.547 | 0.424 | 0.632 |
+| bge-small, 512 | **0.489** | **0.805** | **0.437** | **0.615** | **0.469** | 0.701 |
+
+**The window, not the model, carries the retrieval gain.** At 256, bge-small is
+no better than MiniLM, and worse dense-only. Opening its window to 512 is what
+lifts it. The mechanism shows on the cases D8 predicts: for the 36 whose figure
+sits past word-piece 256 in every labelled chunk, dense hit@5 rises 0.361 →
+0.556 between the two bge arms. Hybrid search hid most of that, because
+keyword matching was already carrying those cases. The hybrid gain came from
+the other numeric cases (0.772 → 0.848), while narrative fell 0.708 → 0.625.
+
+**Then the paid run: retrieval improved, answers did not.**
+`exp-bge512-e5726731` changed only the embedder and its index copy against the
+`exp-ctx20k` run: numeric accuracy **0.8413 → 0.8365** (9 cases better, 10
+worse), the uncalibrated narrative judge 0.875 → 0.708, and hallucination
+0.048 → 0.063. The reference, a same-config re-run of the shipped embedder,
+also scored **0.8365**: bge-512 tied it exactly, and 0.8413 sits within the
+noise.
+Of the 12 failing cases predicted beforehand to gain, 8 did, 7 of them cash
+balances. But a new embedder reorders the passages for most questions, not
+only the labelled ones, and the rest of the set lost more than it gained.
+**bge-512 is not adopted, and the copies are deleted.** Truncation is real and
+costs dense retrieval, but this fix does not pay for itself in answers. A
+retriever fusing both embedders is untried.
+
+> Isolated embedder truncation by re-embedding identical chunks at two windows:
+> a 512-token window lifted hybrid hit@5 0.762 → 0.805 and MRR 0.555 → 0.615,
+> but a single-variable paid run showed no accuracy gain (0.837, tying a
+> same-config re-run of the shipped embedder), so the
+> change was declined. Retrieval metrics over sampled labels did not predict
+> answer quality.
+
+The four-strategy comparison is unblocked: the question it waited on now has an
+answer. Two fixes it needs are already in. Every strategy now treats
+`target_tokens` as a ceiling (D9), and each arm is graded on labels derived for
+its own index (D11). Without D11, three of the four would have scored hit@k = 0
+by construction.
 
 **Expect to be asked:** why hit@5 and not accuracy; what recall@k does not tell
 you (nothing about ordering — that is what nDCG is for); why reranking can leave
@@ -289,7 +325,8 @@ their own ground truth.
 > | `baseline-v5-2943b37a`, re-graded | 232 | — | 0.7548 | same answers, D2 grader fix |
 > | `baseline-v6-no-rerank-7362c6c7` | 232 | openai | 0.7404 | pre-rebuild set |
 > | `baseline-v7-99204312` | 232 | openai | 0.7788 | rebuilt set, 12,000-char context |
-> | `exp-ctx20k-834a873e` | 232 | openai | **0.8413** | current: rebuilt set, 20,000-char context |
+> | `exp-ctx20k-834a873e` | 232 | openai | 0.8413 | rebuilt set, 20,000-char context (the §5 experiment) |
+> | `baseline-v8-7ae05834` | 232 | openai | **0.8365** | current: the same config re-run on the D15 labels |
 >
 > The 0.25 is a **20-case smoke run**, not a baseline. And the deeper problem is
 > that the defects being fixed *changed the golden set itself* — corrected fiscal
@@ -297,7 +334,7 @@ their own ground truth.
 > about, then the D12–D14 rebuild. **An accuracy delta that straddles a
 > ground-truth rebuild compares two different exams.** That includes
 > "0.7404 → 0.7788". The defensible claims are the absolute current figure
-> (**0.8413** on 232 cases), the defects found, the case-by-case attribution
+> (**0.8365** on 232 cases; 0.84 is honest, since a same-config run gave 0.8413), the defects found, the case-by-case attribution
 > above, and the context-cap delta in §5, which is single-variable on one exam.
 >
 > The one delta that *is* quotable is the re-grade, because nothing else moved:
@@ -377,7 +414,7 @@ back at 0.3. You have a better answer than most: *I measured it, it came back
 unusable, I said so in the report instead of shipping the number.*
 
 The same holds for the later runs. `baseline-v6`'s judge reports 0.75,
-`baseline-v7`'s 0.79 and `exp-ctx20k`'s 0.875. Only 12, 14 and 4 of their
+`baseline-v7`'s 0.79, and `exp-ctx20k`'s and `baseline-v8`'s 0.875. Only 12, 14, 4 and 4 of their
 answers match a human label (the floor is 20), and no kappa is reported for
 any of them. The
 deployed `/stats/eval` therefore **withholds** `narrative_pass_rate` and
@@ -476,19 +513,19 @@ edgar-intel eval failures <run_key>
 edgar-intel eval context-probe --case-id <case>
 ```
 
-**Status: measured on the reference run (`exp-ctx20k`), on `baseline-v7`, and
+**Status: measured on the reference run (`baseline-v8`), on `baseline-v7`, and
 on `baseline-v5`'s answers before and after the grader fix (D2).**
 
-| | `baseline-v5`, as graded 17 Sep | `baseline-v5`, re-graded 26 Sep | `baseline-v7`, 5 Oct | **`exp-ctx20k`, 5 Oct** |
+| | `baseline-v5`, as graded 17 Sep | `baseline-v5`, re-graded 26 Sep | `baseline-v7`, 5 Oct | **`baseline-v8`, 6 Oct** |
 |---|---|---|---|---|
-| failures | 84 (79 numeric, 5 narrative by the judge) | 56 (51 numeric, 5 narrative) | 51 (46 numeric, 5 narrative) | **36 (33 numeric, 3 narrative)** |
-| retrieval misses — nothing labelled in the top 5 | 52 (62%) | 46 (82%) | 43 (84%) | **30 (83%)** |
-| generation misses — labelled evidence in the top 5, answer still wrong | 32 (38%) | 10 (18%) | 7 (14%) | **5 (14%)** |
+| failures | 84 (79 numeric, 5 narrative by the judge) | 56 (51 numeric, 5 narrative) | 51 (46 numeric, 5 narrative) | **37 (34 numeric, 3 narrative)** |
+| retrieval misses — nothing labelled in the top 5 | 52 (62%) | 46 (82%) | 43 (84%) | **30 (81%)** |
+| generation misses — labelled evidence in the top 5, answer still wrong | 32 (38%) | 10 (18%) | 7 (14%) | **6 (16%)** |
 | unlabelled | 0 | 0 | 1 (the D14 P&G case) | 1 |
 
 The rule still asks about the top 5, but since the cap fix the model reads all
-eight passages. Counted on the top 8, the reference run's 36 failures are 26
-retrieval misses and 9 generation misses. Either way, most failures are still
+eight passages. Counted on the top 8, the reference run's 37 failures are 26
+retrieval misses and 10 generation misses. Either way, most failures are still
 evidence that never reached the model.
 
 The grader fix moved this more than any other figure: 22 of the 28 re-graded
@@ -498,10 +535,11 @@ nothing labelled in the top 5. That second group shows the rule over-counts
 retrieval: the model reads up to 8 passages, and the labels are a sample of the
 relevant chunks rather than all of them. Quote the direction, not the decimal.
 
-- `abstention_rate` / `hallucination_rate`: **0.1106 / 0.0481** on the
-  reference run. Abstentions fell from `baseline-v7`'s 0.1731 because the cap
-  fix delivered evidence the model had been correctly saying it lacked, and
-  hallucination did not move. `baseline-v7` read 0.1731 / 0.0481, against
+- `abstention_rate` / `hallucination_rate`: **0.1058 / 0.0577** on the
+  reference run, and 0.1106 / 0.0481 on `exp-ctx20k` under the same config, so
+  the hallucination difference is two answers. Abstentions fell from
+  `baseline-v7`'s 0.1731 because the cap fix delivered evidence the model had
+  been correctly saying it lacked. `baseline-v7` read 0.1731 / 0.0481, against
   0.1635 / 0.0962 on `baseline-v6`. The halving is the answer key again.
   Wrong, non-abstaining answers went from 20 to 10, and 9 of those 10 are among
   the 14 corrected cases; on the other 194 it was 10 against 9. `baseline-v5`
@@ -521,7 +559,7 @@ relevant chunks rather than all of them. Quote the direction, not the decimal.
 > retrieval and context selection rather than the prompt.
 
 It is the harness's own attribution, and it is why the embedder-window question
-(§1) has to be settled before the chunking comparison runs.
+(§1) had to be settled before the chunking comparison; it now is.
 
 The context probe is the sharper story: for one case all five relevant chunks
 sat in the hybrid top-50 at ranks 9, 11, 13, 21 and 29, and `top_n=8` discarded
@@ -564,7 +602,9 @@ the agent as well as the evaluation.
 > single-variable run on the same 232-case set, with 10 of the 13 cases
 > predicted beforehand fixed and none regressing, for 39% more prompt tokens.
 
-This delta is quotable, unlike the rebuild's: one exam, one index, one knob.
+This delta is quotable, unlike the rebuild's: one exam, one index, one knob. A
+same-config re-run a day later (`baseline-v8`) scored 0.8365, so the cap is
+worth 12–13 cases, and 1–2 cases either way is run-to-run noise.
 
 ---
 
@@ -625,8 +665,11 @@ edgar-intel bench sweep --endpoint /search     # concurrency sweep: NOT RUN
 **Status: end-to-end latency measured locally; the concurrency sweep has not been
 run.**
 
-From the reference run: **p50 981 ms, p95 2441 ms** end to end (retrieval 134 ms
-of it), at **$0.175 for the full 232-case run** and **$0.7539 per 1k requests**.
+With the shipped 20,000-character context (`exp-ctx20k`): **p50 981 ms, p95
+2441 ms** end to end (retrieval 134 ms of it), at **$0.175 for the full 232-case
+run** and **$0.7539 per 1k requests**. The reference run cost the same ($0.175,
+$0.7541 per 1k), but its timings (p50 1188 ms, p95 3455 ms) were taken while a
+`DELETE` and `VACUUM` ran on the same database, so they are not quoted.
 The 20,000-character context costs 39% more in tokens and about 0.6 s at p95
 over `baseline-v7`'s 12,000 ($0.126 per run, $0.5428 per 1k, p95 1848 ms). The
 gain bought with it is in §5.
@@ -679,7 +722,7 @@ in the repo.
 | claim | status |
 |---|---|
 | 232-case eval set with XBRL-verifiable ground truth | ✅ measured |
-| numeric accuracy **0.8413** on the current set (`exp-ctx20k`, 20,000-char context) | ✅ measured |
+| numeric accuracy **0.8365** on the current set (`baseline-v8`; a same-config run gave 0.8413, so 1–2 cases is noise) | ✅ measured |
 | context cap 12,000 → 20,000 characters, single variable: **0.7788 → 0.8413**, 10 of 13 predicted cases fixed, none regressed | ✅ measured (§5) |
 | the rebuild's +0.038 over v6 is entirely the corrected key: 0/14 → 8/14, the other 194 at 154/194 in both runs | ✅ measured, case by case (§2) |
 | "accuracy 0.7404 → 0.7788" | ❌ **not defensible** as a trend — two exams; quote the attribution above instead |
@@ -690,17 +733,18 @@ in the repo.
 | hit@5 0.762 / MRR 0.555, and the 0.204 ceiling gap (re-measured on the rebuilt labels) | ✅ measured |
 | recall@5 0.408 / nDCG@10 0.429, every label reachable (D15 fixed: was 0.320 / 0.367) | ✅ measured, free sweep |
 | reranker off on a single-variable run: +542 ms p50 for no gain | ✅ measured on the v6 set; the free sweep agrees on v7 labels |
-| abstention 0.111 vs hallucination 0.048, split | ✅ measured; hallucination's drop from v6's 0.096 is the corrected key, abstention's from v7's 0.173 is the cap fix |
-| most remaining failures had no labelled evidence in what the model read (30 of 36 by top 5, 26 of 36 by top 8) | ⚠️ measured on the reference run; quote the direction |
+| abstention 0.106 vs hallucination 0.058, split | ✅ measured; hallucination's drop from v6's 0.096 is the corrected key, abstention's from v7's 0.173 is the cap fix |
+| most remaining failures had no labelled evidence in what the model read (30 of 37 by top 5, 26 of 37 by top 8) | ⚠️ measured on the reference run; quote the direction |
 | corpus: 8 companies, 24 10-K filings, 264 sections, 23,499 chunks, 1,363 XBRL facts | ✅ measured |
 | p50 ≈ 1.0 s / p95 ≈ 2.4 s, $0.75 per 1k — local, with the 20,000-char context | ✅ measured |
 | Cohen's κ = 0.42, below the floor, gate suppressed a wrong 79% | ✅ measured |
 | judge-adoption gate vetoed a rubric on one false negative | ✅ measured |
 | bounded agent: mechanism | ✅ shipped |
-| narrative pass rate | ⚠️ 0.50 by human label on 24 cases; the judge's 0.79 (v5), 0.75 (v6), 0.79 (v7) and 0.875 (current) are not usable |
+| narrative pass rate | ⚠️ 0.50 by human label on 24 cases; the judge's 0.79 (v5), 0.75 (v6), 0.79 (v7) and 0.875 (exp-ctx20k, v8) are not usable |
 | two NVIDIA yoy cases compared across a stock split (D12) | ✅ fixed, in the golden set since 5 Oct |
 | twelve JNJ cases expected fiscal-2022 figures under a 2023 label (D13) | ✅ fixed, in the golden set since 5 Oct |
-| four-strategy chunking comparison | ⛔ **blocked** — the embedder-window test that isolates truncation has not run (§1) |
+| embedder window (D8): a 512 window lifts hybrid hit@5 0.762 → 0.805 but not accuracy (0.841 → 0.837); declined | ✅ measured, single variable (§1) |
+| four-strategy chunking comparison | ❌ not yet run — unblocked now that D8 is settled (§1) |
 | agent escalation rate | ❌ never measured — 2 manual traces, one of which found the revenue-tag bug |
 | concurrency / throughput sweep | ❌ needs a deployed instance |
 | regression gate in CI | ✅ running since 5 Oct against a committed baseline; fails on a deliberate regression; nothing caught yet (§4) |

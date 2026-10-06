@@ -13,19 +13,25 @@ on the ones that have not been.
 
 | | |
 |---|---|
-| Reference run | `baseline-v8-7ae05834`, 6 Oct 2026, `git_sha` `c152a61`, clean tree, the shipped configuration (20,000-character context), on the D15 labels |
-| Report | `reports/baseline-v8-7ae05834.json` |
-| Same-config re-run | `exp-ctx20k-834a873e`, 5 Oct, `0e96e20`: the context-cap experiment's arm, with an identical config. 175/208 against v8's 174/208, so read 1–2 cases as run-to-run noise. |
+| Reference run | `exp-prompt-conventions-c0f6e105`, 6 Oct 2026, `git_sha` `bee5dc0`, clean tree: the shipped configuration with the answering prompt's financial-reading conventions (§5), on the D15 labels |
+| Report | `reports/exp-prompt-conventions-c0f6e105.json` |
+| Prompt control | `baseline-v8-7ae05834`, 6 Oct, `c152a61`: an identical config with the earlier answering prompt. The run config does not record the prompt, so the `git_sha` is the record. |
+| Same-config re-run | `exp-ctx20k-834a873e`, 5 Oct, `0e96e20`: the context-cap experiment's arm, with the same config and prompt as `baseline-v8`. 175/208 against v8's 174/208, so read 1–2 cases as run-to-run noise. |
 | Context-cap control | `baseline-v7-99204312`, 5 Oct, `47251c1`: the same set, index and config with the old 12,000-character cap, against `exp-ctx20k`. The single-variable comparison in §5. |
 | Pre-rebuild reference | `baseline-v6-no-rerank-7362c6c7`, 26 Sep, `cc0a69c`, on the pre-rebuild set (archived locally as `evalset/golden-baseline-v6.json`). Same config as v7. It graded a different exam, and §2 shows exactly where the two differ. |
 | Rerank control | `baseline-v6-rerank-8d0eb06a`: v6's config with `use_rerank=true`, on the v6 set. Not re-run on the v7 set. |
 | Re-grade of an earlier reference | `reports/regrade-baseline-v5-2943b37a.json`: `baseline-v5`'s stored answers re-marked by the fixed grader, no model calls |
 | Set | 232 cases — 160 numeric single-hop · 48 numeric comparative · 24 narrative. Rebuilt 5 Oct with the D12–D14 fixes, then re-linked for D15 the same day (labels only; the exam is unchanged), 231 with linked evidence |
 | Corpus | 8 companies (AAPL CAT COST JNJ MSFT NVDA PG UNH), **24 10-K filings**, FY2023–FY2026 · 264 sections · 1,363 XBRL facts (1,338 before the D13 refresh) · 23,499 chunks across four strategies, all embedded — `section_aware` 5,468 is the evaluated and served index. (A 32,171-chunk `section_aware_t144` experiment also exists locally; it is not shipped — §1.) |
-| Config | `section_aware` · `hybrid` · `use_rerank=false` · `k=50` · `top_n=8` · `gpt-4o-mini` · MiniLM-L6-v2 (384-d) · `rrf_k=60` · `numeric_tolerance=0.005` · `context_max_chars=20000` · judge contract `v2`, shown the source context |
+| Config | `section_aware` · `hybrid` · `use_rerank=false` · `k=50` · `top_n=8` · `gpt-4o-mini` · MiniLM-L6-v2 (384-d) · `rrf_k=60` · `numeric_tolerance=0.005` · `context_max_chars=20000` · answering prompt at `bee5dc0` · judge contract `v2`, shown the source context |
 
 Two standing cautions, both earned the hard way:
 
+- **The evaluation measures retrieve-then-answer, not `/ask`.** Every accuracy
+  figure here comes from `eval run`: hybrid retrieval, then one answering call
+  with `ANSWER_SYSTEM`. The deployed `/ask` runs the tool-calling agent, with
+  its own prompts and direct XBRL tools, and the agent has never been run on
+  the golden set (§6). The two share retrieval and the corpus, not the answering step.
 - **Read the `config` block before the numbers.** Four runs so far carried a
   provider, setting or `git_sha` that did not match intent. One recorded
   `overall_score: 0.0` on 232 consecutive HTTP 401s.
@@ -371,7 +377,8 @@ their own ground truth.
 > | `baseline-v6-no-rerank-7362c6c7` | 232 | openai | 0.7404 | pre-rebuild set |
 > | `baseline-v7-99204312` | 232 | openai | 0.7788 | rebuilt set, 12,000-char context |
 > | `exp-ctx20k-834a873e` | 232 | openai | 0.8413 | rebuilt set, 20,000-char context (the §5 experiment) |
-> | `baseline-v8-7ae05834` | 232 | openai | **0.8365** | current: the same config re-run on the D15 labels |
+> | `baseline-v8-7ae05834` | 232 | openai | 0.8365 | the same config re-run on the D15 labels |
+> | `exp-prompt-conventions-c0f6e105` | 232 | openai | **0.8606** | current: plus the answering-prompt conventions (§5) |
 >
 > The 0.25 is a **20-case smoke run**, not a baseline. And the deeper problem is
 > that the defects being fixed *changed the golden set itself* — corrected fiscal
@@ -379,8 +386,9 @@ their own ground truth.
 > about, then the D12–D14 rebuild. **An accuracy delta that straddles a
 > ground-truth rebuild compares two different exams.** That includes
 > "0.7404 → 0.7788". The defensible claims are the absolute current figure
-> (**0.8365** on 232 cases; 0.84 is honest, since a same-config run gave 0.8413), the defects found, the case-by-case attribution
-> above, and the context-cap delta in §5, which is single-variable on one exam.
+> (**0.8606** on 232 cases), the defects found, the case-by-case attribution
+> above, the context-cap delta in §5, which is single-variable on one exam, and
+> the prompt delta in §5, which is single-variable but in-sample.
 >
 > The one delta that *is* quotable is the re-grade, because nothing else moved:
 > same stored answers, same golden set, same tolerance, only the grading code —
@@ -459,7 +467,7 @@ back at 0.3. You have a better answer than most: *I measured it, it came back
 unusable, I said so in the report instead of shipping the number.*
 
 The same holds for the later runs. `baseline-v6`'s judge reports 0.75,
-`baseline-v7`'s 0.79, and `exp-ctx20k`'s and `baseline-v8`'s 0.875. Only 12, 14, 4 and 4 of their
+`baseline-v7`'s 0.79, and `exp-ctx20k`'s, `baseline-v8`'s and the reference's 0.875. Only 12, 14, 4, 4 and 3 of their
 answers match a human label (the floor is 20), and no kappa is reported for
 any of them. The
 deployed `/stats/eval` therefore **withholds** `narrative_pass_rate` and
@@ -558,19 +566,20 @@ edgar-intel eval failures <run_key>
 edgar-intel eval context-probe --case-id <case>
 ```
 
-**Status: measured on the reference run (`baseline-v8`), on `baseline-v7`, and
+**Status: measured on the reference run, on `baseline-v8` and `baseline-v7`, and
 on `baseline-v5`'s answers before and after the grader fix (D2).**
 
-| | `baseline-v5`, as graded 17 Sep | `baseline-v5`, re-graded 26 Sep | `baseline-v7`, 5 Oct | **`baseline-v8`, 6 Oct** |
-|---|---|---|---|---|
-| failures | 84 (79 numeric, 5 narrative by the judge) | 56 (51 numeric, 5 narrative) | 51 (46 numeric, 5 narrative) | **37 (34 numeric, 3 narrative)** |
-| retrieval misses — nothing labelled in the top 5 | 52 (62%) | 46 (82%) | 43 (84%) | **30 (81%)** |
-| generation misses — labelled evidence in the top 5, answer still wrong | 32 (38%) | 10 (18%) | 7 (14%) | **6 (16%)** |
-| unlabelled | 0 | 0 | 1 (the D14 P&G case) | 1 |
+| | `baseline-v5`, as graded 17 Sep | `baseline-v5`, re-graded 26 Sep | `baseline-v7`, 5 Oct | `baseline-v8`, 6 Oct | **reference, 6 Oct** |
+|---|---|---|---|---|---|
+| failures | 84 (79 numeric, 5 narrative by the judge) | 56 (51 numeric, 5 narrative) | 51 (46 numeric, 5 narrative) | 37 (34 numeric, 3 narrative) | **32 (29 numeric, 3 narrative)** |
+| retrieval misses — nothing labelled in the top 5 | 52 (62%) | 46 (82%) | 43 (84%) | 30 (81%) | **27 (84%)** |
+| generation misses — labelled evidence in the top 5, answer still wrong | 32 (38%) | 10 (18%) | 7 (14%) | 6 (16%) | **4 (13%)** |
+| unlabelled | 0 | 0 | 1 (the D14 P&G case) | 1 | 1 |
 
 The rule still asks about the top 5, but since the cap fix the model reads all
-eight passages. Counted on the top 8, the reference run's 37 failures are 26
-retrieval misses and 10 generation misses. Either way, most failures are still
+eight passages, and the labels are a sample. The sharper test reads the context
+each answer was given: of the reference run's 29 numeric failures, **24 never had
+the expected figure in the model's context, and 5 did.** Most failures are still
 evidence that never reached the model.
 
 The grader fix moved this more than any other figure: 22 of the 28 re-graded
@@ -580,9 +589,10 @@ nothing labelled in the top 5. That second group shows the rule over-counts
 retrieval: the model reads up to 8 passages, and the labels are a sample of the
 relevant chunks rather than all of them. Quote the direction, not the decimal.
 
-- `abstention_rate` / `hallucination_rate`: **0.1058 / 0.0577** on the
-  reference run, and 0.1106 / 0.0481 on `exp-ctx20k` under the same config, so
-  the hallucination difference is two answers. Abstentions fell from
+- `abstention_rate` / `hallucination_rate`: **0.0865 / 0.0529** on the
+  reference run. `baseline-v8`, with the earlier prompt, read 0.1058 / 0.0577,
+  and `exp-ctx20k` 0.1106 / 0.0481 under the same config as v8, so the
+  hallucination difference between those two is two answers. Abstentions fell from
   `baseline-v7`'s 0.1731 because the cap fix delivered evidence the model had
   been correctly saying it lacked. `baseline-v7` read 0.1731 / 0.0481, against
   0.1635 / 0.0962 on `baseline-v6`. The halving is the answer key again.
@@ -651,6 +661,60 @@ This delta is quotable, unlike the rebuild's: one exam, one index, one knob. A
 same-config re-run a day later (`baseline-v8`) scored 0.8365, so the cap is
 worth 12–13 cases, and 1–2 cases either way is run-to-run noise.
 
+### Model misses: found by reading the context, fixed in part by the prompt
+
+The labels are a sample of the relevant chunks, so "labelled evidence in the
+top 8" cannot say whether the model actually saw the figure. Each stored result
+keeps the exact context it was answered from, so `baseline-v8`'s failures were
+searched for the expected figure itself. Only its specific printed form counts
+(five or more digits, or per-share decimals). The three-digit billions form,
+"199" for $199.21B, matched exhibit years and a dividend table. Of 34 numeric
+failures, **25 never had the figure in context, and 9 had every needed figure in
+front of the model.** Those 9:
+
+| what the model did | cases |
+|---|---|
+| took the wrong line of the right statement: earnings before noncontrolling interests (P&G ×2, UNH), cash including restricted cash (AAPL), a fair-value table's "Cash" row (JNJ) | 5 |
+| took a part for the total: a segment's R&D beside "Total research and development expense" (JNJ); total assets for revenue beside "Segments total" (JNJ) | 2 |
+| abstained beside "Worldwide $88,821" (JNJ revenue) | 1 |
+| gave "$18.5B → $20.5B" for a year-over-year question, with no percentage, so the rounding implies +10.8% against +10.3% | 1 |
+
+The answering prompt said nothing about reading financial statements. Six
+conventions were added (`bee5dc0`): prefer the consolidated statements; take
+the total row; net income means the amount attributable to the company; cash
+and cash equivalents excludes restricted cash; revenue's usual labels; and a
+year-over-year answer gives both figures and the percentage. They are standard
+definitions and match the XBRL concepts the set grades against. Then one paid
+run changed only the prompt:
+
+| | `baseline-v8` | **`exp-prompt-conventions`** |
+|---|---|---|
+| numeric accuracy | 0.8365 (174/208) | **0.8606 (179/208)** |
+| the 9 targeted cases | 0/9 | 4/9 |
+| the other 223 | 195 | 196 (+1, −0) |
+| comparative | 38/48 | 42/48 |
+| abstention / hallucination | 0.106 / 0.058 | 0.087 / 0.053 |
+| cost per run | $0.175 | $0.181 |
+
+**Four were fixed:** the R&D total, both cash comparisons, and the missing
+percentage. **Five were not.** The model ignored the net-income rule in all
+three noncontrolling-interest cases, still answered total assets for JNJ's
+FY2025 revenue, and still abstained beside "Worldwide". Nothing regressed.
+
+**The gain is in-sample.** The rules came from the failures they fix and were
+measured on the same set, so the effect on unseen questions is probably smaller.
+The absence of any regression among the other 223 is the evidence that they
+are general. The prompt is not tuned further against the remaining five, since
+that would be fitting the test. For noncontrolling interests, the structural fix
+is the agent's XBRL tools, which read `NetIncomeLoss` directly. This prompt
+serves the evaluation path only; `/ask` runs the agent.
+
+> Separated generation misses from retrieval misses by searching each answer's
+> own context for the expected figure: 9 of 34 numeric failures had the evidence
+> in front of the model. Adding six standard financial-reading conventions to
+> the answering prompt fixed 4 of them with no regressions elsewhere, raising
+> numeric accuracy 0.837 → 0.861 (measured in-sample).
+
 ---
 
 ## 6. Agent reliability
@@ -663,7 +727,8 @@ edgar-intel agent stats
 
 **Status: NOT MEASURED. `agent_traces` holds 2 rows, both manual runs on 28 Sep.
 Do not claim numbers, and expect `/stats/agent` to show nothing meaningful on a
-deployed instance.**
+deployed instance.** The agent is what `/ask` serves, and none of the accuracy
+figures in §2 and §5 measure it. They measure the retrieve-then-answer path.
 
 One of the two runs escalated "What was Apple's revenue in FY2024?" although the
 figure was in the database. The model had passed the word "revenue" to
@@ -710,11 +775,13 @@ edgar-intel bench sweep --endpoint /search     # concurrency sweep: NOT RUN
 **Status: end-to-end latency measured locally; the concurrency sweep has not been
 run.**
 
-With the shipped 20,000-character context (`exp-ctx20k`): **p50 981 ms, p95
-2441 ms** end to end (retrieval 134 ms of it), at **$0.175 for the full 232-case
-run** and **$0.7539 per 1k requests**. The reference run cost the same ($0.175,
-$0.7541 per 1k), but its timings (p50 1188 ms, p95 3455 ms) were taken while a
-`DELETE` and `VACUUM` ran on the same database, so they are not quoted.
+With the shipped 20,000-character context, two clean runs measured **p50 981 and
+1230 ms, p95 2441 and 2936 ms** end to end (`exp-ctx20k` and the reference;
+retrieval about 135 ms of it). Read that as p50 ≈ 1.0–1.2 s and p95 ≈ 2.4–2.9 s
+on a laptop. The reference run cost **$0.181 for the full 232-case run** and
+**$0.7804 per 1k requests**; the longer prompt adds about 3.5%. `baseline-v8`'s
+timings (p50 1188 ms, p95 3455 ms) were taken while a `DELETE` and `VACUUM` ran
+on the same database, so they are not quoted.
 The 20,000-character context costs 39% more in tokens and about 0.6 s at p95
 over `baseline-v7`'s 12,000 ($0.126 per run, $0.5428 per 1k, p95 1848 ms). The
 gain bought with it is in §5.
@@ -730,8 +797,9 @@ the price that bought nothing (§1).
 **Bullet shape — usable now**
 
 > Instrumented per-request token accounting and stage-level timing across
-> retrieval, generation and judging: p50 ≈ 1.0 s / p95 ≈ 2.4 s end to end, at
-> $0.18 per full 232-case evaluation and $0.75 per 1k requests.
+> retrieval, generation and judging: p50 ≈ 1.0–1.2 s / p95 ≈ 2.4–2.9 s end to
+> end across clean runs, at $0.18 per full 232-case evaluation and $0.78 per 1k
+> requests.
 
 These are local figures on a warm process. A deployed instance's numbers come
 from `bench sweep` against its URL, not from here.
@@ -767,7 +835,9 @@ in the repo.
 | claim | status |
 |---|---|
 | 232-case eval set with XBRL-verifiable ground truth | ✅ measured |
-| numeric accuracy **0.8365** on the current set (`baseline-v8`; a same-config run gave 0.8413, so 1–2 cases is noise) | ✅ measured |
+| numeric accuracy **0.8606** on the current set (retrieve-then-answer path; noise is 1–2 cases) | ✅ measured |
+| answering-prompt conventions: 0.837 → 0.861, 4 of 9 model misses fixed, 0 regressions | ✅ measured, single variable, **in-sample** (§5) |
+| model misses found by reading each answer's context: 9 of 34 numeric failures had the figure | ✅ measured (§5) |
 | context cap 12,000 → 20,000 characters, single variable: **0.7788 → 0.8413**, 10 of 13 predicted cases fixed, none regressed | ✅ measured (§5) |
 | the rebuild's +0.038 over v6 is entirely the corrected key: 0/14 → 8/14, the other 194 at 154/194 in both runs | ✅ measured, case by case (§2) |
 | "accuracy 0.7404 → 0.7788" | ❌ **not defensible** as a trend — two exams; quote the attribution above instead |
@@ -778,14 +848,14 @@ in the repo.
 | hit@5 0.762 / MRR 0.555, and the 0.204 ceiling gap (re-measured on the rebuilt labels) | ✅ measured |
 | recall@5 0.408 / nDCG@10 0.429, every label reachable (D15 fixed: was 0.320 / 0.367) | ✅ measured, free sweep |
 | reranker off on a single-variable run: +542 ms p50 for no gain | ✅ measured on the v6 set; the free sweep agrees on v7 labels |
-| abstention 0.106 vs hallucination 0.058, split | ✅ measured; hallucination's drop from v6's 0.096 is the corrected key, abstention's from v7's 0.173 is the cap fix |
-| most remaining failures had no labelled evidence in what the model read (30 of 37 by top 5, 26 of 37 by top 8) | ⚠️ measured on the reference run; quote the direction |
+| abstention 0.087 vs hallucination 0.053, split | ✅ measured; hallucination's drop from v6's 0.096 is the corrected key, abstention's from v7's 0.173 is the cap fix |
+| most remaining failures never had the figure in the model's context (24 of 29 numeric) | ✅ measured on the reference run, by context search; quote the direction |
 | corpus: 8 companies, 24 10-K filings, 264 sections, 23,499 chunks, 1,363 XBRL facts | ✅ measured |
-| p50 ≈ 1.0 s / p95 ≈ 2.4 s, $0.75 per 1k — local, with the 20,000-char context | ✅ measured |
+| p50 ≈ 1.0–1.2 s / p95 ≈ 2.4–2.9 s, $0.78 per 1k — local, two clean runs | ✅ measured |
 | Cohen's κ = 0.42, below the floor, gate suppressed a wrong 79% | ✅ measured |
 | judge-adoption gate vetoed a rubric on one false negative | ✅ measured |
 | bounded agent: mechanism | ✅ shipped |
-| narrative pass rate | ⚠️ 0.50 by human label on 24 cases; the judge's 0.79 (v5), 0.75 (v6), 0.79 (v7) and 0.875 (exp-ctx20k, v8) are not usable |
+| narrative pass rate | ⚠️ 0.50 by human label on 24 cases; the judge's 0.79 (v5), 0.75 (v6), 0.79 (v7) and 0.875 (exp-ctx20k, v8, current) are not usable |
 | two NVIDIA yoy cases compared across a stock split (D12) | ✅ fixed, in the golden set since 5 Oct |
 | twelve JNJ cases expected fiscal-2022 figures under a 2023 label (D13) | ✅ fixed, in the golden set since 5 Oct |
 | embedder window (D8): a 512 window lifts hybrid hit@5 0.762 → 0.805 but not accuracy (0.841 → 0.837); declined | ✅ measured, single variable (§1) |

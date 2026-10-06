@@ -13,12 +13,13 @@ on the ones that have not been.
 
 | | |
 |---|---|
-| Reference run | `baseline-v6-no-rerank-7362c6c7`, 26 Sep 2026, `git_sha` `cc0a69c`, clean tree |
-| Report | `reports/baseline-v6-no-rerank-7362c6c7.json` |
-| Same-commit control | `baseline-v6-rerank-8d0eb06a` — identical config except `use_rerank=true` |
-| Re-grade of the previous reference | `reports/regrade-baseline-v5-2943b37a.json` — `baseline-v5`'s stored answers re-marked by the fixed grader, no model calls |
-| Set | 232 cases — 160 numeric single-hop · 48 numeric comparative · 24 narrative |
-| Corpus | 8 companies (AAPL CAT COST JNJ MSFT NVDA PG UNH), **24 10-K filings**, FY2023–FY2026 · 264 sections · 1,338 XBRL facts · 23,499 chunks across four strategies, all embedded — `section_aware` 5,468 is the evaluated and served index. (A 32,171-chunk `section_aware_t144` experiment also exists locally; it is not shipped — §1.) |
+| Reference run | `baseline-v7-99204312`, 5 Oct 2026, `git_sha` `47251c1`, clean tree, on the set rebuilt that day (§2) |
+| Report | `reports/baseline-v7-99204312.json` |
+| Previous reference | `baseline-v6-no-rerank-7362c6c7`, 26 Sep, `cc0a69c`, on the pre-rebuild set (archived locally as `evalset/golden-baseline-v6.json`). Same config as v7. It graded a different exam, and §2 shows exactly where the two differ. |
+| Rerank control | `baseline-v6-rerank-8d0eb06a`: v6's config with `use_rerank=true`, on the v6 set. Not re-run on the v7 set. |
+| Re-grade of an earlier reference | `reports/regrade-baseline-v5-2943b37a.json`: `baseline-v5`'s stored answers re-marked by the fixed grader, no model calls |
+| Set | 232 cases — 160 numeric single-hop · 48 numeric comparative · 24 narrative. Rebuilt 5 Oct with the D12–D14 fixes, 231 with linked evidence |
+| Corpus | 8 companies (AAPL CAT COST JNJ MSFT NVDA PG UNH), **24 10-K filings**, FY2023–FY2026 · 264 sections · 1,363 XBRL facts (1,338 before the D13 refresh) · 23,499 chunks across four strategies, all embedded — `section_aware` 5,468 is the evaluated and served index. (A 32,171-chunk `section_aware_t144` experiment also exists locally; it is not shipped — §1.) |
 | Config | `section_aware` · `hybrid` · `use_rerank=false` · `k=50` · `top_n=8` · `gpt-4o-mini` · MiniLM-L6-v2 (384-d) · `rrf_k=60` · `numeric_tolerance=0.005` · `context_max_chars=12000` · judge contract `v2`, shown the source context |
 
 Two standing cautions, both earned the hard way:
@@ -27,8 +28,8 @@ Two standing cautions, both earned the hard way:
   provider, setting or `git_sha` that did not match intent. One recorded
   `overall_score: 0.0` on 232 consecutive HTTP 401s.
 - **`hit@k` and `recall@k` are different numbers and this repo reports both.**
-  `hit@5 = 0.6595` means at least one relevant chunk reached the top 5.
-  `recall@5 = 0.2746` means 27% of all relevant chunks did. Quoting the first
+  `hit@5 = 0.7619` means at least one relevant chunk reached the top 5.
+  `recall@5 = 0.3196` means 32% of all relevant chunks did. Quoting the first
   under the second's name is the single easiest way to get caught.
 
 ---
@@ -44,40 +45,49 @@ edgar-intel eval compare --strategies fixed,recursive,section_aware,semantic
 
 **Status: partly measured. The four-strategy comparison has never been run.**
 
-Measured on the reference run, `section_aware` only — identical to `baseline-v5`
-to four decimal places, as it should be: same index, same labels, same retriever:
+Measured on the reference run, `section_aware` only, on the rebuilt labels
+(398 labels on 231 cases, all present in the index). `top_n=8`, so hit@10 here
+is hit@8:
 
 | hit@1 | hit@3 | hit@5 | hit@10 | recall@5 | MRR | nDCG@10 | retrieve_ms |
 |---|---|---|---|---|---|---|---|
-| 0.3405 | 0.5862 | 0.6595 | 0.7414 | 0.2746 | 0.4738 | 0.3121 | 105 |
+| 0.4026 | 0.6883 | 0.7619 | 0.8528 | 0.3196 | 0.5552 | 0.3666 | 142 |
 
-The configuration sweep was re-run on the current labels on 26 Sep
-(`reports/retrieval_current_d7.json`; all 490 labels present in the index). The
-untruncated candidate set reaches **0.853 hit@20 against 0.660 hit@5 for the
-shipped configuration — 0.194 lost to ranking and `top_n=8` truncation, not to
-retrieval failing to find the evidence.** Dense-only reaches 0.810 and
-lexical-only 0.836 at the same depth. The 15 Sep sweep, on the pre-`f5232e6`
-labels and with the reranked row then called "shipped", had also put the gap at
-0.194 (0.483 against 0.677); the absolute figures moved with the labels.
+The rise over `baseline-v6` (hit@5 0.6595, MRR 0.4738) is the labels, not the
+retriever. Both runs used the same index and the same retrieval behaviour, and
+on the 194 cases whose labels did not change, hit@5 is 0.7577 in both. The
+difference sits in the 38 relabelled cases, 26 of them EPS cases whose old
+labels were coincidental (D14, §2). Quote 0.762 as the current figure, never
+"0.660 → 0.762".
 
-| config (26 Sep sweep) | rerank | hit@1 | hit@5 | recall@5 | MRR | nDCG@10 | ms |
+The configuration sweep was re-run on the rebuilt labels on 5 Oct
+(`reports/retrieval_v7_20261005.json`, no model calls). The untruncated
+candidate set reaches **0.965 hit@20 against 0.762 hit@5 for the shipped
+configuration — 0.204 lost to ranking and `top_n=8` truncation, not to
+retrieval failing to find the evidence.** Dense-only reaches 0.922 and
+lexical-only 0.939 at the same depth. On the v6 labels (26 Sep,
+`reports/retrieval_current_d7.json`) the gap was 0.194 (0.853 against 0.660),
+and on the 15 Sep labels it was also 0.194. The absolute figures moved with the
+labels each time, but the gap barely did.
+
+| config (5 Oct sweep) | rerank | hit@1 | hit@5 | recall@5 | MRR | nDCG@10 | ms |
 |---|---|---|---|---|---|---|---|
-| shipped | off | 0.3405 | **0.6595** | 0.2746 | **0.4738** | 0.3121 | 19 |
-| same, reranked | on | 0.3448 | 0.6379 | 0.2759 | 0.4700 | 0.3176 | 558 |
+| shipped | off | 0.4026 | **0.7619** | 0.3196 | **0.5552** | 0.3666 | 19 |
+| same, reranked | on | 0.4113 | 0.7489 | 0.3377 | 0.5550 | 0.3855 | 584 |
 
-(The sweep file labels the reranked row "shipped" and the other "no-rerank": it
-was produced before the sweep learned to read `use_rerank`. The rows above are
-named for what they ran.)
+(The 26 Sep sweep file labels its reranked row "shipped", because it was
+produced before the sweep learned to read `use_rerank`. The 5 Oct file names
+both rows for what they ran.)
 
 **Bullet shape — usable now**
 
 > Measured hybrid retrieval (pgvector dense + Postgres full-text, RRF-fused) on
-> a 232-case labelled set over 8 companies' SEC filings at hit@5 0.660 /
-> MRR 0.474 / nDCG@10 0.312.
+> a 232-case labelled set over 8 companies' SEC filings at hit@5 0.762 /
+> MRR 0.555 / nDCG@10 0.367.
 
-and the ceiling gap, now measured on the same labels as the reference run:
+and the ceiling gap, measured on the same labels as the reference run:
 
-> Diagnosed a 0.194 hit@5 gap between the shipped ranking and the candidate-set
+> Diagnosed a 0.204 hit@5 gap between the shipped ranking and the candidate-set
 > ceiling, showing the relevant passages were being retrieved and then discarded
 > by `top_n` truncation rather than never found — which moved the work from
 > prompt tuning to context selection.
@@ -93,7 +103,7 @@ and the ceiling gap, now measured on the same labels as the reference run:
 > `edgar-intel index embed-window` confirmed truncation: it put the ceiling that
 > fits the window at **144 `token_est`**. Re-chunking to that ceiling
 > (`section_aware_t144`, 32,171 chunks, `reports/retrieval_section_aware_t144_d8.json`)
-> made every figure worse — hit@5 0.660 → 0.330, recall@5 0.275 → 0.104, MRR
+> made every figure worse on the v6 labels — hit@5 0.660 → 0.330, recall@5 0.275 → 0.104, MRR
 > 0.474 → 0.217 — **and lexical-only fell as far as dense-only** (0.836 → 0.552 at
 > depth), which the embedder's window cannot touch. So that experiment measured
 > chunk granularity and re-derived labels, not truncation; it is not shipped.
@@ -114,6 +124,9 @@ recall unchanged while improving nDCG. And, on this project specifically: why
 flag: the cross-encoder added **542 ms at p50** (892 → 1434 ms), numeric accuracy
 went 0.7404 → 0.7356 and hit@5 0.660 → 0.638. It had reversed twice across
 earlier runs that changed other things too; this is the first clean comparison.
+That was on the v6 set. On the rebuilt labels, the free sweep tells the same
+story: reranking moves hit@5 0.762 → 0.749 and nDCG@10 0.367 → 0.386, for
+565 ms. The paid single-variable run has not been repeated on the v7 set.
 
 ---
 
@@ -126,7 +139,8 @@ edgar-intel eval build --numeric 20 --narrative 3
 edgar-intel ingest verify-facts          # the check that makes it trustworthy
 ```
 
-**Status: measured.** 232 cases, all 232 with linked evidence.
+**Status: measured.** 232 cases, 231 with linked evidence. Rebuilt 5 Oct 2026
+on corrected facts. The one unlinked case is explained under D14.
 
 **Bullet shape**
 
@@ -138,11 +152,17 @@ edgar-intel ingest verify-facts          # the check that makes it trustworthy
 
 **The stronger version of this bullet is about the ground truth, not the size:**
 
-> Found and fixed three defects in the evaluation harness itself — fiscal years
-> attributed from the filing rather than the reported period, the grader parsing
-> the question's year as the answer, and abstentions scored as hallucinations —
-> and added an abort on infrastructure failure after a run of 232 consecutive
+> Found and fixed seven defects in the evaluation harness itself, among them
+> fiscal years attributed from the filing rather than the reported period, a
+> 52/53-week year-end that filed a company's fiscal 2022 as 2023, year-over-year
+> answers computed across a stock split, a grader that failed correct
+> comparative answers, and evidence labels matched on a single rounded digit.
+> Also added an abort on infrastructure failure, after a run of 232 consecutive
 > HTTP 401s was recorded as a score of 0.0 rather than as a void run.
+
+The first three were fiscal years attributed from the filing, the grader parsing
+the question's year as the answer, and abstentions scored as hallucinations.
+The others follow.
 
 A fourth, found 26 Sep and measured without a model call: **the comparative
 grader failed correct answers.** "How did X change from FY2023 to FY2024?" never
@@ -153,43 +173,76 @@ comparative cases went from 5/48 to 33/48, single-hop was untouched at 124/160.
 Every flip is listed in `reports/regrade-baseline-v5-2943b37a.json`, and each
 states both XBRL values exactly.
 
-**Fixed in code, not yet in the golden set (D12):** two NVIDIA year-over-year
-cases compare across the June 2024 10-for-1 split, because each year's value
-comes from its own earliest filing — "EPS decreased 75.4%" (11.93 → 2.94) and
-"shares increased 893.4%" (2,464M → 24,477M). The model's split-adjusted answers
-are the right ones. Each fact now also stores the prior year as its own filing
-printed it (`prior_year_value`), and comparisons use that: "EPS increased
-147.1%" (1.19 → 2.94) and "shares decreased 0.7%" (24,643M → 24,477M). The
-other 46 comparative cases already matched their filings and do not move. The
-agent's `compare_fact` now uses the same basis.
+**D12, fixed 5 Oct:** two NVIDIA year-over-year cases compared across the June
+2024 10-for-1 split, because each year's value came from its own earliest
+filing. The set expected "EPS decreased 75.4%" (11.93 → 2.94) and "shares
+increased 893.4%" (2,464M → 24,477M), and the model's split-adjusted answers
+were the right ones. Each fact now also stores the prior year as its own filing
+printed it (`prior_year_value`, `sql/004`), and comparisons use that: "EPS
+increased 147.1%" (1.19 → 2.94) and "shares decreased 0.7%" (24,643M →
+24,477M). The other 46 comparative cases already matched their filings and did
+not move. The agent's `compare_fact` uses the same basis.
 
-**Fixed in code, not yet in the golden set (D13):** twelve JNJ cases grade
-fiscal 2023 against fiscal 2022. JNJ's year ends on the Sunday nearest December 31, so fiscal 2022
-ended 2023-01-01. The year-of-period-end rule filed it as 2023, where, as the
-earlier filing, it displaced the real fiscal 2023. The six `num-JNJ-*-2023` cases
-and six `yoy-JNJ-*-2023-2024` cases all expect fiscal-2022 figures: diluted EPS
-$6.73 for $13.72, net income $17.94B for $35.15B, "total assets decreased 3.9%"
-where they rose 7.5%. All twelve failed in both `baseline-v6` runs, and in each
-run six of the stored answers are the real fiscal-2023 figure. The ingest rule
-is fixed (a year ending in the first week of January belongs to the year
-before) and matches the filings' own `fy` on all eight JNJ year-ends that fall
-there.
+**D13, fixed 5 Oct:** twelve JNJ cases graded fiscal 2023 against fiscal 2022.
+JNJ's year ends on the Sunday nearest December 31, so fiscal 2022 ended
+2023-01-01. The year-of-period-end rule filed it as 2023, where, as the earlier
+filing, it displaced the real fiscal 2023. The six `num-JNJ-*-2023` and six
+`yoy-JNJ-*-2023-2024` cases expected fiscal-2022 figures: diluted EPS $6.73 for
+$13.72, net income $17.94B for $35.15B, and "total assets decreased 3.9%" where
+they rose 7.5%. A year ending in the first week of January now belongs to the
+year before, which matches the filings' own `fy` on all eight JNJ year-ends that
+fall there. The refresh changed only JNJ's rows: 63 values moved to their
+correct year, and 25 missing years were filled in.
 
-**The rebuild that lands both** changes these fourteen expected values and one
-question: `nar-UNH-supply-concentration` picks up the override added on 24 Sep
-(`ecd0d94`), after the current set was built. All 232 case ids stay. That was
-simulated end to end against current `companyfacts` and the live index. It
-must refresh the facts without re-ingesting filings.
+**D14, fixed 5 Oct: evidence labels matched on a rounded digit.** The linker
+searches chunk text for each case's value, and every needle was the value
+rounded to a whole number. Diluted EPS of 2.94 became "3", and the first
+needle that hits wins, so EPS cases were labelled with whichever chunks
+happened to contain the digit, and hit@k for them measured nothing. Needles now
+keep printed decimals ("2.94", "11.80"), and any needle under three digits is
+dropped. 38 cases' labels changed, 26 of them EPS. One case lost its labels:
+`num-PG-ResearchAndDevelopmentExpense-2024` is exactly $2.00B, its five old
+labels came from the needle "2", and no chunk prints the figure as "2,000". It
+still counts toward accuracy, but not toward retrieval metrics.
+
+**The rebuild, 5 Oct.** It refreshed the facts without re-ingesting filings:
 `ingest run` never overwrites an existing fact, and re-parsing a filing deletes
 its chunks through `chunks.section_id`, which would move the corpus the set is
-graded against. It is a new exam: accuracy before and after it does not compare.
+graded against. All 232 case ids stayed. Fourteen expected answers changed (the
+12 D13 and 2 D12 cases), and so did one question: `nar-UNH-supply-concentration`
+picked up the override added on 24 Sep (`ecd0d94`). That matched the
+pre-rebuild simulation exactly.
 
 ```bash
 edgar-intel init --schema sql/004_fact_prior_year_value.sql  # just the new column
 edgar-intel ingest facts          # facts only; filings, sections, chunks untouched
-edgar-intel ingest verify-facts   # must pass before the build
+edgar-intel ingest verify-facts   # passed: all four checks
 edgar-intel eval build --numeric 20 --narrative 3
 ```
+
+**What the rebuild did to the scores.** It is a new exam, so v6 and v7 do not
+compare as a trend. But the same system answered both, under the same config,
+so the difference can be attributed case by case:
+
+| | `baseline-v6`, old key | `baseline-v7`, corrected key |
+|---|---|---|
+| the 14 cases whose expected answer changed | 0/14 | **8/14** |
+| the other 194 numeric cases | 154/194 | 154/194 (one flip each way) |
+| hit@5 on the 194 cases whose labels did not change | 0.7577 | 0.7577 |
+| wrong, non-abstaining numeric answers | 20 | 10, of which 9 fewer are among the 14 |
+
+**Every point of the accuracy difference is the answer key.** Eight answers the
+old key failed were right all along: both D12 cases and six of the twelve D13
+cases. Re-marking `baseline-v6`'s own stored answers against the corrected key,
+with no model call, passes the same eight of the fourteen that v7 passes. They
+also account for most of the halved hallucination rate. The six JNJ cases still
+failing (2023 gross profit and liabilities, and four 2023→2024 comparisons) are
+now real misses, not ground-truth errors.
+
+> Rebuilt the golden set after fixing three ground-truth defects and attributed
+> the re-run case by case: the entire 0.038 accuracy difference was eight
+> answers the old ground truth had marked wrong, with the 194 unaffected cases
+> scoring 154/194 in both runs.
 
 That is the bullet an interviewer remembers, because almost nobody has debugged
 their own ground truth.
@@ -206,21 +259,24 @@ their own ground truth.
 > | `baseline-d2f33b7b` | 232 | openai | 0.5625 | first trustworthy run |
 > | `baseline-v5-2943b37a` | 232 | openai | 0.6202 | as graded on 17 Sep |
 > | `baseline-v5-2943b37a`, re-graded | 232 | — | 0.7548 | same answers, D2 grader fix |
-> | `baseline-v6-no-rerank-7362c6c7` | 232 | openai | **0.7404** | current |
+> | `baseline-v6-no-rerank-7362c6c7` | 232 | openai | 0.7404 | pre-rebuild set |
+> | `baseline-v7-99204312` | 232 | openai | **0.7788** | current, rebuilt set |
 >
 > The 0.25 is a **20-case smoke run**, not a baseline. And the deeper problem is
 > that the defects being fixed *changed the golden set itself* — corrected fiscal
 > years, then `PREFERRED_TAG_FAMILIES` changing which XBRL concept a case asks
-> about. **An accuracy delta that straddles a ground-truth rebuild compares two
-> different exams.** The defensible claims are the absolute current figure
-> (**0.7404** on 232 cases) and the defects found.
+> about, then the D12–D14 rebuild. **An accuracy delta that straddles a
+> ground-truth rebuild compares two different exams.** That includes
+> "0.7404 → 0.7788". The defensible claims are the absolute current figure
+> (**0.7788** on 232 cases), the defects found, and the case-by-case attribution
+> above.
 >
 > The one delta that *is* quotable is the re-grade, because nothing else moved:
 > same stored answers, same golden set, same tolerance, only the grading code —
-> **0.6202 → 0.7548**, with every flip listed. `baseline-v6` then came within three
-> cases of it on freshly generated answers (0.7404); regenerated answers move a
-> few cases between runs even at temperature 0, so quote v6 as the current figure
-> and the re-grade as the size of the grader fix.
+> **0.6202 → 0.7548**, with every flip listed. Regenerated answers move a few
+> cases between runs even at temperature 0 (one each way between v6 and v7 on
+> the unchanged cases), so quote v7 as the current figure and the re-grade as
+> the size of the grader fix.
 
 Saying that out loud in an interview is worth more than the delta would have
 been. It is the difference between someone who reports numbers and someone who
@@ -290,8 +346,9 @@ agreement, κ 0.42 — half the agreement was chance); what you would do if κ c
 back at 0.3. You have a better answer than most: *I measured it, it came back
 unusable, I said so in the report instead of shipping the number.*
 
-The same holds for `baseline-v6`: its judge reports 0.75, only 12 of its answers
-match a human label (the floor is 20), and no kappa is reported for it. The
+The same holds for the later runs. `baseline-v6`'s judge reports 0.75 and
+`baseline-v7`'s 0.79. Only 12 and 14 of their answers match a human label (the
+floor is 20), and no kappa is reported for either. The
 deployed `/stats/eval` therefore **withholds** `narrative_pass_rate` and
 `overall_score` and prints the kappa verdict in their place; the stored run keeps
 every value.
@@ -312,15 +369,21 @@ identical runs, with 2 pairs flagged unstable.
 edgar-intel eval gate --max-regression 0.03
 ```
 
-**Status: built, never yet caught anything — and not running in CI. Do not claim
-a catch count, and do not call it a CI gate until the job runs.**
+**Status: built, never yet caught anything, and not yet passing in CI. Do not
+claim a catch count, and do not call it a CI gate until the job passes *and*
+compares against something.**
 
-> ⚠️ The `eval-gate` job in `.github/workflows/ci.yml` cannot pass as written:
-> `evalset/` is gitignored, so the checkout has no `golden.json` for `eval run`
-> to load, and the job applies only `sql/001_schema.sql`, so the columns
-> `sql/003_…` adds — which every run writes — do not exist. Separately,
-> `ruff check src tests` reports 16 findings on the current code, so the `test`
-> job most likely stops at lint.
+> ⚠️ As of 5 Oct, the `test` job is green: the 16 ruff findings that stopped it
+> at lint are fixed (`f83c0fc`). The `eval-gate` job now applies every migration
+> through `edgar-intel init` (`f186448`), so it gets past loading the fixture.
+> It still fails one step later, because `evalset/` is gitignored and the
+> checkout has no `golden.json` for `eval run` to load.
+>
+> Supplying a golden set is not enough. `eval gate` compares the latest run
+> with the latest run labelled as the baseline. CI starts from an empty
+> database, so there is never a baseline, and the gate then passes with a
+> warning. A green job would compare nothing until CI is given a baseline of
+> its own for the fixture corpus.
 
 **Bullet shape — usable now**
 
@@ -343,16 +406,15 @@ edgar-intel eval failures <run_key>
 edgar-intel eval context-probe --case-id <case>
 ```
 
-**Status: measured on `baseline-v5`'s answers, before and after the grader fix
-(D2). For the current run, `edgar-intel eval failures baseline-v6-no-rerank-7362c6c7`
-has not been run yet.**
+**Status: measured on the reference run (`baseline-v7`), and on `baseline-v5`'s
+answers before and after the grader fix (D2).**
 
-| `baseline-v5` answers | as graded, 17 Sep | re-graded, 26 Sep |
-|---|---|---|
-| failures | 84 (79 numeric, 5 narrative by the judge) | 56 (51 numeric, 5 narrative) |
-| retrieval misses — nothing labelled in the top 5 | 52 (62%) | **46 (82%)** |
-| generation misses — labelled evidence in the top 5, answer still wrong | 32 (38%) | **10 (18%)** |
-| unlabelled | 0 | 0 |
+| | `baseline-v5`, as graded 17 Sep | `baseline-v5`, re-graded 26 Sep | **`baseline-v7`, 5 Oct** |
+|---|---|---|---|
+| failures | 84 (79 numeric, 5 narrative by the judge) | 56 (51 numeric, 5 narrative) | **51 (46 numeric, 5 narrative)** |
+| retrieval misses — nothing labelled in the top 5 | 52 (62%) | 46 (82%) | **43 (84%)** |
+| generation misses — labelled evidence in the top 5, answer still wrong | 32 (38%) | 10 (18%) | **7 (14%)** |
+| unlabelled | 0 | 0 | 1 (the D14 P&G case) |
 
 The grader fix moved this more than any other figure: 22 of the 28 re-graded
 answers had been counted as *generation* misses — correct answers the grader could
@@ -361,20 +423,24 @@ nothing labelled in the top 5. That second group shows the rule over-counts
 retrieval: the model reads up to 8 passages, and the labels are a sample of the
 relevant chunks rather than all of them. Quote the direction, not the decimal.
 
-- `abstention_rate` / `hallucination_rate`: **0.1635 / 0.0962** on `baseline-v6`.
-  `baseline-v5` read 0.1587 / 0.2212 as graded and 0.1587 / 0.0865 re-graded —
-  every D2 answer had been sitting in the hallucination bucket.
-- `hit@5` 0.6595, so roughly a third of cases have no relevant evidence in the
+- `abstention_rate` / `hallucination_rate`: **0.1731 / 0.0481** on `baseline-v7`,
+  against 0.1635 / 0.0962 on `baseline-v6`. The halving is the answer key again.
+  Wrong, non-abstaining answers went from 20 to 10, and 9 of those 10 are among
+  the 14 corrected cases; on the other 194 it was 10 against 9. `baseline-v5`
+  read 0.1587 / 0.2212 as graded and 0.1587 / 0.0865 re-graded, because every
+  D2 answer had been sitting in the hallucination bucket. Both defects inflated
+  "hallucination" with correct answers.
+- `hit@5` 0.7619, so roughly a quarter of cases have no relevant evidence in the
   top 5 — which is where the abstentions live.
 
 **Bullet shape**
 
 > Instrumented per-case retrieval metrics to separate retrieval misses from
 > generation misses, and split abstention from hallucination as distinct
-> outcomes (0.164 / 0.096) — after fixing a grader that had failed 28 correct
-> answers, most remaining failures (46 of 56) had no labelled evidence in the
-> retrieved top 5, which pointed the work at retrieval and context selection
-> rather than the prompt.
+> outcomes (0.173 / 0.048). After fixing a grader that had failed 28 correct
+> answers and a ground truth that had failed 8 more, most remaining failures
+> (43 of 51) had no labelled evidence in the retrieved top 5, which pointed the
+> work at retrieval and context selection rather than the prompt.
 
 It is the harness's own attribution, and it is why the embedder-window question
 (§1) has to be settled before the chunking comparison runs.
@@ -393,9 +459,15 @@ every one. The run reported a quality failure. It was a truncation failure.
 edgar-intel agent stats
 ```
 
-**Status: NOT MEASURED. `agent_traces` is 0 — the agent has never been run
-outside tests. Do not claim numbers, and expect `/stats/agent` to come back
-empty on a deployed instance.**
+**Status: NOT MEASURED. `agent_traces` holds 2 rows, both manual runs on 28 Sep.
+Do not claim numbers, and expect `/stats/agent` to show nothing meaningful on a
+deployed instance.**
+
+One of the two runs escalated "What was Apple's revenue in FY2024?" although the
+figure was in the database. The model had passed the word "revenue" to
+`get_fact` as the XBRL tag, and no fact is tagged with it. The tag alias
+(`56268a8`) resolves the word to the revenue tag each company reports, and the
+same lookup now returns $391.04B. Two runs are a bug report, not a rate.
 
 **Bullet shape — mechanism only, which is defensible today**
 
@@ -436,16 +508,21 @@ edgar-intel bench sweep --endpoint /search     # concurrency sweep: NOT RUN
 **Status: end-to-end latency measured locally; the concurrency sweep has not been
 run.**
 
-From the reference run: **p50 892 ms, p95 1732 ms** end to end (retrieval 105 ms
-of it), at **$0.126 for the full 232-case run** and **$0.5439 per 1k requests**.
-The same-commit reranked run: p50 1434 ms, p95 2340 ms, $0.5582 per 1k — the
-cross-encoder's 542 ms at p50 is the price that bought nothing (§1).
+From the reference run: **p50 1015 ms, p95 1848 ms** end to end (retrieval 142 ms
+of it), at **$0.126 for the full 232-case run** and **$0.5428 per 1k requests**.
+`baseline-v6` measured p50 892 ms / p95 1732 ms (retrieval 105 ms) with the same
+config and no behavioural change on the request path (the only edits there
+resolve the `use_rerank` default, and both runs passed it explicitly), so read about ±120 ms at p50 as
+run-to-run variance on a laptop, not as a regression. The v6 reranked run: p50
+1434 ms, p95 2340 ms, $0.5582 per 1k — the cross-encoder's 542 ms at p50 is
+the price that bought nothing (§1).
 
 **Bullet shape — usable now**
 
 > Instrumented per-request token accounting and stage-level timing across
-> retrieval, generation and judging: p50 892 ms / p95 1732 ms end to end at
-> $0.13 per full 232-case evaluation and $0.54 per 1k requests.
+> retrieval, generation and judging: p50 ≈ 0.9–1.0 s / p95 ≈ 1.7–1.8 s end to
+> end across two runs, at $0.13 per full 232-case evaluation and $0.54 per 1k
+> requests.
 
 These are local figures on a warm process. A deployed instance's numbers come
 from `bench sweep` against its URL, not from here.
@@ -481,27 +558,29 @@ in the repo.
 | claim | status |
 |---|---|
 | 232-case eval set with XBRL-verifiable ground truth | ✅ measured |
-| numeric accuracy **0.7404** on the current set (`baseline-v6`) | ✅ measured |
+| numeric accuracy **0.7788** on the current set (`baseline-v7`) | ✅ measured |
+| the rebuild's +0.038 over v6 is entirely the corrected key: 0/14 → 8/14, the other 194 at 154/194 in both runs | ✅ measured, case by case (§2) |
+| "accuracy 0.7404 → 0.7788" | ❌ **not defensible** as a trend — two exams; quote the attribution above instead |
 | grader fix re-graded the same answers **0.6202 → 0.7548**, 28 flips listed, 0 reversed | ✅ measured |
 | "accuracy 0.25 → 0.62" | ❌ **not defensible** — 20-case smoke vs 232-case baseline, across a ground-truth rebuild |
-| four ground-truth and grading defects found and fixed | ✅ measured |
+| seven ground-truth, grading and labelling defects found and fixed (D12–D14 landed 5 Oct) | ✅ measured |
 | void-run abort after 232 consecutive 401s scored as 0.0 | ✅ measured |
-| hit@5 0.660 / MRR 0.474, and the 0.194 ceiling gap (re-measured on current labels) | ✅ measured |
-| reranker off on a single-variable run: +542 ms p50 for no gain | ✅ measured |
-| abstention 0.164 vs hallucination 0.096, split | ✅ measured |
-| most remaining failures (46 of 56) had no labelled evidence in the top 5 | ⚠️ measured on re-graded v5; the rule over-counts retrieval — quote the direction |
-| corpus: 8 companies, 24 10-K filings, 264 sections, 23,499 chunks | ✅ measured |
-| p50 892 ms / p95 1732 ms, $0.54 per 1k — local | ✅ measured |
+| hit@5 0.762 / MRR 0.555, and the 0.204 ceiling gap (re-measured on the rebuilt labels) | ✅ measured |
+| reranker off on a single-variable run: +542 ms p50 for no gain | ✅ measured on the v6 set; the free sweep agrees on v7 labels |
+| abstention 0.173 vs hallucination 0.048, split | ✅ measured; the drop from v6's 0.096 is the corrected key |
+| most remaining failures (43 of 51) had no labelled evidence in the top 5 | ⚠️ measured on `baseline-v7`; the rule over-counts retrieval — quote the direction |
+| corpus: 8 companies, 24 10-K filings, 264 sections, 23,499 chunks, 1,363 XBRL facts | ✅ measured |
+| p50 ≈ 0.9–1.0 s / p95 ≈ 1.7–1.8 s, $0.54 per 1k — local, two runs | ✅ measured |
 | Cohen's κ = 0.42, below the floor, gate suppressed a wrong 79% | ✅ measured |
 | judge-adoption gate vetoed a rubric on one false negative | ✅ measured |
 | bounded agent: mechanism | ✅ shipped |
-| narrative pass rate | ⚠️ 0.50 by human label on 24 cases; the judge's 0.79 (v5) and 0.75 (v6) are not usable |
-| two NVIDIA yoy cases compare across a stock split (D12) | ⚠️ generator fixed; golden set waits for the rebuild |
-| twelve JNJ cases expect fiscal-2022 figures under a 2023 label (D13) | ⚠️ ingest rule fixed; golden set waits for the rebuild |
+| narrative pass rate | ⚠️ 0.50 by human label on 24 cases; the judge's 0.79 (v5), 0.75 (v6) and 0.79 (v7) are not usable |
+| two NVIDIA yoy cases compared across a stock split (D12) | ✅ fixed, in the golden set since 5 Oct |
+| twelve JNJ cases expected fiscal-2022 figures under a 2023 label (D13) | ✅ fixed, in the golden set since 5 Oct |
 | four-strategy chunking comparison | ⛔ **blocked** — the embedder-window test that isolates truncation has not run (§1) |
-| agent escalation rate | ❌ never run |
+| agent escalation rate | ❌ never measured — 2 manual traces, one of which found the revenue-tag bug |
 | concurrency / throughput sweep | ❌ needs a deployed instance |
-| regression gate in CI | ❌ the CI job cannot pass as written (§4); nothing caught yet |
+| regression gate in CI | ❌ `test` job green since 5 Oct; `eval-gate` fails at `eval run` (no golden set) and would have no baseline (§4); nothing caught yet |
 | LoRA fine-tune comparison | ❌ never run |
 | live URL | ❌ not deployed — see `docs/DEPLOY.md` |
 

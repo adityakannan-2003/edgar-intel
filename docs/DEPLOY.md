@@ -73,13 +73,14 @@ numbers from a corpus the instance is no longer serving.
 
 ### 2a. Before the copy
 
-- **Exercise `/ask` locally.** The agent has never run end to end outside the
-  tests (`agent_traces` is 0). A few `edgar-intel agent ask "…"` calls against
+- **Exercise `/ask` locally.** The agent has run end to end outside the tests
+  only twice (`agent_traces` holds 2 manual runs from 28 Sep, one of which
+  found the revenue-tag bug). A few `edgar-intel agent ask "…"` calls against
   the local database cost cents, show whether it works before the internet can
   call it, and leave traces that the copy then carries to `/stats/agent`.
 - **Record no evaluation run after the one you mean to publish.** `/stats/eval`
   serves the most recently *finished* run — today
-  `baseline-v6-no-rerank-7362c6c7`, the reference run in `docs/METRICS.md`.
+  `baseline-v7-99204312`, the reference run in `docs/METRICS.md`.
 
 ### 2b. Make a trimmed copy
 
@@ -205,7 +206,7 @@ the image, so a request can ask for `"rerank": true` explicitly.
 curl -fsS https://edgar-intel.fly.dev/health
 curl -fsS https://edgar-intel.fly.dev/ready          # ready: true, strategy section_aware, indexed_chunks 5468
 curl -fsS https://edgar-intel.fly.dev/config         # ask_requires_api_key: true, use_rerank: false
-curl -fsS https://edgar-intel.fly.dev/stats/eval     # baseline-v6-no-rerank; judge_calibration.withheld
+curl -fsS https://edgar-intel.fly.dev/stats/eval     # baseline-v7; judge_calibration.withheld
                                                      #   lists narrative_pass_rate and overall_score
 
 curl -fsS -X POST https://edgar-intel.fly.dev/search \
@@ -238,7 +239,7 @@ amount of restarting will fix.**
 | Fly machine, 1 GB shared-cpu-1, suspending when idle | free allowance covers a portfolio deployment |
 | Neon / Supabase free tier | 0 |
 | `/search` | 0 — local embeddings, Postgres only |
-| `/ask` | ~$0.0005 per request at `gpt-4o-mini` (measured: $0.5439 per 1k in `baseline-v6`) |
+| `/ask` | ~$0.0005 per request at `gpt-4o-mini` (measured: $0.5428 per 1k in `baseline-v7`) |
 
 The rate limit at 20/min per IP caps a single abusive client at roughly $0.60 an
 hour. That is the number the limit was chosen against, and it is why the limit is

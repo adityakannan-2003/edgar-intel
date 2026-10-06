@@ -19,7 +19,7 @@ on the ones that have not been.
 | Pre-rebuild reference | `baseline-v6-no-rerank-7362c6c7`, 26 Sep, `cc0a69c`, on the pre-rebuild set (archived locally as `evalset/golden-baseline-v6.json`). Same config as v7. It graded a different exam, and §2 shows exactly where the two differ. |
 | Rerank control | `baseline-v6-rerank-8d0eb06a`: v6's config with `use_rerank=true`, on the v6 set. Not re-run on the v7 set. |
 | Re-grade of an earlier reference | `reports/regrade-baseline-v5-2943b37a.json`: `baseline-v5`'s stored answers re-marked by the fixed grader, no model calls |
-| Set | 232 cases — 160 numeric single-hop · 48 numeric comparative · 24 narrative. Rebuilt 5 Oct with the D12–D14 fixes, 231 with linked evidence |
+| Set | 232 cases — 160 numeric single-hop · 48 numeric comparative · 24 narrative. Rebuilt 5 Oct with the D12–D14 fixes, then re-linked for D15 the same day (labels only; the exam is unchanged), 231 with linked evidence |
 | Corpus | 8 companies (AAPL CAT COST JNJ MSFT NVDA PG UNH), **24 10-K filings**, FY2023–FY2026 · 264 sections · 1,363 XBRL facts (1,338 before the D13 refresh) · 23,499 chunks across four strategies, all embedded — `section_aware` 5,468 is the evaluated and served index. (A 32,171-chunk `section_aware_t144` experiment also exists locally; it is not shipped — §1.) |
 | Config | `section_aware` · `hybrid` · `use_rerank=false` · `k=50` · `top_n=8` · `gpt-4o-mini` · MiniLM-L6-v2 (384-d) · `rrf_k=60` · `numeric_tolerance=0.005` · `context_max_chars=20000` · judge contract `v2`, shown the source context |
 
@@ -30,7 +30,7 @@ Two standing cautions, both earned the hard way:
   `overall_score: 0.0` on 232 consecutive HTTP 401s.
 - **`hit@k` and `recall@k` are different numbers and this repo reports both.**
   `hit@5 = 0.7619` means at least one relevant chunk reached the top 5.
-  `recall@5 = 0.3196` means 32% of all relevant chunks did. Quoting the first
+  `recall@5 = 0.4084` means 41% of all relevant chunks did. Quoting the first
   under the second's name is the single easiest way to get caught.
 
 ---
@@ -47,23 +47,29 @@ edgar-intel eval compare --strategies fixed,recursive,section_aware,semantic
 **Status: partly measured. The four-strategy comparison has never been run.**
 
 Measured on the reference run, `section_aware` only, on the rebuilt labels
-(398 labels on 231 cases, all present in the index). `top_n=8`, so hit@10 here
+(741 label references to 396 chunks on 231 cases, every one reachable since
+D15). `top_n=8`, so hit@10 here
 is hit@8:
 
 | hit@1 | hit@3 | hit@5 | hit@10 | recall@5 | MRR | nDCG@10 | retrieve_ms |
 |---|---|---|---|---|---|---|---|
-| 0.4026 | 0.6883 | 0.7619 | 0.8528 | 0.3196 | 0.5552 | 0.3666 | 134 |
+| 0.4026 | 0.6883 | 0.7619 | 0.8528 | 0.4084 | 0.5552 | 0.4288 | 134 |
 
-These are identical in `baseline-v7` (apart from timing), because raising the
-context cap changes what the model reads, not what retrieval returns.
+The hit@k and MRR figures are identical in `baseline-v7` (apart from timing),
+because raising the context cap changes what the model reads, not what
+retrieval returns. recall@5 and nDCG@10 are from the free sweep on the D15
+labels (`reports/retrieval_d15_20261005.json`). That sweep reproduces a run's
+retrieval block exactly. The reference run's stored summary, and so a deployed
+`/stats/eval`, still carries the pre-D15 recall@5 of 0.320 until the next paid
+run.
 
-> ⚠️ **recall@k is understated (D15, not yet fixed).** 178 of the 919 label
-> references (19%) point at chunks in a filing other than the case's fiscal
-> year. Search filters on that year, so those chunks can never be retrieved,
-> but recall@k still counts them. Over the labels the filter can reach,
-> recall@5 is **0.408**, not 0.320. No case is left with zero reachable
-> labels, so hit@k is unaffected. Quote hit@5 as the headline, and recall@5
-> only with this caveat.
+**D15, fixed 5 Oct: labels search could never reach.** 178 of the 919 label
+references (19%) pointed at chunks in a filing other than the case's fiscal
+year. Search filters on that year, so those chunks could never be retrieved,
+yet recall@k counted each as a miss. The linker now labels only the filing
+search reaches. On the same retrieval results recall@5 goes **0.320 → 0.408**
+and nDCG@10 0.367 → 0.429, while hit@k, MRR and the ceiling gap do not move.
+That is the signature of a measurement fix, not a retrieval change.
 
 The rise over `baseline-v6` (hit@5 0.6595, MRR 0.4738) is the labels, not the
 retriever. Both runs used the same index and the same retrieval behaviour, and
@@ -73,7 +79,8 @@ labels were coincidental (D14, §2). Quote 0.762 as the current figure, never
 "0.660 → 0.762".
 
 The configuration sweep was re-run on the rebuilt labels on 5 Oct
-(`reports/retrieval_v7_20261005.json`, no model calls). The untruncated
+(`reports/retrieval_v7_20261005.json`; on the D15 labels,
+`reports/retrieval_d15_20261005.json`; no model calls). The untruncated
 candidate set reaches **0.965 hit@20 against 0.762 hit@5 for the shipped
 configuration — 0.204 lost to ranking and `top_n=8` truncation, not to
 retrieval failing to find the evidence.** Dense-only reaches 0.922 and
@@ -82,10 +89,10 @@ lexical-only 0.939 at the same depth. On the v6 labels (26 Sep,
 and on the 15 Sep labels it was also 0.194. The absolute figures moved with the
 labels each time, but the gap barely did.
 
-| config (5 Oct sweep) | rerank | hit@1 | hit@5 | recall@5 | MRR | nDCG@10 | ms |
+| config (5 Oct sweep, D15 labels) | rerank | hit@1 | hit@5 | recall@5 | MRR | nDCG@10 | ms |
 |---|---|---|---|---|---|---|---|
-| shipped | off | 0.4026 | **0.7619** | 0.3196 | **0.5552** | 0.3666 | 19 |
-| same, reranked | on | 0.4113 | 0.7489 | 0.3377 | 0.5550 | 0.3855 | 584 |
+| shipped | off | 0.4026 | **0.7619** | 0.4084 | **0.5552** | 0.4288 | 21 |
+| same, reranked | on | 0.4113 | 0.7489 | 0.4381 | 0.5550 | 0.4535 | 553 |
 
 (The 26 Sep sweep file labels its reranked row "shipped", because it was
 produced before the sweep learned to read `use_rerank`. The 5 Oct file names
@@ -95,7 +102,7 @@ both rows for what they ran.)
 
 > Measured hybrid retrieval (pgvector dense + Postgres full-text, RRF-fused) on
 > a 232-case labelled set over 8 companies' SEC filings at hit@5 0.762 /
-> MRR 0.555 / nDCG@10 0.367.
+> MRR 0.555 / nDCG@10 0.429.
 
 and the ceiling gap, measured on the same labels as the reference run:
 
@@ -137,8 +144,8 @@ flag: the cross-encoder added **542 ms at p50** (892 → 1434 ms), numeric accur
 went 0.7404 → 0.7356 and hit@5 0.660 → 0.638. It had reversed twice across
 earlier runs that changed other things too; this is the first clean comparison.
 That was on the v6 set. On the rebuilt labels, the free sweep tells the same
-story: reranking moves hit@5 0.762 → 0.749 and nDCG@10 0.367 → 0.386, for
-565 ms. The paid single-variable run has not been repeated on the v7 set.
+story: reranking moves hit@5 0.762 → 0.749 and nDCG@10 0.429 → 0.454, for
+about 530 ms. The paid single-variable run has not been repeated on the v7 set.
 
 ---
 
@@ -164,11 +171,12 @@ on corrected facts. The one unlinked case is explained under D14.
 
 **The stronger version of this bullet is about the ground truth, not the size:**
 
-> Found and fixed seven defects in the evaluation harness itself, among them
+> Found and fixed eight defects in the evaluation harness itself, among them
 > fiscal years attributed from the filing rather than the reported period, a
 > 52/53-week year-end that filed a company's fiscal 2022 as 2023, year-over-year
 > answers computed across a stock split, a grader that failed correct
-> comparative answers, and evidence labels matched on a single rounded digit.
+> comparative answers, evidence labels matched on a single rounded digit, and
+> labels placed in filings retrieval was never allowed to search.
 > Also added an abort on infrastructure failure, after a run of 232 consecutive
 > HTTP 401s was recorded as a score of 0.0 rather than as a void run.
 
@@ -216,6 +224,14 @@ dropped. 38 cases' labels changed, 26 of them EPS. One case lost its labels:
 `num-PG-ResearchAndDevelopmentExpense-2024` is exactly $2.00B, its five old
 labels came from the needle "2", and no chunk prints the figure as "2,000". It
 still counts toward accuracy, but not toward retrieval metrics.
+
+**D15, fixed 5 Oct, after the rebuild: labels out of reach.** The linker
+accepted the case's filing or any later one, since later 10-Ks reprint earlier
+years, but search only ever looks in the case's own. A fifth of the labels
+could never be retrieved and counted as misses in recall@k. Re-linking changed
+106 cases' labels and nothing else: the same 232 questions and answers (exam
+fingerprint unchanged), 919 references down to exactly the 741 reachable ones,
+and no case losing its last label. Retrieval effects are in §1.
 
 **The rebuild, 5 Oct.** It refreshed the facts without re-ingesting filings:
 `ingest run` never overwrites an existing fact, and re-parsing a filing deletes
@@ -419,7 +435,8 @@ quality. Those numbers come from the paid baseline (§2).
 
 **Regenerate the baseline** only when a change is meant to move these numbers,
 and say so in the commit: the diff of the baseline file is the change being
-accepted. It must come from a fresh database, so that chunk ids match CI's:
+accepted. So far that has happened once, for D15: on the fixture, recall@5
+went 0.833 → 1.0 and accuracy did not move. It must come from a fresh database, so that chunk ids match CI's:
 
 ```bash
 docker run -d --rm --name edgar-ci -e POSTGRES_USER=edgar -e POSTGRES_PASSWORD=edgar \
@@ -668,10 +685,10 @@ in the repo.
 | "accuracy 0.7404 → 0.7788" | ❌ **not defensible** as a trend — two exams; quote the attribution above instead |
 | grader fix re-graded the same answers **0.6202 → 0.7548**, 28 flips listed, 0 reversed | ✅ measured |
 | "accuracy 0.25 → 0.62" | ❌ **not defensible** — 20-case smoke vs 232-case baseline, across a ground-truth rebuild |
-| seven ground-truth, grading and labelling defects found and fixed (D12–D14 landed 5 Oct) | ✅ measured |
+| eight ground-truth, grading and labelling defects found and fixed (D12–D15 landed 5 Oct) | ✅ measured |
 | void-run abort after 232 consecutive 401s scored as 0.0 | ✅ measured |
 | hit@5 0.762 / MRR 0.555, and the 0.204 ceiling gap (re-measured on the rebuilt labels) | ✅ measured |
-| recall@5 0.320 | ⚠️ understated: 19% of labels are unreachable under the year filter (D15); 0.408 over reachable labels |
+| recall@5 0.408 / nDCG@10 0.429, every label reachable (D15 fixed: was 0.320 / 0.367) | ✅ measured, free sweep |
 | reranker off on a single-variable run: +542 ms p50 for no gain | ✅ measured on the v6 set; the free sweep agrees on v7 labels |
 | abstention 0.111 vs hallucination 0.048, split | ✅ measured; hallucination's drop from v6's 0.096 is the corrected key, abstention's from v7's 0.173 is the cap fix |
 | most remaining failures had no labelled evidence in what the model read (30 of 36 by top 5, 26 of 36 by top 8) | ⚠️ measured on the reference run; quote the direction |

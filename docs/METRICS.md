@@ -42,10 +42,11 @@ Two standing cautions, both earned the hard way:
 
 ```bash
 edgar-intel eval retrieval --out reports/retrieval_<date>.json   # measured, below
-edgar-intel eval compare --strategies fixed,recursive,section_aware,semantic
+edgar-intel index build --strategy all --suffix _d9                # rebuild beside, never in place
+edgar-intel eval compare --strategies fixed_d9,recursive_d9,section_aware_d9,semantic_d9
 ```
 
-**Status: partly measured. The four-strategy comparison has never been run.**
+**Status: measured, including the four-strategy comparison (6 Oct).**
 
 Measured on the reference run, `section_aware` only, on the rebuilt labels
 (741 label references to 396 chunks on 231 cases, every one reachable since
@@ -111,11 +112,56 @@ and the ceiling gap, measured on the same labels as the reference run:
 > by `top_n` truncation rather than never found — which moved the work from
 > prompt tuning to context selection.
 
-**Bullet shape — not yet measured: `eval compare` has never run**
+### The four-strategy comparison: the strategy mattered less than the chunk size
 
-> ~~Benchmarked four chunking strategies…~~ Do not write this until
-> `eval compare` runs. All four strategies are chunked and fully embedded
-> (23,499 chunks); none has been evaluated against the others.
+The four original indexes all date from 15 Sep, before D9 made `target_tokens`
+a ceiling. `semantic` held one chunk of 31,476 `token_est`, about 125,000
+characters, more than any context can hold, so comparing those builds would
+have measured that bug. All four were rebuilt beside the originals with
+today's chunker (`--suffix _d9`; 512 ceiling, 64 overlap, MiniLM) and run
+through `eval compare` against the shipped index, with labels re-linked per
+index (D11). The config was identical to the reference apart from the index,
+and run-to-run noise is 1–2 cases:
+
+| index | numeric accuracy | single-hop | comparative | hit@5 | mean prompt tokens | vs shipped |
+|---|---|---|---|---|---|---|
+| **`section_aware`, shipped (pre-D9)** | **0.837** | 136/160 | 38/48 | 0.762 | 4,828 | — |
+| `recursive_d9` | 0.789 | 129/160 | 35/48 | 0.701 | 4,463 | +9 / −20 |
+| `fixed_d9` | 0.784 | 121/160 | **42/48** | 0.693 | 4,889 | +18 / −33 |
+| `section_aware_d9` | 0.784 | 127/160 | 36/48 | 0.710 | 4,465 | +8 / −21 |
+| `semantic_d9` | 0.745 | 123/160 | 32/48 | 0.652 | 3,977 | +15 / −35 |
+
+**On equal footing, three strategies tie.** Fixed, recursive and section-aware
+chunking land within one case of each other. Knowing 10-K structure bought
+nothing once every chunk was capped at the same size. **Semantic trails by 8–9
+cases.** Its chunks average half the size (265 `token_est`), so at a fixed
+`top_n=8` the model reads about 18% less text, which is part of the reason.
+Fixed chunking's 42/48 on comparisons is 4 cases above the rest, a lead that
+might be real but is close to the noise.
+
+**The shipped index beats all four by 10–11 cases, and size is most of why.**
+Built before D9, it added the section header and overlap *on top of* 512
+tokens, so its chunks run about 15% larger, which keeps statement tables
+together: nine of its rebuild's retrieval losses were liabilities. Rebuilding
+`section_aware` under today's rules with a 600-token ceiling
+(`exp-sa-d9t600-ccd9a5b3`; 4,668 chunks, average 2,148 characters, all eight
+still inside the context cap) scored **0.817**. That is 7 cases above the
+512-token rebuild, but still 4 below the shipped index, even though its chunks
+are larger on average. So size explains most of the gap, and where the
+boundaries fall explains the rest. The shipped index stays.
+
+> Benchmarked four chunking strategies end to end on a 232-case set: at an
+> equal 512-token ceiling, fixed, recursive and section-aware chunking tied
+> (0.784–0.789 numeric accuracy) and semantic trailed (0.745). The bigger lever
+> was chunk size: 512 → 600 tokens recovered 7 of the 11 cases separating the
+> rebuild from the shipped index.
+
+Because today's chunker does not reproduce the shipped index, `index build` now
+refuses to replace an existing served index without `--replace-served`
+(`48fcefd`). The README's own `index build --strategy all` would otherwise have
+cost those 11 cases on the local database. A fresh database, such as CI or a
+new deployment, builds as before. The rebuilt indexes were deleted after
+measurement.
 
 **D8, settled 5–6 Oct: the embedder window.** `all-MiniLM-L6-v2` reads 256
 word-pieces, and 93% of `section_aware` chunks are longer than that (median
@@ -166,11 +212,10 @@ retriever fusing both embedders is untried.
 > change was declined. Retrieval metrics over sampled labels did not predict
 > answer quality.
 
-The four-strategy comparison is unblocked: the question it waited on now has an
-answer. Two fixes it needs are already in. Every strategy now treats
-`target_tokens` as a ceiling (D9), and each arm is graded on labels derived for
-its own index (D11). Without D11, three of the four would have scored hit@k = 0
-by construction.
+With D8 settled, the four-strategy comparison ran (above). It depended on two
+earlier fixes: every strategy treats `target_tokens` as a ceiling (D9), and each
+arm is graded on labels derived for its own index (D11). Without D11, three of
+the four would have scored hit@k = 0 by construction.
 
 **Expect to be asked:** why hit@5 and not accuracy; what recall@k does not tell
 you (nothing about ordering — that is what nDCG is for); why reranking can leave
@@ -744,7 +789,8 @@ in the repo.
 | two NVIDIA yoy cases compared across a stock split (D12) | ✅ fixed, in the golden set since 5 Oct |
 | twelve JNJ cases expected fiscal-2022 figures under a 2023 label (D13) | ✅ fixed, in the golden set since 5 Oct |
 | embedder window (D8): a 512 window lifts hybrid hit@5 0.762 → 0.805 but not accuracy (0.841 → 0.837); declined | ✅ measured, single variable (§1) |
-| four-strategy chunking comparison | ❌ not yet run — unblocked now that D8 is settled (§1) |
+| four chunking strategies at an equal 512 ceiling: fixed / recursive / section-aware tie (0.784–0.789), semantic 0.745 | ✅ measured, end to end (§1) |
+| chunk size over strategy: 512 → 600 tokens recovers 7 of the 11 cases to the shipped index (0.784 → 0.817 vs 0.837) | ✅ measured (§1) |
 | agent escalation rate | ❌ never measured — 2 manual traces, one of which found the revenue-tag bug |
 | concurrency / throughput sweep | ❌ needs a deployed instance |
 | regression gate in CI | ✅ running since 5 Oct against a committed baseline; fails on a deliberate regression; nothing caught yet (§4) |

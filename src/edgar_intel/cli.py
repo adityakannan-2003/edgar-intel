@@ -532,6 +532,9 @@ def eval_run(
         False, "--no-rerank", help="Do not rerank, whatever EDGAR_USE_RERANK says."
     ),
     top_n: int = typer.Option(0, help="Passages placed in the answering context. 0 = configured default."),
+    context_max_chars: int = typer.Option(
+        0, help="Character cap on the answering context. 0 = the shipped default (12000)."
+    ),
     limit: int = typer.Option(0, help="Run only the first N cases."),
     git_sha: str = typer.Option(""),
 ) -> None:
@@ -564,6 +567,7 @@ def eval_run(
         _, summary = run_suite(
             cases, label=label, strategy=strategy or None, mode=mode,
             use_rerank=use_rerank, top_n=top_n or None, sha=git_sha, progress=progress,
+            context_max_chars=context_max_chars or None,
         )
     except RunAborted as exc:
         console.print()

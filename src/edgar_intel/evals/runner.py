@@ -189,9 +189,13 @@ def run_suite(
     top_n: int | None = None,
     sha: str = "",
     progress=None,
+    context_max_chars: int | None = None,
 ) -> tuple[int, RunSummary]:
     s = get_settings()
     strategy = strategy or s.default_strategy
+    # Resolved once, like use_rerank below, so the config records the cap that
+    # ran. It used to record the constant whatever the run did.
+    context_max_chars = context_max_chars or DEFAULT_CONTEXT_MAX_CHARS
     # Resolved here, once, so the config records the value that ran rather than
     # "None" -- and so an unflagged run measures what the service ships.
     use_rerank = s.use_rerank if use_rerank is None else use_rerank
@@ -240,7 +244,7 @@ def run_suite(
         # Recorded even at their defaults. A knob absent from the config is a
         # knob nobody can rule out when two runs disagree.
         "item_boost_weight": s.item_boost_weight,
-        "context_max_chars": DEFAULT_CONTEXT_MAX_CHARS,
+        "context_max_chars": context_max_chars,
         "context_packing": "greedy-stop",
     }
 
@@ -260,7 +264,8 @@ def run_suite(
         source_context = ""
         try:
             answer, retrieval, latency, p_tok, c_tok, _hits, _ctx = answer_question(
-                case, strategy, mode, use_rerank, k, top_n
+                case, strategy, mode, use_rerank, k, top_n,
+                context_max_chars=context_max_chars,
             )
             source_context = _ctx.text
             result = build_result(

@@ -40,7 +40,11 @@ def _run(monkeypatch, cases=(), **kwargs) -> tuple[dict, list[int | None]]:
         caps.append(context_max_chars)
         raise Stop  # recorded as that case's error; the run carries on
 
+    # Every database call stubbed: CI's test job has no database, and an
+    # unstubbed call (calibration_pairs reads labels after the loop) passes
+    # locally against a running Postgres and hangs for 30 s there.
     monkeypatch.setattr(runner.db, "query_one", query_one)
+    monkeypatch.setattr(runner.db, "query", lambda *a, **k: [])
     monkeypatch.setattr(runner.db, "execute", lambda *a, **k: None)
     monkeypatch.setattr(runner, "answer_question", answer_question)
     runner.run_suite(list(cases), sha="test", **kwargs)

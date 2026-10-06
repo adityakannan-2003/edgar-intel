@@ -102,6 +102,36 @@ def index_label_problem(strategy: str, label: str | None) -> str | None:
     return None
 
 
+def replacement_problem(strategies: list[str], suffix: str, replace_served: bool) -> str | None:
+    """Why this build must not replace the served index in place, or None.
+
+    Without a suffix, a build deletes and re-creates each strategy's own index.
+    For the served strategy, that index is also what the golden set's labels and
+    the reference run point at. Today's chunker does not reproduce it: it was
+    built before D9 made `target_tokens` a ceiling, and on 6 Oct its rebuild
+    scored 0.784 numeric accuracy against the shipped index's 0.837
+    (docs/METRICS.md §1). So an existing served index is only replaced on
+    request. A fresh database (CI, a new deployment) has nothing to lose, and
+    builds as before.
+    """
+    s = get_settings()
+    served = s.default_strategy
+    if suffix or replace_served or served not in strategies:
+        return None
+    existing = db.query_one(
+        "SELECT count(*) AS n FROM chunks WHERE strategy = %s", (served,)
+    )["n"]
+    if not existing:
+        return None
+    return (
+        f"'{served}' is the served index ({existing} chunks), and rebuilding it in "
+        "place replaces the chunks the golden set's labels and the reference run "
+        "point at. Today's chunker does not reproduce them: its rebuild scored "
+        "0.784 against 0.837 (docs/METRICS.md §1). Use --suffix to build beside "
+        "it, or --replace-served if replacing it is the point."
+    )
+
+
 def index_strategy(
     strategy: str,
     target_tokens: int = 512,

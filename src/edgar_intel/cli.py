@@ -316,6 +316,11 @@ def index_build(
         help="Build beside the existing index instead of replacing it: "
         "--suffix _t169 stores section_aware as section_aware_t169.",
     ),
+    replace_served: bool = typer.Option(
+        False,
+        "--replace-served",
+        help="Allow replacing the served strategy's existing index in place.",
+    ),
 ) -> None:
     """Chunk and embed. Without --suffix this REPLACES the strategy's index.
 
@@ -324,11 +329,13 @@ def index_build(
     for the new index automatically at run time (evals/evidence.py).
     """
     from .chunking import STRATEGIES
-    from .retrieval.index import index_label_problem, index_strategy
+    from .retrieval.index import index_label_problem, index_strategy, replacement_problem
 
     strategies = list(STRATEGIES) if strategy == "all" else [strategy]
     labels = {st: f"{st}{suffix}" if suffix else None for st in strategies}
     problems = [p for st in strategies if (p := index_label_problem(st, labels[st]))]
+    if not problems and (p := replacement_problem(strategies, suffix, replace_served)):
+        problems = [p]
     if problems:
         console.print(f"[red]{problems[0]}[/red]")
         raise typer.Exit(1)

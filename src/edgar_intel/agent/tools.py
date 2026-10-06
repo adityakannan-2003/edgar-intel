@@ -216,11 +216,17 @@ def get_fact(args: GetFactArgs) -> ToolResult:
             data={"available_tags": [r["tag"] for r in available]},
         )
     value = float(row["value"])
+    # The model cites what it reads, so the summary prints the id exactly as
+    # registered. It used to print "XBRL <accession>" and register
+    # "xbrl:<accession>": the model cited the bare accession, the citation check
+    # rejected it, and 7 of 20 pilot questions escalated with the right figure
+    # in hand (docs/METRICS.md §6).
+    citation = f"xbrl:{row['accession']}"
     return ToolResult(
         ok=True,
         summary=(
             f"{row['name']} {CORE_TAGS.get(row['tag'], row['tag'])} FY{row['fiscal_year']}: "
-            f"{format_value(value, row['unit'])} (source: XBRL {row['accession']})"
+            f"{format_value(value, row['unit'])} (source: {citation})"
         ),
         data={
             "value": value,
@@ -229,7 +235,7 @@ def get_fact(args: GetFactArgs) -> ToolResult:
             "fiscal_year": row["fiscal_year"],
             "accession": row["accession"],
         },
-        citations=[f"xbrl:{row['accession']}"],
+        citations=[citation],
     )
 
 

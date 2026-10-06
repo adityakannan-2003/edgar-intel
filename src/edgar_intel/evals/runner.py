@@ -74,10 +74,13 @@ Answer using only the context above. Return JSON:
 # Errors that mean the harness never reached the model. A run made entirely of
 # these is not a score of zero -- it is an absence of a score, and recording it
 # as 0.0 puts a number in the metrics table that describes a missing API key.
+# DNS failure reads "Name or service not known" on Linux and "nodename nor
+# servname provided, or not known" on macOS; the second went uncounted until a
+# lookup outage voided 7 cases of an agent run on 6 Oct.
 _INFRA_ERROR = re.compile(
     r"401 Unauthorized|403 Forbidden|429 Too Many Requests|invalid[_ ]api[_ ]key"
     r"|authentication|insufficient_quota|Connection (?:refused|error|reset)"
-    r"|Timeout|Name or service not known|SSL",
+    r"|Timeout|Name or service not known|nodename nor servname|SSL",
     re.I,
 )
 

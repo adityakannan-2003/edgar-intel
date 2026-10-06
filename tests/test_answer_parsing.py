@@ -169,6 +169,8 @@ class TestInfrastructureFailuresAreNotScores:
             "Connection refused",
             "insufficient_quota",
             "Read Timeout",
+            "[Errno -2] Name or service not known",
+            "[Errno 8] nodename nor servname provided, or not known",
         ],
     )
     def test_other_infrastructure_failures(self, message):

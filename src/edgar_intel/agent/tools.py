@@ -179,6 +179,23 @@ def _tried(tag: str, tags: tuple[str, ...]) -> str:
     return f" (tried {', '.join(tags)})" if tags != (tag,) else ""
 
 
+def _held_tags() -> str:
+    return ", ".join(CORE_TAGS)
+
+
+def _unknown_tag_hint(tags: tuple[str, ...]) -> str:
+    """The tags that exist, when none of `tags` is one of them.
+
+    The model guesses XBRL names from memory: `CashAndCashEquivalents`,
+    `epsDiluted`. `get_fact`'s miss lists what the company reports, and
+    `compare_fact`'s said only "Missing", so the agent escalated or detoured
+    instead of correcting the name (docs/METRICS.md §6).
+    """
+    if any(t in CORE_TAGS for t in tags):
+        return ""
+    return f" No fact carries that tag. Tags held: {_held_tags()}."
+
+
 def get_fact(args: GetFactArgs) -> ToolResult:
     tags = resolve_tag(args.tag)
     row = None
@@ -269,6 +286,7 @@ def compare_fact(args: CompareFactArgs) -> ToolResult:
             ok=False,
             summary=(
                 f"Missing {args.tag} for {args.ticker} in {missing}{tried}."
+                f"{_unknown_tag_hint(tags)}"
                 if missing
                 else f"{args.tag} for {args.ticker} is reported under different tags in "
                 f"FY{args.year_a} and FY{args.year_b}{tried}, so there is no "
@@ -450,6 +468,15 @@ def tool_catalogue() -> str:
             for k, v in props.items()
         )
         lines.append(f"- {name}({fields})\n    {spec['description']}")
+    # The model sees names and types, not field descriptions, so without this
+    # line it had to recall XBRL tag names: in the 6 Oct golden-set run with the
+    # citation fix, 55 of 217 fact calls (49 questions) named a tag no fact
+    # carries.
+    lines.append(
+        f"XBRL tags the fact tools hold (get_fact, compare_fact, compute_ratio): "
+        f"{_held_tags()}. The word 'revenue' resolves to the revenue tag the "
+        "company reports."
+    )
     return "\n".join(lines)
 
 

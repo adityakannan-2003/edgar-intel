@@ -56,10 +56,20 @@ jobs:
         run: edgar-intel fixture load --path tests/fixtures/mini_corpus.json
       - name: Build the index
         run: edgar-intel index build --strategy section_aware
+      # Built here rather than committed: its evidence labels are chunk ids, and
+      # only a set linked against this index can be trusted to point at the
+      # right chunks. The questions and answers come from the fixture's facts,
+      # and the gate checks they are the exam the baseline was measured on.
+      # Numeric only: narrative cases need hand-written references, and the
+      # fixture's companies have none.
+      - name: Build the golden set from the fixture
+        run: edgar-intel eval build --narrative 0
       - name: Run the evaluation suite
         run: edgar-intel eval run --label "ci-${{ github.sha }}" --git-sha "${{ github.sha }}"
+      # Against a committed baseline: this database started empty, so no
+      # earlier run exists to compare with. See docs/METRICS.md §4 to regenerate.
       - name: Fail on regression greater than 3 points
-        run: edgar-intel eval gate --max-regression 0.03
+        run: edgar-intel eval gate --max-regression 0.03 --baseline-file tests/fixtures/ci_baseline.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:

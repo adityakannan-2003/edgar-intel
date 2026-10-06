@@ -578,14 +578,56 @@ def eval_run(
 def eval_gate(
     max_regression: float = typer.Option(0.03),
     baseline_label: str = typer.Option(""),
+    baseline_file: str = typer.Option(
+        "",
+        help="Compare with a committed baseline instead of a database run. CI uses "
+        "this: its database starts empty, so a database baseline never exists there.",
+    ),
+    path: str = typer.Option(
+        "evalset/golden.json",
+        help="The golden set the run graded; with --baseline-file it must be the "
+        "exam the baseline was measured on.",
+    ),
 ) -> None:
     """Fail the build if quality regressed beyond tolerance."""
     from .evals.report import gate
 
-    result = gate(max_regression, baseline_label or None)
+    result = gate(
+        max_regression,
+        baseline_label or None,
+        baseline_file=baseline_file or None,
+        golden_path=path,
+    )
     console.print(result.render())
     if not result.passed:
         raise typer.Exit(1)
+
+
+@eval_app.command("save-baseline")
+def eval_save_baseline(
+    run_key: str = typer.Argument(..., help="A finished run, e.g. ci-local-a9080ce9."),
+    out: str = typer.Option("tests/fixtures/ci_baseline.json"),
+    path: str = typer.Option("evalset/golden.json", help="The golden set that run graded."),
+) -> None:
+    """Record a run as the reference `eval gate --baseline-file` compares with.
+
+    Regenerate the CI baseline only when a change is meant to move its numbers,
+    and say so in the commit: the diff of this file is the regression the PR
+    is choosing to accept.
+    """
+    from .evals.report import save_baseline
+
+    try:
+        payload = save_baseline(run_key, path, out)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from exc
+    s = payload["summary"]
+    console.print(
+        f"[green]baseline written to {out}[/green]: {payload['golden']['n_cases']} cases, "
+        f"numeric_accuracy {s.get('numeric_accuracy')}, "
+        f"recall@5 {s.get('retrieval', {}).get('recall@5')}"
+    )
 
 
 @eval_app.command("regrade")

@@ -1,0 +1,43 @@
+{
+  "about": "Reference for `edgar-intel eval gate --baseline-file`. Regenerate it only when a change is meant to move these numbers; see docs/METRICS.md §4.",
+  "run_key": "ci-baseline-340250fb",
+  "git_sha": "7d6f778",
+  "golden": {
+    "n_cases": 24,
+    "sha256": "076be76350bc4d43"
+  },
+  "summary": {
+    "n_cases": 24,
+    "numeric_accuracy": 0.1667,
+    "narrative_pass_rate": 0.0,
+    "overall_score": 0.1667,
+    "abstention_rate": 0.0,
+    "hallucination_rate": 0.8333,
+    "retrieval": {
+      "mrr": 0.875,
+      "hit@1": 0.75,
+      "hit@3": 1.0,
+      "hit@5": 1.0,
+      "hit@10": 1.0,
+      "hit@20": 1.0,
+      "ndcg@1": 0.75,
+      "ndcg@3": 0.8026,
+      "ndcg@5": 0.8026,
+      "ndcg@10": 0.8026,
+      "ndcg@20": 0.8026,
+      "recall@1": 0.6667,
+      "recall@3": 0.8333,
+      "recall@5": 0.8333,
+      "recall@10": 0.8333,
+      "recall@20": 0.8333,
+      "n_relevant": 1.3333,
+      "precision@1": 0.75,
+      "precision@3": 0.3333,
+      "precision@5": 0.25,
+      "n_candidates": 4.0,
+      "precision@10": 0.25,
+      "precision@20": 0.25,
+      "first_hit_rank": 1.25
+    }
+  }
+}

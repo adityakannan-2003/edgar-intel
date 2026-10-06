@@ -366,34 +366,72 @@ identical runs, with 2 pairs flagged unstable.
 **Produce it**
 
 ```bash
-edgar-intel eval gate --max-regression 0.03
+edgar-intel eval gate --max-regression 0.03                       # against a database run
+edgar-intel eval gate --max-regression 0.03 \
+    --baseline-file tests/fixtures/ci_baseline.json               # what CI runs
 ```
 
-**Status: built, never yet caught anything, and not yet passing in CI. Do not
-claim a catch count, and do not call it a CI gate until the job passes *and*
-compares against something.**
+**Status: running in CI since 5 Oct, against a committed baseline. It has never
+caught a real regression. Do not claim a catch count.**
 
-> ⚠️ As of 5 Oct, the `test` job is green: the 16 ruff findings that stopped it
-> at lint are fixed (`f83c0fc`). The `eval-gate` job now applies every migration
-> through `edgar-intel init` (`f186448`), so it gets past loading the fixture.
-> It still fails one step later, because `evalset/` is gitignored and the
-> checkout has no `golden.json` for `eval run` to load.
->
-> Supplying a golden set is not enough. `eval gate` compares the latest run
-> with the latest run labelled as the baseline. CI starts from an empty
-> database, so there is never a baseline, and the gate then passes with a
-> warning. A green job would compare nothing until CI is given a baseline of
-> its own for the fixture corpus.
+The `eval-gate` job loads the frozen fixture (two fictional companies, four
+10-Ks) and builds the index. It then builds a 24-case numeric golden set from
+the fixture's facts, runs the suite with deterministic fake providers, and
+compares overall score, numeric accuracy and recall@5 with
+`tests/fixtures/ci_baseline.json`. A drop of more than 0.03 on any of them
+fails the job. On 24 cases, one changed answer moves accuracy by 0.042, so a
+single regressed case is enough to fail it.
+
+It also fails, rather than passing, whenever the comparison would mean nothing:
+- the baseline file is missing or malformed;
+- the golden set is not the exam the baseline was measured on, which the
+  baseline records as a case count and a hash of every question and answer;
+- the run graded only part of the exam.
+
+Before this, CI's database started empty, no run labelled "baseline" ever
+existed there, and `eval gate` passed with a warning having compared nothing.
+
+**Verified, not caught:** re-running the fixture with `--top-n 1` instead of 8
+failed the gate on all three metrics (numeric accuracy 0.1667 → 0.0833, recall@5
+0.8333 → 0.6667). That shows the gate works. It is not a regression the gate
+found.
+
+**What it does not measure.** The fake model ignores the system prompt and
+extracts its answer from the passages it is given. So the gate measures
+retrieval, chunking, context assembly and grading. It does not measure how a
+real model responds to a prompt change, and its 0.1667 accuracy is not answer
+quality. Those numbers come from the paid baseline (§2).
+
+**Regenerate the baseline** only when a change is meant to move these numbers,
+and say so in the commit: the diff of the baseline file is the change being
+accepted. It must come from a fresh database, so that chunk ids match CI's:
+
+```bash
+docker run -d --rm --name edgar-ci -e POSTGRES_USER=edgar -e POSTGRES_PASSWORD=edgar \
+    -e POSTGRES_DB=edgar -p 5434:5432 pgvector/pgvector:pg16
+export EDGAR_DB_DSN=postgresql://edgar:edgar@localhost:5434/edgar \
+    EDGAR_LLM_PROVIDER=fake EDGAR_EMBED_PROVIDER=fake
+# Run this in a separate worktree, never the main checkout: `eval build` below
+# writes evalset/golden.json, which there is the real 232-case golden set.
+edgar-intel init
+edgar-intel fixture load --path tests/fixtures/mini_corpus.json
+edgar-intel index build --strategy section_aware
+edgar-intel eval build --narrative 0
+edgar-intel eval run --label ci-baseline --git-sha "$(git rev-parse --short HEAD)"
+edgar-intel eval save-baseline <run_key printed above>
+docker stop edgar-ci
+```
 
 **Bullet shape — usable now**
 
-> Wired the evaluation suite into a regression gate that blocks on any drop
-> above 3 points in overall score, numeric accuracy or recall@5, and a separate
-> judge-adoption gate that vetoes a new judge rubric on a single new false
-> negative regardless of its κ.
+> Wired the evaluation suite into a CI regression gate that blocks a merge on
+> any drop above 3 points in overall score, numeric accuracy or recall@5 against
+> a committed baseline, and refuses to compare at all when the exam has changed.
+> A separate judge-adoption gate vetoes a new judge rubric on a single new false
+> negative, regardless of its κ.
 
-Say "a gate command" rather than "CI" until the job above passes. The second
-clause is the better half and it *has* fired — it blocked v3_1.
+The second sentence is the better half, and that gate *has* fired: it blocked
+v3_1. The CI gate has not caught anything yet, so say "blocks", never "caught".
 
 ---
 
@@ -580,7 +618,7 @@ in the repo.
 | four-strategy chunking comparison | ⛔ **blocked** — the embedder-window test that isolates truncation has not run (§1) |
 | agent escalation rate | ❌ never measured — 2 manual traces, one of which found the revenue-tag bug |
 | concurrency / throughput sweep | ❌ needs a deployed instance |
-| regression gate in CI | ❌ `test` job green since 5 Oct; `eval-gate` fails at `eval run` (no golden set) and would have no baseline (§4); nothing caught yet |
+| regression gate in CI | ✅ running since 5 Oct against a committed baseline; fails on a deliberate regression; nothing caught yet (§4) |
 | LoRA fine-tune comparison | ❌ never run |
 | live URL | ❌ not deployed — see `docs/DEPLOY.md` |
 

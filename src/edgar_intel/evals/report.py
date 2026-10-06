@@ -16,10 +16,14 @@ Deliberate design choices:
   * It also fails when the judge's kappa falls below the floor, because at that
     point the narrative half of the score means nothing and passing on it would
     be passing on noise.
+  * In CI the baseline is a committed file, because the database starts empty.
+    The file records the exam it was measured on, and a run on any other exam
+    fails rather than being compared.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from typing import Any
@@ -46,8 +50,7 @@ class GateResult:
             )
         lines.append(f"  current:  {self.current.get('run_key')}")
         for metric, delta in sorted(self.deltas.items()):
-            arrow = "+" if delta >= 0 else ""
-            lines.append(f"    {metric:<22} {arrow}{delta:+.4f}")
+            lines.append(f"    {metric:<22} {delta:+.4f}")
         for reason in self.reasons:
             lines.append(f"  ! {reason}")
         return "\n".join(lines)
@@ -90,11 +93,131 @@ def _extract(summary: dict[str, Any], path: str) -> float | None:
     return float(value) if isinstance(value, (int, float)) else None
 
 
+# What a golden set asks and expects, not what it is graded against: evidence
+# labels are chunk ids, which change whenever the index is rebuilt, and notes
+# are working detail. Two sets with the same fingerprint are the same exam.
+_EXAM_FIELDS = ("case_id", "kind", "question", "expected", "expected_value", "unit")
+
+# The parts of a run summary a committed baseline keeps. Latency, cost, stage
+# timings and the config block depend on the machine and the moment, and would
+# make every regenerated baseline a noisy diff; the gate does not fail on them.
+_BASELINE_KEYS = (
+    "n_cases",
+    "numeric_accuracy",
+    "narrative_pass_rate",
+    "overall_score",
+    "abstention_rate",
+    "hallucination_rate",
+    "retrieval",
+)
+
+
+def golden_fingerprint(cases: list[Any]) -> dict[str, Any]:
+    """The exam's identity: its size and a hash of every question and answer."""
+    rows = sorted(
+        (
+            [c.get(f) if isinstance(c, dict) else getattr(c, f) for f in _EXAM_FIELDS]
+            for c in cases
+        ),
+        # Order-free, and never compares a None with a number.
+        key=lambda row: json.dumps(row, sort_keys=True),
+    )
+    digest = hashlib.sha256(json.dumps(rows, sort_keys=True).encode("utf-8")).hexdigest()
+    return {"n_cases": len(rows), "sha256": digest[:16]}
+
+
+def save_baseline(run_key: str, golden_path: str, out: str) -> dict[str, Any]:
+    """Write a finished run as the reference `gate(baseline_file=...)` reads.
+
+    Refuses a run that did not grade the whole golden set, because the baseline
+    would then describe a smaller exam than the one it is checked against.
+    """
+    from .goldenset import load
+
+    run = db.query_one(
+        "SELECT run_key, label, git_sha, summary FROM eval_runs WHERE run_key = %s",
+        (run_key,),
+    )
+    if not run:
+        raise ValueError(f"no run {run_key!r}")
+    summary = _summary(run)
+    exam = golden_fingerprint(load(golden_path))
+    if summary.get("n_cases") != exam["n_cases"]:
+        raise ValueError(
+            f"{run_key} graded {summary.get('n_cases')} cases; "
+            f"{golden_path} has {exam['n_cases']}"
+        )
+    payload = {
+        "about": (
+            "Reference for `edgar-intel eval gate --baseline-file`. Regenerate it "
+            "only when a change is meant to move these numbers; see docs/METRICS.md §4."
+        ),
+        "run_key": run["run_key"],
+        "git_sha": run["git_sha"],
+        "golden": exam,
+        "summary": {k: summary[k] for k in _BASELINE_KEYS if k in summary},
+    }
+    retrieval = payload["summary"].get("retrieval")
+    if isinstance(retrieval, dict):
+        payload["summary"]["retrieval"] = {
+            k: v for k, v in retrieval.items() if not k.endswith("_ms")
+        }
+    with open(out, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, indent=2, ensure_ascii=False)
+        fh.write("\n")
+    return payload
+
+
+def _baseline_from_file(
+    path: str, golden_path: str, current: dict[str, Any]
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """The committed baseline, and any reason it cannot be compared with."""
+    from .goldenset import load
+
+    try:
+        with open(path, encoding="utf-8") as fh:
+            ref = json.load(fh)
+        recorded = ref["golden"]
+        baseline = dict(ref["summary"])
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return None, [f"baseline file {path} is unusable: {exc}"]
+    baseline["run_key"] = ref.get("run_key")
+    baseline["label"] = path
+
+    try:
+        exam = golden_fingerprint(load(golden_path))
+    except (OSError, ValueError, TypeError) as exc:
+        return None, [f"golden set {golden_path} is unusable: {exc}"]
+    problems = []
+    if exam != recorded:
+        problems.append(
+            f"{golden_path} is not the exam the baseline was measured on "
+            f"({exam['n_cases']} cases, {exam['sha256']} vs "
+            f"{recorded.get('n_cases')} cases, {recorded.get('sha256')}). If the "
+            "change is intended, regenerate the baseline (docs/METRICS.md §4)"
+        )
+    if current.get("n_cases") != exam["n_cases"]:
+        problems.append(
+            f"the run graded {current.get('n_cases')} cases; "
+            f"{golden_path} has {exam['n_cases']}"
+        )
+    return baseline, problems
+
+
 def gate(
     max_regression: float = 0.03,
     baseline_label: str | None = None,
     current_run_key: str | None = None,
+    baseline_file: str | None = None,
+    golden_path: str = "evalset/golden.json",
 ) -> GateResult:
+    """Compare the latest run with a baseline.
+
+    The baseline is the latest database run carrying `baseline_label`, or, with
+    `baseline_file`, a committed summary. CI uses the file: its database starts
+    empty every time, so a database baseline never exists there, and the gate
+    would pass having compared nothing.
+    """
     s = get_settings()
     baseline_label = baseline_label or s.eval_baseline_label
 
@@ -112,33 +235,46 @@ def gate(
     current = _summary(current_run)
     current["run_key"] = current_run["run_key"]
 
-    baseline_run = latest_run(baseline_label)
-    if baseline_run and baseline_run["run_key"] == current_run["run_key"]:
-        baseline_run = None
-
     reasons: list[str] = []
+    blocking: list[str] = []
     deltas: dict[str, float] = {}
+
+    def block(reason: str) -> None:
+        reasons.append(reason)
+        blocking.append(reason)
 
     kappa = current.get("judge_kappa")
     if kappa is not None and kappa < KAPPA_FLOOR:
-        reasons.append(
+        block(
             f"judge kappa {kappa:.2f} is below the {KAPPA_FLOOR:.2f} floor; "
             "narrative scores are not trustworthy"
         )
 
-    if not baseline_run:
-        # First run, or no baseline recorded yet. Not a failure -- but say so,
-        # because a gate that silently passes when it has nothing to compare
-        # against is worse than no gate.
-        reasons.append(
-            f"no prior run labelled '{baseline_label}' to compare against; "
-            "recording this run as the reference"
-        )
-        return GateResult(not reasons[:-1], reasons, current, None, {})
-
-    baseline = _summary(baseline_run)
-    baseline["run_key"] = baseline_run["run_key"]
-    baseline["label"] = baseline_run["label"]
+    if baseline_file:
+        # A file that is missing, malformed, or describes another exam fails
+        # the gate. Passing there would be the silent pass this mode exists to
+        # remove.
+        baseline, problems = _baseline_from_file(baseline_file, golden_path, current)
+        for problem in problems:
+            block(problem)
+        if baseline is None or problems:
+            return GateResult(False, reasons, current, baseline, {})
+    else:
+        baseline_run = latest_run(baseline_label)
+        if baseline_run and baseline_run["run_key"] == current_run["run_key"]:
+            baseline_run = None
+        if not baseline_run:
+            # First run, or no baseline recorded yet. Not a failure -- but say
+            # so, because a gate that silently passes when it has nothing to
+            # compare against is worse than no gate.
+            reasons.append(
+                f"no prior run labelled '{baseline_label}' to compare against; "
+                "recording this run as the reference"
+            )
+            return GateResult(not blocking, reasons, current, None, {})
+        baseline = _summary(baseline_run)
+        baseline["run_key"] = baseline_run["run_key"]
+        baseline["label"] = baseline_run["label"]
 
     for path, name in GATED_METRICS:
         cur = _extract(current, path)
@@ -148,7 +284,7 @@ def gate(
         delta = cur - base
         deltas[name] = round(delta, 4)
         if delta < -max_regression:
-            reasons.append(
+            block(
                 f"{name} regressed by {abs(delta):.4f} "
                 f"({base:.4f} -> {cur:.4f}), tolerance is {max_regression:.4f}"
             )
@@ -161,8 +297,7 @@ def gate(
         if isinstance(cur, (int, float)) and isinstance(base, (int, float)) and base:
             deltas[key] = round((cur - base) / base, 4)
 
-    hard_failures = [r for r in reasons if "regressed" in r or "kappa" in r]
-    return GateResult(not hard_failures, reasons, current, baseline, deltas)
+    return GateResult(not blocking, reasons, current, baseline, deltas)
 
 
 def compare_runs(run_keys: list[str]) -> list[dict[str, Any]]:

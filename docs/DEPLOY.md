@@ -78,8 +78,10 @@ numbers from a corpus the instance is no longer serving.
   `agent_traces`, which still holds only 2 manual runs from 28 Sep. A few
   `edgar-intel agent ask "…"` calls against the local database cost cents and
   leave traces that the copy then carries to `/stats/agent`. Deploy at or after
-  `c9f74a5`: before `c4a7424` a citation-format bug escalated 48% of questions,
-  and `c9f74a5` adds the tag vocabulary (0.7115 → 0.8317 on the golden set).
+  `b79a49f`: before `c4a7424` a citation-format bug escalated 48% of questions,
+  `c9f74a5` adds the tag vocabulary and `b79a49f` the date line (0.7115 →
+  0.8317 → 0.9615 on the golden set; `docs/METRICS.md` §6 says how to read
+  those).
 - **Record no evaluation run after the one you mean to publish.** `/stats/eval`
   serves the most recently *finished* retrieve-then-answer run — today
   `exp-prompt-conventions-c0f6e105`, the reference run in `docs/METRICS.md`.

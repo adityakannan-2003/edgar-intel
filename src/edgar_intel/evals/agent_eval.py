@@ -38,7 +38,7 @@ from collections import Counter
 from typing import Any
 
 from .. import db
-from ..agent.loop import AgentRun, run_agent
+from ..agent.loop import AgentRun, prompt_date, run_agent
 from ..agent.tools import SearchFilingsArgs
 from ..config import get_settings
 from .evidence import index_shape
@@ -82,6 +82,9 @@ def agent_config(persist_traces: bool = False) -> dict[str, Any]:
         "agent_confidence_floor": s.agent_confidence_floor,
         "agent_max_tool_output_chars": s.agent_max_tool_output_chars,
         "agent_cost_ceiling_usd": AGENT_COST_CEILING_USD,
+        # The system prompt states today's date, so a re-run on another day is
+        # a different prompt. Recorded as of the start of the run.
+        "agent_prompt_date": prompt_date(),
         # What `search_filings` runs with. The model chooses top_n per call;
         # the schema default applies when it does not.
         "search": {

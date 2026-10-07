@@ -28,6 +28,7 @@ import json
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
+from datetime import date
 from typing import Any
 
 from .. import db
@@ -43,7 +44,14 @@ from .guardrails import (
 )
 from .tools import TOOLS, call_tool, tool_catalogue
 
+# The date line is there because the model's own sense of the date is earlier
+# than the corpus. In the golden-set run with the tag vocabulary, 21 of 29
+# escalations were FY2025-26 figures it called "not yet reported", although
+# list_coverage listed those 10-Ks. A rule telling it to ignore its sense of the
+# date backfired (docs/METRICS.md §6); this states the date instead.
 SYSTEM_PROMPT = """You answer questions about SEC filings by calling tools.
+
+Today's date is {today}.
 
 Available tools:
 {catalogue}
@@ -141,6 +149,11 @@ class AgentRun:
         return "\n".join(lines)
 
 
+def prompt_date() -> str:
+    """Today's date as the system prompt states it."""
+    return date.today().isoformat()
+
+
 def run_agent(
     question: str,
     max_steps: int | None = None,
@@ -187,7 +200,9 @@ def run_agent(
     tool_outputs: list[str] = []
     retries = 0
 
-    system = SYSTEM_PROMPT.format(catalogue=tool_catalogue(), max_steps=max_steps)
+    system = SYSTEM_PROMPT.format(
+        catalogue=tool_catalogue(), max_steps=max_steps, today=prompt_date()
+    )
 
     for step_n in range(1, max_steps + 1):
         prompt = "\n\n".join(transcript) + "\n\nNext action (JSON only):"

@@ -22,6 +22,7 @@ on the ones that have not been.
 | Pre-rebuild reference | `baseline-v6-no-rerank-7362c6c7`, 26 Sep, `cc0a69c`, on the pre-rebuild set (archived locally as `evalset/golden-baseline-v6.json`). Same config as v7. It graded a different exam, and §2 shows exactly where the two differ. |
 | Rerank control | `baseline-v6-rerank-8d0eb06a`: v6's config with `use_rerank=true`, on the v6 set. Not re-run on the v7 set. |
 | Re-grade of an earlier reference | `reports/regrade-baseline-v5-2943b37a.json`: `baseline-v5`'s stored answers re-marked by the fixed grader, no model calls |
+| Re-grades for the abstention pattern | `reports/regrade-<run_key>.json` for the reference and the seven §6 agent runs, grader `6e3aab1`, no model calls (§6 caveats) |
 | Set | 232 cases — 160 numeric single-hop · 48 numeric comparative · 24 narrative. Rebuilt 5 Oct with the D12–D14 fixes, then re-linked for D15 the same day (labels only; the exam is unchanged), 231 with linked evidence |
 | Corpus | 8 companies (AAPL CAT COST JNJ MSFT NVDA PG UNH), **24 10-K filings**, FY2023–FY2026 · 264 sections · 1,363 XBRL facts (1,338 before the D13 refresh) · 23,499 chunks across four strategies, all embedded — `section_aware` 5,468 is the evaluated and served index. (A 32,171-chunk `section_aware_t144` experiment also exists locally; it is not shipped — §1.) |
 | Config | `section_aware` · `hybrid` · `use_rerank=false` · `k=50` · `top_n=8` · `gpt-4o-mini` · MiniLM-L6-v2 (384-d) · `rrf_k=60` · `numeric_tolerance=0.005` · `context_max_chars=20000` · answering prompt at `bee5dc0` · judge contract `v2`, shown the source context |
@@ -605,6 +606,13 @@ relevant chunks rather than all of them. Quote the direction, not the decimal.
   read 0.1587 / 0.2212 as graded and 0.1587 / 0.0865 re-graded, because every
   D2 answer had been sitting in the hallucination bucket. Both defects inflated
   "hallucination" with correct answers.
+  Re-graded with the wider abstention pattern (`6e3aab1`, §6 caveats), the
+  reference does not move: no answer changes bucket, so 0.0865 / 0.0529 stands.
+  Two of its 11 "wrong" answers are refusals on reading. Both say the figure
+  "is not explicitly stated in the provided context". The pattern leaves that
+  phrase out on purpose, because UNH's FY2023 operating-income answer opens
+  with the same words and then gives the right figure. Counted by hand, the
+  split would be 0.0962 / 0.0433. That is a reading, not the grader's figure.
 - `hit@5` 0.7619, so roughly a quarter of cases have no relevant evidence in the
   top 5 — which is where the abstentions live.
 
@@ -788,7 +796,7 @@ that copies the id from the tool output.
 | escalated | — | 112 (48.3%) | 52 (22.4%) | **29 (12.5%)** |
 | not answered (escalated or step ceiling) | — | 115 | 53 | 29 |
 | numeric answers that were right | 179 of 190 (0.942) | 86 of 98 (0.878) | 148 of 159 (0.931) | 173 of 183 (0.945) |
-| abstention / hallucination (numeric) | 0.087 / 0.053 | 0.543 / 0.043 | 0.255 / 0.034 | 0.130 / 0.038 |
+| abstention / hallucination (numeric) | 0.087 / 0.053 | 0.543 / 0.043 | 0.255 / 0.034 | 0.135 / 0.034 re-graded (0.130 / 0.038 as run) |
 | the three NCI net-income cases | 0/3 | 2/3 | 3/3 | 3/3 |
 | mean model calls per question | 1 | 3.76 | 2.68 | 2.22 |
 | mean prompt tokens per question | 4,996 | 2,824 | 2,029 | 1,656 |
@@ -819,7 +827,7 @@ twice with nothing changed:
 | numeric accuracy | 0.7115 (148/208) | 0.7067 (147/208) |
 | single-hop / comparative | 118 / 30 | 116 / 31 |
 | escalated | 52 | 52 |
-| wrong numeric answers | 7 | 10 |
+| wrong numeric answers | 7 | 10 (9 re-graded) |
 | the three NCI cases | 3/3 | 3/3 |
 | cost · p50 / p95 | $0.098 · 3.6 / 9.3 s | $0.100 · 3.4 / 7.6 s |
 
@@ -841,7 +849,7 @@ moves as predicted (`reports/agent-fix-predictions-20261006.json`, 22:43 UTC).
 | numeric accuracy | 148 | 147 | **173** | 141 |
 | single-hop / comparative | 118 / 30 | 116 / 31 | 128 / **45** | 111 / 30 |
 | escalated | 52 | 52 | **29** | 45 |
-| wrong numeric answers | 7 | 10 | 8 | 20, of which 16 are refusals |
+| wrong numeric answers, as run (re-graded) | 7 (7) | 10 (9) | 8 (7) | 20 (4): 16 were refusals |
 | fact calls naming a tag no fact carries | 55 of 217 | 60 of 219 | **0 of 186** | 55 of 212 |
 | FY2025 / FY2026 questions not answered | 28 / 7 | 24 / 10 | 15 / 7 | 17 / 5 |
 | cost · p50 / p95 | $0.098 · 3.6 / 9.3 s | $0.100 · 3.4 / 7.6 s | $0.079 · 2.6 / 4.5 s | $0.093 · 3.3 / 5.8 s |
@@ -862,13 +870,18 @@ moves as predicted (`reports/agent-fix-predictions-20261006.json`, 22:43 UTC).
   mostly because it now answered "X has not reported FY2025 yet". Answers
   claiming a year is unavailable rose from 23 and 20 in the baselines to 37,
   and accuracy fell 6–7 cases below them. Saying the date may work where arguing with the
-  model's sense of it did not. That is untested.
+  model's sense of it did not. That is untested. The rule was applied with the
+  grader of the day. Re-graded, 16 of the calendar run's 20 wrong answers are
+  refusals, which leaves 4 and passes the wrong-answer test. The run still fails
+  on accuracy (141 against 152), so the decision stands.
 
 **Against retrieve-then-answer, the current agent trails by 6 cases, all in
 declining.** 173 of its 183 numeric answers were right (0.945, against
-0.942). It passes 23 of the reference's 29 numeric failures, declines 5 and gets
-1 wrong. Numeric flips are +23 / −29. It declines 27 numeric questions against
-the reference's 18. 25 of its 29 escalations are the model's own choice. 21 of
+0.942). It passes 23 of the reference's 29 numeric failures and declines the
+other 6. As run, one of those six counted as wrong: "Total assets for fiscal
+year 2026 are not available", a refusal the old pattern missed. Numeric flips
+are +23 / −29. It declines 28 numeric questions (27 as run) against the
+reference's 18. 25 of its 29 escalations are the model's own choice. 21 of
 those are FY2025–26 figure questions it calls not yet reported, and 4 are
 narrative questions: **the calendar problem is now most of the gap.**
 
@@ -931,13 +944,22 @@ $0.098, 3.6 s and 9.3 s.
   of failures that pass by chance.
 - The narrative judge is uncalibrated (κ 0.42, §3), so none of the narrative
   counts is usable.
-- **The abstention pattern misses some refusals.** "has not been reported",
-  "are not available" and "has not reported ... yet" are not recognised, so such
-  answers count as wrong figures rather than abstentions: 1 in the
-  tag-vocabulary run and 16 in the calendar run. Accuracy is unaffected, because
-  both fail. The abstention/hallucination split is overstated on the
-  hallucination side, on both pipelines.
-- **Four of the current agent's 8 wrong answers are a data quirk.** JNJ files
+- **The abstention pattern missed the agent's refusals; fixed in `6e3aab1`
+  and re-graded with no model calls.** "has not reported ... yet", "has not been
+  reported", "are not available" and "has not yet been filed" were counted as
+  wrong figures. `eval regrade` re-marked the reference and all seven agent
+  runs above. No verdict flipped, and every stored split that has a summary to
+  check matches it. Only the bucket moved: 1 answer in the tag-vocabulary run,
+  16 in the calendar run and 1 in re-run C. The reference is unchanged. Across
+  all 4,976 stored numeric answers, the new phrases match 34, all failures and
+  none a pass. On retrieve-then-answer they match a single refusal, in
+  `fixed_d9`, whose split this document does not quote. Accuracy cannot move,
+  since both buckets fail. Two refusals in the reference remain counted as
+  wrong, deliberately (§5). One asymmetry remains. The "numeric answers that were right" row counts
+  an agent run that answered with a refusal as an answer, while the reference
+  excludes its abstentions. On the reference's definition, the current agent is
+  173 of 180, not 173 of 183.
+- **Four of the current agent's 7 wrong answers (8 as run) are a data quirk.** JNJ files
   0, 0, $483M, $1.84B and $109M under the generic
   `ResearchAndDevelopmentExpense` tag, which looks like acquired in-process
   R&D. Its R&D totals are under the "Excluding" tag. The agent picks the generic
@@ -1083,7 +1105,7 @@ in the repo.
 | hit@5 0.762 / MRR 0.555, and the 0.204 ceiling gap (re-measured on the rebuilt labels) | ✅ measured |
 | recall@5 0.408 / nDCG@10 0.429, every label reachable (D15 fixed: was 0.320 / 0.367) | ✅ measured, free sweep |
 | reranker off on a single-variable run: +542 ms p50 for no gain | ✅ measured on the v6 set; the free sweep agrees on v7 labels |
-| abstention 0.087 vs hallucination 0.053, split | ✅ measured; hallucination's drop from v6's 0.096 is the corrected key, abstention's from v7's 0.173 is the cap fix |
+| abstention 0.087 vs hallucination 0.053, split | ✅ measured; hallucination's drop from v6's 0.096 is the corrected key, abstention's from v7's 0.173 is the cap fix; unchanged by the `6e3aab1` re-grade |
 | most remaining failures never had the figure in the model's context (24 of 29 numeric) | ✅ measured on the reference run, by context search; quote the direction |
 | corpus: 8 companies, 24 10-K filings, 264 sections, 23,499 chunks, 1,363 XBRL facts | ✅ measured |
 | p50 ≈ 1.0–1.2 s / p95 ≈ 2.4–2.9 s, $0.78 per 1k — local, two clean runs | ✅ measured |

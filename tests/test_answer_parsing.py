@@ -105,6 +105,66 @@ class TestAbstention:
     def test_a_real_answer_is_not_an_abstention(self, answer):
         assert not is_abstention(answer)
 
+    @pytest.mark.parametrize(
+        "answer",
+        [
+            # Answers the agent gave in `agent-calendar-393d6b00` and
+            # `agent-tag-vocabulary-13ce6702`, each once counted as a wrong figure.
+            "COSTCO WHOLESALE CORP /NEW has not reported total assets for FY2025.",
+            "NVIDIA CORP has not reported total revenue for FY2026 yet.",
+            "Apple Inc. has not reported FY2025 financials yet.",
+            "Total revenue for JOHNSON & JOHNSON in FY2025 has not been reported yet.",
+            "Total revenue for FY2026 has not been reported.",
+            "Total liabilities for fiscal year 2025 are not available.",
+            "Total assets for fiscal year 2026 are not available.",
+            "Apple Inc. did not report diluted earnings per share for FY2025 as it "
+            "has not yet filed the relevant financial documents.",
+            "ESCALATED: FY2025 10-K for CATERPILLAR INC has not been filed yet.",
+            "The FY2025 figures have not yet been filed.",
+            "Revenue for FY2026 is not yet reported.",
+        ],
+    )
+    def test_the_agents_refusals_are_recognised(self, answer):
+        assert is_abstention(answer)
+
+    @pytest.mark.parametrize(
+        "answer",
+        [
+            # Passed in eight stored runs, `exp-prompt-conventions-c0f6e105` among
+            # them: the hedge comes first and the right figure follows. Matching
+            # "not explicitly stated in the provided context" would fail it.
+            "The operating income for UnitedHealth Group in FY2023 is not explicitly "
+            "stated in the provided context. However, the earnings from operations, "
+            "which is a close measure, is reported as $32,358 million for 2023.",
+            "Total liabilities were $70,345 million at the end of fiscal 2024.",
+            "Net income was $14,879 million; the company reported $15,974 million "
+            "the following year.",
+        ],
+    )
+    def test_a_figure_beside_a_hedge_is_not_an_abstention(self, answer):
+        assert not is_abstention(answer)
+
+    def test_a_not_yet_reported_answer_is_an_abstention_not_a_hallucination(self):
+        """Both fail; the split between them is what moves."""
+        from edgar_intel.evals.judge import build_result
+        from edgar_intel.evals.schemas import EvalCase
+
+        case = EvalCase(
+            case_id="num-COST-Assets-2025",
+            kind="numeric",
+            question="How much total assets did COSTCO WHOLESALE CORP /NEW report in FY2025?",
+            expected="$77.10 billion",
+            expected_value=77_099_000_000,
+            unit="USD",
+        )
+        result = build_result(
+            case, "COSTCO WHOLESALE CORP /NEW has not reported total assets for FY2025.",
+            {}, 0, 0, 0,
+        )
+        assert result.passed is False
+        assert result.abstained is True
+        assert result.judge_rationale.startswith("ABSTAINED")
+
     def test_abstention_short_circuits_numeric_grading(self):
         """Otherwise the refusal's own words get parsed as the answer."""
         from edgar_intel.evals.judge import grade_numeric

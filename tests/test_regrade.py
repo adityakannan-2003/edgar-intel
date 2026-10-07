@@ -103,6 +103,67 @@ class TestRegradeRows:
         assert out["by_difficulty"]["comparative"] == {"cases": 1, "before": 0, "after": 1}
 
 
+class TestTheAbstentionSplit:
+    """A change to the abstention pattern moves failures between buckets
+    without moving accuracy. "Before" has to be what the run recorded, or the
+    move is invisible: both sides would be classified by the new pattern."""
+
+    @staticmethod
+    def _refusal_rows() -> list[dict]:
+        return [
+            {"case_id": "num-CAT-Cash", "passed": False,
+             "answer": "CATERPILLAR INC has not reported cash for FY2025 yet.",
+             "expected": "$6.89 billion",
+             "judge_rationale": "no number found in the answer"},
+        ]
+
+    def test_a_refusal_the_old_pattern_missed_moves_from_wrong_to_abstained(self):
+        out = regrade_rows(self._refusal_rows(), _cases(), tolerance=0.005)
+        assert out["before"]["wrong"] == 1 and out["before"]["abstained"] == 0
+        assert out["after"]["wrong"] == 0 and out["after"]["abstained"] == 1
+        assert out["before"]["numeric_accuracy"] == out["after"]["numeric_accuracy"] == 0.0
+        assert [(r["case_id"], r["before"], r["after"]) for r in out["reclassified"]] == [
+            ("num-CAT-Cash", "wrong", "abstained")
+        ]
+
+    def test_the_stored_rationale_decides_before(self):
+        out = regrade_rows(_rows(), _cases(), tolerance=0.005)
+        assert out["reclassified"] == []
+        assert out["before"]["abstained"] == 1
+
+
+class TestAgentRuns:
+    """`eval agent` grades only what /ask returns. A declined question is stored
+    with the escalation text, and a held-back draft in it can carry the right
+    figure; re-marking it would pass what the run correctly refused to count."""
+
+    @staticmethod
+    def _agent_rows() -> list[dict]:
+        return [
+            {"case_id": "num-CAT-Rev", "passed": False,
+             "answer": "Low confidence (0.40). Draft answer, needs review: "
+                       "Revenue was $64,809 million.",
+             "expected": "$64.81 billion",
+             "judge_rationale": "NOT ANSWERED: the agent's outcome was 'escalated'",
+             "agent": {"outcome": "escalated"}},
+            {"case_id": "num-CAT-Cash", "passed": False,
+             "answer": "Total cash for fiscal year 2025 is not yet reported.",
+             "expected": "$6.89 billion",
+             "judge_rationale": "no number found in the answer",
+             "agent": '{"outcome": "answered"}'},
+        ]
+
+    def test_a_declined_question_keeps_its_verdict(self):
+        out = regrade_rows(self._agent_rows(), _cases(), tolerance=0.005)
+        assert out["fail_to_pass"] == []
+        assert out["held_as_declined"] == 1
+        assert out["before"]["abstained"] == 1 and out["after"]["abstained"] == 2
+
+    def test_an_answered_question_is_re_marked(self):
+        out = regrade_rows(self._agent_rows(), _cases(), tolerance=0.005)
+        assert [r["case_id"] for r in out["reclassified"]] == ["num-CAT-Cash"]
+
+
 class TestFailureAttribution:
     """"62% of failures are retrieval misses" is a headline claim, and D2's false
     failures sat in the other bucket. The re-marked run is attributed by the
@@ -188,6 +249,25 @@ class TestRegradeRun:
             "baseline-v5-x", list(_cases().values()), out_path=str(tmp_path / "r.json")
         )
         assert payload["stored_verdicts_reproduce_report"] is False
+
+    def test_the_stored_split_is_checked_against_the_report(self, tmp_path, monkeypatch):
+        from edgar_intel.evals.regrade import regrade_run
+
+        # _rows(): 3 graded, one abstention, one wrong figure.
+        summary = {"numeric_accuracy": 0.3333,
+                   "abstention_rate": 0.3333, "hallucination_rate": 0.3333}
+        self._db(monkeypatch, {"numeric_tolerance": 0.005}, summary)
+        payload = regrade_run(
+            "baseline-v5-x", list(_cases().values()), out_path=str(tmp_path / "a.json")
+        )
+        assert payload["stored_split_reproduces_report"] is True
+
+        self._db(monkeypatch, {"numeric_tolerance": 0.005},
+                 {**summary, "hallucination_rate": 0.0})
+        payload = regrade_run(
+            "baseline-v5-x", list(_cases().values()), out_path=str(tmp_path / "b.json")
+        )
+        assert payload["stored_split_reproduces_report"] is False
 
     def test_it_refuses_to_overwrite(self, tmp_path, monkeypatch):
         from edgar_intel.evals.regrade import regrade_run

@@ -126,12 +126,22 @@ def _to_float(raw: str) -> float | None:
 # An answer that declines to answer. The system prompt explicitly asks for this
 # when the context lacks the evidence, so it is the behaviour we designed for --
 # and it must never be scored as if the model invented a figure.
+#
+# The agent declines in its own words: "X has not reported FY2025 yet", "Total
+# liabilities for fiscal year 2026 are not available". Those were counted as
+# wrong figures until 6 Oct 2026. Every phrase below was checked against all
+# 4,976 numeric answers stored then: it matched 34, all failures, and no pass.
+# "not explicitly stated in the provided context" is deliberately absent: UNH's
+# FY2023 operating-income answer opens with it, then gives the right figure.
 _ABSTENTION = re.compile(
     r"\b(?:does not (?:provide|contain|include|specify|mention)"
     r"|do not (?:provide|contain|include|specify|mention)"
     r"|is not (?:provided|available|specified|mentioned|included)"
+    r"|are not (?:provided|available|specified|mentioned)"
     r"|no (?:information|data|figure|mention)"
     r"|not (?:stated|disclosed|available|specified) in the (?:context|passages?|filing)"
+    r"|(?:has|have) not (?:yet )?(?:been )?(?:reported|filed)"
+    r"|not yet (?:been )?(?:reported|filed|available)"
     r"|cannot (?:be )?(?:determine|determined|answer|be answered)"
     r"|unable to (?:determine|answer))\b",
     re.I,

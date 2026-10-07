@@ -730,9 +730,15 @@ def eval_regrade(
             {"": "current grader", **{k: a[k] for k in ("numeric_accuracy", "abstention_rate", "hallucination_rate")}},
         ],
     )
+    moved = payload["reclassified"]
     console.print(
         f"fail -> pass: {len(payload['fail_to_pass'])}   "
         f"pass -> fail: {len(payload['pass_to_fail'])}   skipped: {payload['skipped']}"
+    )
+    console.print(
+        f"wrong -> abstained: {sum(1 for r in moved if r['after'] == 'abstained')}   "
+        f"abstained -> wrong: {sum(1 for r in moved if r['after'] == 'wrong')}   "
+        f"agent declines held at their verdict: {payload['held_as_declined']}"
     )
     fa = payload["failure_attribution"]
     console.print(
@@ -745,6 +751,11 @@ def eval_regrade(
             f"[red]stored verdicts give {b['numeric_accuracy']} but the run reported "
             f"{payload['reported_numeric_accuracy']} -- these rows are not the run the "
             f"report describes; do not quote the delta.[/red]"
+        )
+    if payload["stored_split_reproduces_report"] is False:
+        console.print(
+            "[red]the abstention / hallucination split read from the stored rationales "
+            "does not match the run's summary; do not quote the split's delta.[/red]"
         )
     if payload["pass_to_fail"]:
         console.print("[yellow]answers that passed before and fail now -- read them:[/yellow]")

@@ -13,6 +13,13 @@ stored is skipped and counted, never re-graded against the new expectation.
 The run's own numeric tolerance is used, so the grader code is the only thing
 that varies.
 
+"Before" is what the run recorded, not the old verdict recomputed. Whether a
+failure was an abstention is read from the stored rationale, so a change to the
+abstention pattern shows up as answers moving between the two buckets. On an
+agent run (`eval agent`), a question the agent declined keeps its recorded
+verdict: the stored text is the escalation, sometimes with a held-back draft
+the numeric grader would pass, and only what `/ask` returns is graded.
+
 Read-only: the run's rows are the historical record and stay as they were.
 """
 
@@ -30,6 +37,25 @@ from .schemas import EvalCase
 
 def default_regrade_name(run_key: str) -> str:
     return os.path.join("reports", f"regrade-{run_key}.json")
+
+
+def _stored_abstained(row: dict[str, Any]) -> bool:
+    """Whether the run counted this failure as an abstention.
+
+    `eval_results` has no abstained column; the rationale carries it.
+    `grade_numeric` writes "ABSTAINED:" for an abstention, and `grade_agent_run`
+    writes "NOT ANSWERED:" for a run the agent declined.
+    """
+    why = row.get("judge_rationale") or ""
+    return not row.get("passed") and why.startswith(("ABSTAINED", "NOT ANSWERED"))
+
+
+def _agent_outcome(row: dict[str, Any]) -> str | None:
+    """answered, escalated, exhausted or error on an agent run; None otherwise."""
+    agent = row.get("agent")
+    if isinstance(agent, str):
+        agent = json.loads(agent)
+    return (agent or {}).get("outcome")
 
 
 def regrade_rows(
@@ -59,11 +85,15 @@ def regrade_rows(
             attribute("after", bool(row.get("passed")), row)
 
     skipped = {"not_in_golden_set": 0, "expected_changed": 0}
+    # Agent questions with no answer: graded as declined, as the run graded them.
+    held_as_declined = 0
     before = {"passed": 0, "abstained": 0, "wrong": 0}
     after = {"passed": 0, "abstained": 0, "wrong": 0}
     by_difficulty: dict[str, dict[str, int]] = {}
     fail_to_pass: list[dict[str, Any]] = []
     pass_to_fail: list[dict[str, Any]] = []
+    # Failures that stay failures but change bucket: abstained <-> wrong.
+    reclassified: list[dict[str, Any]] = []
     graded = 0
     errored = 0
 
@@ -85,11 +115,16 @@ def regrade_rows(
             continue
 
         graded += 1
-        abstained = is_abstention(answer)
         was = bool(row.get("passed"))
-        now, _, why = grade_numeric(case, answer, tolerance=tolerance)
+        was_abstained = _stored_abstained(row)
+        if _agent_outcome(row) not in (None, "answered"):
+            held_as_declined += 1
+            now, why, abstained = was, row.get("judge_rationale") or "", was_abstained
+        else:
+            abstained = is_abstention(answer)
+            now, _, why = grade_numeric(case, answer, tolerance=tolerance)
 
-        before["passed" if was else ("abstained" if abstained else "wrong")] += 1
+        before["passed" if was else ("abstained" if was_abstained else "wrong")] += 1
         after["passed" if now else ("abstained" if abstained else "wrong")] += 1
         attribute("before", was, row)
         attribute("after", now, row)
@@ -108,6 +143,13 @@ def regrade_rows(
                 "after": why,
             }
             (fail_to_pass if now else pass_to_fail).append(flip)
+        elif not now and was_abstained != abstained:
+            reclassified.append({
+                "case_id": case.case_id,
+                "answer": answer[:400],
+                "before": "abstained" if was_abstained else "wrong",
+                "after": "abstained" if abstained else "wrong",
+            })
 
     def rates(counts: dict[str, int]) -> dict[str, float | None]:
         if not graded:
@@ -122,6 +164,7 @@ def regrade_rows(
         "numeric_graded": graded,
         "numeric_errored": errored,
         "skipped": skipped,
+        "held_as_declined": held_as_declined,
         "before": {**before, **rates(before)},
         "after": {**after, **rates(after)},
         "by_difficulty": by_difficulty,
@@ -130,7 +173,15 @@ def regrade_rows(
         "failure_attribution": attribution,
         "fail_to_pass": fail_to_pass,
         "pass_to_fail": pass_to_fail,
+        "reclassified": reclassified,
     }
+
+
+def _split_reproduces(summary: dict[str, Any], before: dict[str, Any]) -> bool | None:
+    keys = ("abstention_rate", "hallucination_rate")
+    if any(summary.get(k) is None or before.get(k) is None for k in keys):
+        return None
+    return all(abs(summary[k] - before[k]) < 5e-4 for k in keys)
 
 
 def regrade_run(
@@ -165,7 +216,7 @@ def regrade_run(
 
     rows = db.query(
         """
-        SELECT case_id, kind, passed, answer, expected, judge_rationale, retrieval
+        SELECT case_id, kind, passed, answer, expected, judge_rationale, retrieval, agent
           FROM eval_results
          WHERE run_id = %s
          ORDER BY id
@@ -188,6 +239,8 @@ def regrade_run(
         "stored_verdicts_reproduce_report": (
             None if reported is None or before is None else abs(reported - before) < 5e-4
         ),
+        # The same check for the abstention split read back from the rationales.
+        "stored_split_reproduces_report": _split_reproduces(summary, result["before"]),
         **result,
     }
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)

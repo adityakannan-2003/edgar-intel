@@ -104,6 +104,31 @@ class TestLabelling:
         labels, _, _ = label_passage(passage, cands)
         assert labels and labels[0]["value"] == 15.51
 
+    def test_prose_needs_the_concept_in_the_same_sentence(self):
+        # From the first audit: LMT's capitalized software, labelled as cash.
+        cands = {("cash and cash equivalents", 2023): [1_442_000_000.0]}
+        passage = (
+            "Our cash position is discussed below. Costs are amortized over two to 15 "
+            "years. As of December 31, 2023, capitalized software totaled $1.4 billion."
+        )
+        labels, dropped, _ = label_passage(passage, cands)
+        assert labels == [] and len(dropped) == 1
+        labels, _, _ = label_passage("At year end we had cash and cash equivalents of $1.4 billion.", cands)
+        assert len(labels) == 1
+
+    def test_a_concept_word_after_a_prose_figure_counts(self):
+        cands = {("diluted earnings per share", 2024): [16.56]}
+        passage = "Net income for 2024 was " + "x" * 300 + " $7,367, or $16.56 per diluted share."
+        labels, _, _ = label_passage(passage, cands)
+        assert len(labels) == 1
+
+    def test_the_section_title_is_not_an_anchor(self):
+        # From the first audit: a buyback authorisation labelled as equity.
+        cands = {("total stockholders' equity", 2022): [9_266_000_000.0]}
+        passage = "[5 Market for Registrant's Common Equity]The remaining authority under our share repurchase program was $9.3 billion."
+        labels, dropped, _ = label_passage(passage, cands)
+        assert labels == [] and len(dropped) == 1
+
     def test_two_facts_on_one_printed_number_make_the_passage_ambiguous(self):
         cands = {
             ("common shares outstanding", 2024): [2_464_000_000.0],
@@ -125,6 +150,11 @@ class TestExampleFormat:
     def test_every_concept_is_in_the_instruction(self):
         assert all(c in INSTRUCTION for c in CONCEPTS)
         assert len(CONCEPTS) == 11
+
+    def test_the_fiscal_year_rule_is_stated(self):
+        # Home Depot calls the year ending January 2024 "fiscal 2023"; XBRL and
+        # the labels call it 2024. A model can only follow a rule it is given.
+        assert "first week of January" in INSTRUCTION
 
     def test_header_carries_the_filing_year_and_window(self):
         ex = Example(

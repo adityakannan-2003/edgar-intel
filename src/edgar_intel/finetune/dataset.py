@@ -64,8 +64,10 @@ INSTRUCTION = (
     'Return a JSON array of {"concept": "<one of the concepts above>", '
     '"fiscal_year": <int>, "value": <number>}. Report only figures the passage '
     "itself prints, only for the fiscal years listed with it, and only company "
-    "totals, not segments. fiscal_year is the year the filing labels the figure "
-    "with. Give each value as a plain number, in full units or as printed. "
+    "totals, not segments. fiscal_year is the calendar year the figure's fiscal "
+    "year ends in (one ending in the first week of January counts as the year "
+    "before), even where the company names its years differently. Give each "
+    "value as a plain number, in full units or as printed. "
     "Return [] if the passage states none of these facts."
 )
 
@@ -114,13 +116,30 @@ CONCEPT_WORDS: dict[str, re.Pattern[str]] = {
         "total assets": r"total\s+assets",
         "total liabilities": r"total\s+liabilities",
         "total stockholders' equity": r"equity",
-        "cash and cash equivalents": r"\bcash\b",
+        # Not bare "cash": "net cash used for investing activities was $5.5
+        # billion" is a cash flow, and was labelled as PepsiCo's cash balance.
+        "cash and cash equivalents": (
+            r"cash\s+and\s+(?:cash\s+)?equivalents|cash\s+balances?|\bof\s+cash\b"
+        ),
         "gross profit": r"gross\s+(?:profit|margin)",
         "diluted earnings per share": r"diluted|per\s+(?:common\s+)?share",
         "common shares outstanding": r"\bshares\b",
     }.items()
 }
 ANCHOR_LINES = 3
+
+# A table row is short; a prose paragraph arrives as one long line, so "within
+# three lines" would mean "anywhere in the paragraph". In prose the concept must
+# be named in the same sentence, close to the number. The first audit found
+# "capitalized software totaled $1.4 billion" labelled as cash, because "cash"
+# appeared elsewhere in the paragraph.
+PROSE_LINE_CHARS = 300
+PROSE_BEFORE, PROSE_AFTER = 150, 40
+_SENTENCE_BREAK = re.compile(r"\.\s|;\s|\n|•")
+
+# Three comma-grouped figures make a passage a table for negative sampling;
+# an exhibit number or "Item 601" does not.
+_TABLE_FIGURE = re.compile(r"(?<![\d,.])\d{1,3}(?:,\d{3})+(?![\d])")
 
 # A figure worth stating: "1,234", "577", "$5.2 billion". Not a year: "In 2024,
 # cash ..." is prose, and treating years as figures would make every dated
@@ -189,19 +208,55 @@ def _plain(value: float) -> int | float:
     return int(value) if float(value).is_integer() else float(value)
 
 
-def _window(passage: str, start: int, end: int) -> tuple[int, int]:
-    """The span of the line holding [start, end) and the ANCHOR_LINES above it."""
-    window_start = passage.rfind("\n", 0, start) + 1
-    for _ in range(ANCHOR_LINES):
-        if window_start == 0:
-            break
-        window_start = passage.rfind("\n", 0, window_start - 1) + 1
+def _header_end(passage: str) -> int:
+    """Where the chunk's "[7 Management's Discussion ...]" prefix ends.
+
+    The section title is not a statement the passage makes. In the first
+    audit, "Equity" in "Market for Registrant's Common Equity" anchored a
+    share-repurchase figure as stockholders' equity.
+    """
+    if passage.startswith("["):
+        close = passage.find("]")
+        if close > 0:
+            return close + 1
+    return 0
+
+
+def _window(passage: str, start: int, end: int, prose: bool = False) -> tuple[int, int]:
+    """The span a concept must be named in for the figure at [start, end).
+
+    A table row: the row and the ANCHOR_LINES above it. Prose: the same
+    sentence, at most PROSE_BEFORE characters before the figure and
+    PROSE_AFTER after ("$16.56 per diluted share"). Never the section title.
+    """
+    floor = _header_end(passage)
+    line_start = passage.rfind("\n", 0, start) + 1
     line_end = passage.find("\n", end)
-    return window_start, len(passage) if line_end < 0 else line_end
+    line_end = len(passage) if line_end < 0 else line_end
+
+    if prose or line_end - line_start > PROSE_LINE_CHARS:
+        lo = max(line_start, start - PROSE_BEFORE, floor)
+        breaks = [m.end() for m in _SENTENCE_BREAK.finditer(passage, lo, start)]
+        if breaks:
+            lo = breaks[-1]
+        hi = min(line_end, end + PROSE_AFTER)
+        stop = _SENTENCE_BREAK.search(passage, end, hi)
+        return lo, stop.start() if stop else hi
+
+    lo = line_start
+    for _ in range(ANCHOR_LINES):
+        if lo == 0:
+            break
+        lo = passage.rfind("\n", 0, lo - 1) + 1
+    return max(lo, floor), line_end
 
 
-def _anchored(passage: str, start: int, concept: str) -> bool:
-    lo, hi = _window(passage, start, start)
+def _is_prose_match(match: re.Match[str]) -> bool:
+    return "illion" in match.group(0).lower()
+
+
+def _anchored(passage: str, match: re.Match[str], concept: str) -> bool:
+    lo, hi = _window(passage, match.start(), match.end(), _is_prose_match(match))
     return bool(CONCEPT_WORDS[concept].search(passage[lo:hi]))
 
 
@@ -245,7 +300,7 @@ def label_passage(
         for value in values:
             match = find_value(passage, value, concept)
             if match:
-                hits.append((match.start(), concept, year, value, _anchored(passage, match.start(), concept)))
+                hits.append((match.start(), concept, year, value, _anchored(passage, match, concept)))
                 break
 
     starts = [h[0] for h in hits if h[4]]
@@ -351,10 +406,10 @@ def add_negatives(
     """Add passages labelled [] at `ratio` per company, half of them numeric.
 
     Without negatives the model learns "always emit facts" and hallucinates
-    numbers on prose. Half are drawn from passages that print large numbers
-    (a pension table, a debt schedule) because prose-only negatives are too
-    easy: a model can learn "no digits, no facts" and still invent revenue
-    from a table.
+    numbers on prose. Half are drawn from tables -- three or more
+    comma-grouped figures, a pension table or a debt schedule -- because
+    prose-only negatives are too easy: a model can learn "no digits, no
+    facts" and still invent revenue from a table. The rest have no figure.
     """
     rng = random.Random(seed)
     by_ticker: dict[str, list[Example]] = {}
@@ -365,7 +420,7 @@ def add_negatives(
     for ticker in sorted({e.ticker for e in positives}):
         want = round(ratio * sum(1 for e in positives if e.ticker == ticker))
         pool = by_ticker.get(ticker, [])
-        numeric = [e for e in pool if _BIG_NUMBER.search(e.passage)]
+        numeric = [e for e in pool if len(_TABLE_FIGURE.findall(e.passage)) >= 3]
         prose = [e for e in pool if not _BIG_NUMBER.search(e.passage)]
         rng.shuffle(numeric)
         rng.shuffle(prose)
@@ -480,9 +535,10 @@ def load_records(path: str) -> list[dict[str, Any]]:
         return [json.loads(line) for line in fh if line.strip()]
 
 
-def _context(passage: str, start: int, end: int) -> str:
+def _context(passage: str, match: re.Match[str]) -> str:
     """The anchor window around a match, with the match marked »like this«."""
-    lo, hi = _window(passage, start, end)
+    start, end = match.start(), match.end()
+    lo, hi = _window(passage, start, end, _is_prose_match(match))
     return passage[lo:start] + "»" + passage[start:end] + "«" + passage[end:hi]
 
 
@@ -502,7 +558,7 @@ def audit_sample(
     items = []
     for i, (row, f) in enumerate(rng.sample(facts, min(n_labels, len(facts))), 1):
         match = find_value(row["passage"], f["value"], f["concept"])
-        context = _context(row["passage"], match.start(), match.end()) if match else ""
+        context = _context(row["passage"], match) if match else ""
         items.append({
             "n": i, "example_id": row["id"], "ticker": row["ticker"],
             "filing_fy": row["filing_fy"], "concept": f["concept"],

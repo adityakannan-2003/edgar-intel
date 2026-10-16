@@ -1453,11 +1453,39 @@ def agent_stats_cmd() -> None:
 @ft_app.command("dataset")
 def ft_dataset(
     out_dir: str = typer.Option("data/finetune"),
-    strategy: str = typer.Option("section_aware"),
+    negatives_ratio: float = typer.Option(0.25),
+    tickers: str = typer.Option("", help="Comma-separated; default is every ingested company."),
 ) -> None:
+    """Label, split and write the dataset. Point EDGAR_DB_DSN at edgar_ft, not the RAG corpus."""
     from .finetune.dataset import build_dataset
 
-    console.print_json(json.dumps(build_dataset(out_dir, strategy), indent=2))
+    ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()] or None
+    manifest = build_dataset(out_dir, negatives_ratio, ticker_list)
+    summary = {k: v for k, v in manifest.items() if k not in ("train", "held_out")}
+    for side in ("train", "held_out"):
+        summary[side] = {k: v for k, v in manifest[side].items() if k != "accessions"}
+    console.print_json(json.dumps(summary, indent=2))
+
+
+@ft_app.command("audit")
+def ft_audit(
+    held_out: str = typer.Option("data/finetune/held_out.jsonl"),
+    out: str = typer.Option("reports/finetune/label_audit.json"),
+    n_labels: int = typer.Option(50),
+    n_negatives: int = typer.Option(10),
+) -> None:
+    """Sample held-out labels for a hand check. Refuses to overwrite a filled-in audit."""
+    import os
+
+    from .finetune.dataset import audit_sample
+
+    if os.path.exists(out):
+        raise typer.BadParameter(f"{out} exists; an audit with verdicts in it is a result")
+    os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+    sample = audit_sample(held_out, n_labels, n_negatives)
+    with open(out, "w", encoding="utf-8") as fh:
+        json.dump(sample, fh, indent=2)
+    console.print(f"{len(sample['labels'])} labels, {len(sample['negatives'])} negatives -> {out}")
 
 
 @ft_app.command("train")

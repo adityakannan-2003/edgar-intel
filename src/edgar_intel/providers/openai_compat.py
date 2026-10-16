@@ -107,6 +107,7 @@ class OpenAICompatLLM:
         temperature: float = 0.0,
         max_tokens: int = 1024,
         json_schema: dict[str, Any] | None = None,
+        extra_body: dict[str, Any] | None = None,
     ) -> Completion:
         messages: list[dict[str, str]] = []
         if system:
@@ -130,6 +131,16 @@ class OpenAICompatLLM:
                     "strict": True,
                 },
             }
+
+        # Per-call overrides. Some models reject a default this method sends --
+        # newer reasoning models refuse `max_tokens` (they take
+        # `max_completion_tokens`) and any `temperature` but 1 -- so a caller
+        # can replace a key, add one, or remove one by passing None.
+        for key, value in (extra_body or {}).items():
+            if value is None:
+                payload.pop(key, None)
+            else:
+                payload[key] = value
 
         started = time.perf_counter()
         try:

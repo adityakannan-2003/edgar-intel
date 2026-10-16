@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -97,6 +98,13 @@ class EdgarClient:
         url = f"{self.settings.edgar_base}/submissions/CIK{cik}.json"
         return self._get(url).json()
 
+    def submissions_page(self, name: str) -> dict[str, Any]:
+        """One of the older pages listed under `filings.files` in the
+        submissions JSON, e.g. "CIK0000019617-submissions-001.json". Each page
+        is the same columnar block as `filings.recent`, served on its own."""
+        url = f"{self.settings.edgar_base}/submissions/{name}"
+        return self._get(url).json()
+
     def company_facts(self, cik: str) -> dict[str, Any]:
         """All XBRL facts the company has ever reported. This is the ground
         truth the numeric evaluation set is generated from."""
@@ -116,15 +124,39 @@ class EdgarClient:
 
 
 def recent_filings(
-    submissions: dict[str, Any], forms: list[str], limit: int = 5
+    submissions: dict[str, Any],
+    forms: list[str],
+    limit: int = 5,
+    fetch_page: Callable[[str], dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Flatten the columnar `filings.recent` block into row dicts.
+    """The newest `limit` filings of the given forms, as row dicts.
+
+    `filings.recent` holds only the last year or the last 1,000 filings,
+    whichever is more. A frequent filer outgrows that: in October 2026 JPM's
+    recent block was 26,410 filings reaching back one year, mostly
+    prospectuses, with one 10-K among them. Everything older sits in the pages listed under `filings.files`,
+    newest first. Given `fetch_page` (normally `EdgarClient.submissions_page`),
+    those pages are fetched in turn until `limit` rows are found; without it,
+    only the recent block is read.
+    """
+    filings = submissions.get("filings", {})
+    rows = _matching_rows(filings.get("recent", {}), forms, limit)
+    if fetch_page is None:
+        return rows
+    for page in filings.get("files", []):
+        if len(rows) >= limit:
+            break
+        rows += _matching_rows(fetch_page(page["name"]), forms, limit - len(rows))
+    return rows
+
+
+def _matching_rows(block: dict[str, Any], forms: list[str], limit: int) -> list[dict[str, Any]]:
+    """Flatten one columnar block into row dicts, keeping the given forms.
 
     EDGAR returns parallel arrays rather than records, which is compact on the
     wire and awkward everywhere else.
     """
-    recent = submissions.get("filings", {}).get("recent", {})
-    if not recent:
+    if not block:
         return []
     keys = [
         "accessionNumber",
@@ -133,7 +165,7 @@ def recent_filings(
         "reportDate",
         "primaryDocument",
     ]
-    cols = {k: recent.get(k, []) for k in keys}
+    cols = {k: block.get(k, []) for k in keys}
     n = len(cols["accessionNumber"])
     rows: list[dict[str, Any]] = []
     for i in range(n):

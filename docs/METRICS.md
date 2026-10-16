@@ -1142,16 +1142,49 @@ never tells you).
 
 ## 9. Fine-tuning tradeoff
 
-**Status: NOT MEASURED. Code exists; no training run, no benchmark.**
+**Status: the dataset is built and its labels audited. The comparison is NOT
+MEASURED: no paid API run, no training run.**
 
 > Fine-tuned `<model>` with LoRA on `<N>` distantly-supervised extraction
 > examples, lifting F1 from `<baseline>` (few-shot prompting) to `<result>` on a
 > company-disjoint held-out set at `<X>`× lower cost per request, against
 > `<H>` GPU-hours of training.
 
-**The comparison is the bullet, not the training.** Placeholders left
-deliberately — this one is honestly unmeasured and is the lowest-priority item
-in the repo.
+**The comparison is the bullet, not the training.** The placeholders stay
+until the run that fills them.
+
+**Produce it**
+
+```bash
+export EDGAR_DB_DSN=postgresql://edgar:edgar@localhost:5433/edgar_ft   # never the RAG corpus
+edgar-intel ingest run --tickers <the 40 in finetune/dataset.py FT_SECTORS> --years 3
+edgar-intel finetune dataset --out-dir data/finetune
+edgar-intel finetune audit                                   # then check the sample by hand
+edgar-intel finetune predict --arm sol-fewshot --n 50 --out reports/finetune/pilot/sol.jsonl  # spends money
+edgar-intel finetune score reports/finetune/pilot/*.jsonl --out reports/finetune/pilot/report.json
+```
+
+**What is measured so far (16 Oct 2026)**
+
+| | measured | source |
+|---|---|---|
+| the labeller as shipped | 18,480 of its 19,199 labels on the RAG corpus were diluted EPS ("6.13" searched as "6"); revenue had none | `reports/finetune/old-labeller-76899f0.json` |
+| corpus | 40 companies, ten sectors of four, 120 10-Ks, in a separate database `edgar_ft` so the RAG corpus and its eval set are untouched | `reports/finetune/ingest-edgar_ft*.log` |
+| dataset | **1,756 training examples** (1,405 with facts, 351 without) from 30 companies; **539 held-out** (433 with facts, 106 without, 1,767 labels) from 10 companies, one per sector: ADBE CMCSA COST JNJ LMT NVDA PG SLB UNH V | `data/finetune/split.json`, built at `e05f0a7`; held-out sha256 `146778436fd5a42f…` |
+| label precision | **50 of 50** sampled held-out labels right (95% interval lower bound 92.9%); 10 of 10 negatives state no core fact. Marked by Claude; Aditya's confirmation pending | `reports/finetune/label_audit-round2.json` |
+| the audit before it | 49 of 50 on the previous build. The wrong one, a buyback authorisation labelled as equity, led to the same-sentence rule for prose | `reports/finetune/label_audit-round1.json` |
+| example length | longest 1,789 Qwen3 tokens, median 958; 1.70M training tokens per epoch | `reports/finetune/train-smoke-cpu.json` |
+| scorer sanity | the labels returned as answers score micro F1 1.000 on all 539; an always-`[]` answer scores 0.000 | `reports/finetune/scorer-sanity-oracle.json` |
+| label recall | **NOT MEASURED**. A fact the passage states that the labeller missed counts against every arm; `diagnose()` counts those predictions as `unlabelled` | |
+
+**How the arms are scored.** Micro F1 over (concept, fiscal year, value)
+triples across all 539 cases is the headline, so an arm cannot score by saying
+nothing on the 106 negatives. Facts are keyed on the concept, not the XBRL tag:
+an unseen company's choice between `Revenues` and
+`RevenueFromContractWithCustomerExcludingAssessedTax` cannot be known. Values
+match at any reporting scale, on magnitude. A figure the labeller found
+without a nearby concept name (2,143 across the corpus, such as equity-statement
+columns) is ignored when predicted, for every arm alike.
 
 ---
 
@@ -1192,7 +1225,8 @@ in the repo.
 | "the agent is more accurate than RAG" | ⚠️ **true on this exam (0.96 against 0.86) and misleading**: its numeric questions are lookups in the table the answer key came from; say it no longer gets in its own way, not that it reads better |
 | concurrency / throughput sweep | ❌ needs a deployed instance |
 | regression gate in CI | ✅ running since 5 Oct against a committed baseline; fails on a deliberate regression; nothing caught yet (§4) |
-| LoRA fine-tune comparison | ❌ never run |
+| LoRA fine-tune comparison | ❌ not run; the dataset and harness are ready (§9) |
+| fine-tune labels: 50 of 50 audited held-out labels right, after a first audit's 49 of 50 led to a fix | ⚠️ measured, awaiting Aditya's confirmation (§9) |
 | live URL | ❌ not deployed — see `docs/DEPLOY.md` |
 
 ## Metrics that carry the most weight, ranked

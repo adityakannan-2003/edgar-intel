@@ -1,4 +1,4 @@
-from .benchmark import ArmResult, compare, run_arm
+from .benchmark import ARMS, Arm, compare, predict, score
 from .dataset import (
     INSTRUCTION,
     Example,
@@ -11,15 +11,17 @@ from .dataset import (
 )
 
 __all__ = [
+    "ARMS",
     "INSTRUCTION",
-    "ArmResult",
+    "Arm",
     "Example",
     "add_negatives",
     "build_dataset",
     "build_examples",
     "compare",
     "parse_extraction",
-    "run_arm",
+    "predict",
+    "score",
     "score_extraction",
     "split",
 ]

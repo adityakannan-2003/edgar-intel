@@ -8,7 +8,7 @@ run -- including you, six weeks later.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
@@ -1504,16 +1504,58 @@ def ft_train(
     console.print_json(json.dumps(manifest, indent=2))
 
 
-@ft_app.command("benchmark")
-def ft_benchmark(
-    held_out: str = typer.Option("data/finetune/held_out.jsonl"),
-    limit: int = typer.Option(100),
-) -> None:
-    from .finetune.benchmark import compare
+@ft_app.command("arms")
+def ft_arms() -> None:
+    """List the benchmark arms and their configuration."""
+    from .finetune.benchmark import ARMS
 
-    payload = compare(held_out, limit)
-    _table("fine-tune vs prompting", payload["arms"])
-    console.print(f"\n[bold]{payload['interpretation']}[/bold]")
+    _table("benchmark arms", [{"key": k, **a.config()} for k, a in ARMS.items()])
+
+
+@ft_app.command("predict")
+def ft_predict(
+    arm: str = typer.Option(..., help="An arm key from `finetune arms`."),
+    out: str = typer.Option(..., help="Predictions JSONL; appended to, resumable."),
+    n: int = typer.Option(0, help="First n cases of the fixed shuffle; 0 = all."),
+    held_out: str = typer.Option("data/finetune/held_out.jsonl"),
+    train: str = typer.Option("data/finetune/train.jsonl", help="Where few-shot examples come from."),
+    base_url: str = typer.Option("", help="Self-hosted arms: the vLLM server's /v1 URL."),
+) -> None:
+    """Send held-out cases to one arm and write every raw output. Spends money on API arms."""
+    from .finetune.benchmark import ARMS, predict
+
+    if arm not in ARMS:
+        raise typer.BadParameter(f"unknown arm {arm!r}; known: {', '.join(ARMS)}")
+    summary = predict(
+        ARMS[arm], held_out, out, train_path=train, n=n or None, base_url=base_url or None,
+        progress=lambda msg: console.log(msg),
+    )
+    console.print_json(json.dumps(summary))
+
+
+@ft_app.command("score")
+def ft_score(
+    preds: Annotated[
+        list[str], typer.Argument(help="Predictions files; the first is the baseline.")
+    ],
+    out: str = typer.Option(..., help="Report JSON; per-case scores go beside it."),
+    held_out: str = typer.Option("data/finetune/held_out.jsonl"),
+    gpu_usd_per_hour: Annotated[
+        list[str] | None,
+        typer.Option(help="PATH=PRICE for self-hosted arms, e.g. preds/lora.jsonl=0.74"),
+    ] = None,
+) -> None:
+    """Score predictions files. No model calls."""
+    from .finetune.benchmark import compare, table_rows
+
+    gpu = {k: float(v) for k, v in (item.rsplit("=", 1) for item in gpu_usd_per_hour or [])}
+    payload = compare(preds, held_out, out, gpu)
+    _table("fine-tune vs prompting", table_rows(payload))
+    for row in payload["vs_first"]:
+        console.print(
+            f"{row['arm']} vs {row['against']}: micro-F1 {row.get('f1_diff', 0):+.4f}, "
+            f"95% CI {row.get('ci95')}, {row.get('cases_flipped')} of {row['cases']} cases flipped"
+        )
 
 
 # -------------------------------------------------------------------- bench

@@ -139,7 +139,7 @@ _SENTENCE_BREAK = re.compile(r"\.\s|;\s|\n|•")
 
 # Three comma-grouped figures make a passage a table for negative sampling;
 # an exhibit number or "Item 601" does not.
-_TABLE_FIGURE = re.compile(r"(?<![\d,.])\d{1,3}(?:,\d{3})+(?![\d])")
+TABLE_FIGURE = re.compile(r"(?<![\d,.])\d{1,3}(?:,\d{3})+(?![\d])")
 
 # A figure worth stating: "1,234", "577", "$5.2 billion". Not a year: "In 2024,
 # cash ..." is prose, and treating years as figures would make every dated
@@ -420,7 +420,7 @@ def add_negatives(
     for ticker in sorted({e.ticker for e in positives}):
         want = round(ratio * sum(1 for e in positives if e.ticker == ticker))
         pool = by_ticker.get(ticker, [])
-        numeric = [e for e in pool if len(_TABLE_FIGURE.findall(e.passage)) >= 3]
+        numeric = [e for e in pool if len(TABLE_FIGURE.findall(e.passage)) >= 3]
         prose = [e for e in pool if not _BIG_NUMBER.search(e.passage)]
         rng.shuffle(numeric)
         rng.shuffle(prose)
@@ -468,7 +468,7 @@ def write_jsonl(examples: list[Example], path: str) -> int:
     return len(examples)
 
 
-def _sha256(path: str) -> str:
+def sha256_file(path: str) -> str:
     with open(path, "rb") as fh:
         return hashlib.sha256(fh.read()).hexdigest()
 
@@ -514,8 +514,8 @@ def build_dataset(
         "years_printed": YEARS_PRINTED,
         "counts": counts,
         "negative_candidates": len(candidates),
-        "train": {**side(train), "sha256": _sha256(train_path)},
-        "held_out": {**side(held_out), "sha256": _sha256(held_path)},
+        "train": {**side(train), "sha256": sha256_file(train_path)},
+        "held_out": {**side(held_out), "sha256": sha256_file(held_path)},
         "sectors": {
             sector: {
                 "train": sorted({e.ticker for e in train if e.sector == sector}),
@@ -573,7 +573,7 @@ def audit_sample(
     ]
     return {
         "held_out_path": held_out_path,
-        "held_out_sha256": _sha256(held_out_path),
+        "held_out_sha256": sha256_file(held_out_path),
         "seed": seed,
         "labels": items,
         "negatives": neg_items,

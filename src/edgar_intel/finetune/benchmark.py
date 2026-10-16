@@ -6,226 +6,488 @@ against a prompting baseline on the same held-out set, and can tell you the
 quality, cost and latency tradeoff in both directions."
 
 That requires holding everything constant except the thing being compared:
-same held-out examples, same scoring function, same parser. This module does
-that and emits a table you can put in a README and defend in an interview.
+same held-out examples, same instruction and input, same parser, same scorer.
+The only differences between arms are the weights and, for prompted arms, the
+worked examples in the system prompt.
+
+Two phases, never one. `predict` sends each held-out case to one arm and
+appends the raw output to a JSONL file as it arrives; `score` reads those
+files. A paid run interrupted at case 400 keeps its 400 answers, a scoring
+change re-scores without a single model call, and the raw outputs are the
+record every reported number comes from.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import random
 import statistics
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from ..config import get_settings
-from ..providers import get_llm
-from .dataset import INSTRUCTION, parse_extraction, score_extraction
+from .dataset import INSTRUCTION, TABLE_FIGURE, load_records, sha256_file
+from .scoring import (
+    CONCEPTS,
+    diagnose,
+    normalise_fact,
+    parse_extraction,
+    parse_ok,
+    score_extraction,
+)
 
-FEW_SHOT_PREFIX = """Examples:
-
-PASSAGE: Total net sales | 383,285 | 394,328
-FACTS: [{"tag":"Revenues","fiscal_year":2023,"value":383285000000,"unit":"USD"}]
-
-PASSAGE: We face intense competition in all of our markets.
-FACTS: []
-
-"""
+# (input, cached input, output) USD per 1M tokens, standard tier, read from
+# developers.openai.com/api/docs/pricing on 16 Oct 2026. Update with the date.
+PRICES_USD_PER_MTOK: dict[str, tuple[float, float, float]] = {
+    "gpt-6-astra": (10.00, 1.00, 50.00),
+    "gpt-6.1-sol": (2.00, 0.10, 10.00),
+    "gpt-6-luna": (0.10, 0.01, 0.50),
+    "gpt-4o-mini": (0.15, 0.075, 0.60),
+}
 
 
 @dataclass(slots=True)
-class ArmResult:
+class Arm:
     name: str
-    n: int
-    precision: float
-    recall: float
-    f1: float
-    exact_set_match: float
-    p50_latency_ms: int
-    p95_latency_ms: int
-    total_cost_usd: float
-    cost_per_1k_usd: float
+    model: str
+    few_shot: bool = True
+    # Self-hosted arms (vLLM) need a base_url at predict time; API arms use the
+    # configured provider. Keys are never stored here.
+    self_hosted: bool = False
+    extra_body: dict[str, Any] = field(default_factory=dict)
+    max_tokens: int = 1024
     notes: str = ""
-    per_case: list[dict[str, Any]] = field(default_factory=list)
 
-    def as_row(self) -> dict[str, Any]:
-        d = asdict(self)
-        d.pop("per_case")
-        return d
+    def config(self) -> dict[str, Any]:
+        return asdict(self)
 
 
-def _load_held_out(path: str, limit: int | None = None) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    with open(path, encoding="utf-8") as fh:
-        for line in fh:
-            record = json.loads(line)
-            messages = record["messages"]
-            rows.append(
-                {
-                    "passage": messages[1]["content"],
-                    "expected": json.loads(messages[2]["content"]),
-                }
-            )
-            if limit and len(rows) >= limit:
-                break
-    return rows
+# Unverified until the pilot: newer OpenAI models reject `max_tokens` and may
+# reject temperature 0. The pilot's first call per arm settles it, and the
+# provider's error message says which parameter was wrong.
+_OPENAI_REASONING = {"max_tokens": None, "max_completion_tokens": 2048}
+# Qwen3 thinks before answering unless told not to; extraction does not need it.
+_QWEN_NO_THINK = {"chat_template_kwargs": {"enable_thinking": False}}
+
+ARMS: dict[str, Arm] = {
+    "luna-fewshot": Arm("gpt-6-luna few-shot", "gpt-6-luna", extra_body=_OPENAI_REASONING),
+    "sol-fewshot": Arm("gpt-6.1-sol few-shot", "gpt-6.1-sol", extra_body=_OPENAI_REASONING),
+    "astra-fewshot": Arm("gpt-6-astra few-shot", "gpt-6-astra", extra_body=_OPENAI_REASONING),
+    "qwen3-8b-fewshot": Arm(
+        "Qwen3-8B few-shot, no LoRA", "Qwen/Qwen3-8B", self_hosted=True,
+        extra_body=_QWEN_NO_THINK,
+        notes="isolates what the LoRA adds from what the base model already does",
+    ),
+    "qwen3-8b-lora": Arm(
+        "Qwen3-8B + LoRA", "extract", few_shot=False, self_hosted=True,
+        extra_body=_QWEN_NO_THINK,
+        notes="vLLM serving the adapter under the name 'extract'",
+    ),
+}
 
 
-def run_arm(
-    name: str,
-    rows: list[dict[str, Any]],
-    model: str | None = None,
-    few_shot: bool = False,
-    cost_prompt_per_mtok: float | None = None,
-    cost_completion_per_mtok: float | None = None,
-    notes: str = "",
-) -> ArmResult:
-    s = get_settings()
-    llm = get_llm()
+# ------------------------------------------------------------------- shots
+def pick_shots(
+    train_path: str, n_pos: int = 3, max_chars: int = 1400, seed: int = 7
+) -> list[dict[str, Any]]:
+    """Worked examples for the prompted arms, from training companies only.
 
-    scores: list[dict[str, float]] = []
-    latencies: list[int] = []
-    total_cost = 0.0
-    per_case: list[dict[str, Any]] = []
+    Three positives from three different companies, chosen so that each adds
+    concepts the others lack, plus one table that states no fact -- the case
+    a prompted model most often gets wrong by inventing revenue from a
+    segment table. Deterministic for a given training file and seed.
+    """
+    rng = random.Random(seed)
+    rows = load_records(train_path)
+    pos = [r for r in rows if 2 <= len(r["facts"]) <= 6 and len(r["passage"]) <= max_chars]
+    neg = [
+        r for r in rows
+        if not r["facts"] and len(r["passage"]) <= max_chars
+        and len(TABLE_FIGURE.findall(r["passage"])) >= 3
+    ]
+    rng.shuffle(pos)
+    rng.shuffle(neg)
 
-    for row in rows:
-        prompt = (FEW_SHOT_PREFIX if few_shot else "") + f"PASSAGE: {row['passage']}\nFACTS:"
-        started = time.perf_counter()
-        completion = llm.complete(
-            prompt, system=INSTRUCTION, model=model, temperature=0.0, max_tokens=512
+    chosen: list[dict[str, Any]] = []
+    concepts: set[str] = set()
+    for row in pos:
+        new = {f["concept"] for f in row["facts"]} - concepts
+        if row["ticker"] in {c["ticker"] for c in chosen} or not new:
+            continue
+        chosen.append(row)
+        concepts |= new
+        if len(chosen) == n_pos:
+            break
+    for row in neg:
+        if row["ticker"] not in {c["ticker"] for c in chosen}:
+            chosen.append(row)
+            break
+    return chosen
+
+
+def system_prompt(shots: list[dict[str, Any]]) -> str:
+    if not shots:
+        return INSTRUCTION
+    parts = [
+        INSTRUCTION,
+        "Worked examples follow. Each INPUT is what you will be given and each "
+        "OUTPUT is the correct answer for it.",
+    ]
+    for shot in shots:
+        parts.append(f"INPUT:\n{shot['messages'][1]['content']}\n\nOUTPUT:\n{shot['messages'][2]['content']}")
+    return "\n\n".join(parts)
+
+
+# ----------------------------------------------------------------- predict
+def select(rows: list[dict[str, Any]], n: int | None, seed: int = 17) -> list[dict[str, Any]]:
+    """The first-n cases of a fixed shuffle: every arm, and every pilot, gets
+    the same cases, and a larger n is a superset of a smaller one."""
+    if n is None or n >= len(rows):
+        return rows
+    order = list(range(len(rows)))
+    random.Random(seed).shuffle(order)
+    return [rows[i] for i in sorted(order[:n])]
+
+
+def _usage(raw: dict[str, Any]) -> dict[str, int]:
+    usage = raw.get("usage") or {}
+    prompt_details = usage.get("prompt_tokens_details") or {}
+    completion_details = usage.get("completion_tokens_details") or {}
+    return {
+        "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+        "cached_tokens": int(prompt_details.get("cached_tokens") or 0),
+        "completion_tokens": int(usage.get("completion_tokens") or 0),
+        "reasoning_tokens": int(completion_details.get("reasoning_tokens") or 0),
+    }
+
+
+def predict(
+    arm: Arm,
+    held_out_path: str,
+    out_path: str,
+    *,
+    train_path: str | None = None,
+    n: int | None = None,
+    base_url: str | None = None,
+    llm: Any = None,
+    max_consecutive_errors: int = 5,
+    progress: Any = None,
+) -> dict[str, Any]:
+    """Run one arm over the held-out cases, appending each output as it arrives.
+
+    Resumable: ids already in `out_path` are skipped. A file is bound to one
+    configuration by its `.meta.json` sidecar, and predicting into it with a
+    different arm, system prompt or held-out set is refused rather than
+    silently mixed. Five consecutive call failures abort the run: 232
+    consecutive HTTP 401s once scored as 0.0 in this repo.
+    """
+    rows = select(load_records(held_out_path), n)
+    shots = pick_shots(train_path) if arm.few_shot else []
+    if arm.few_shot and not shots:
+        raise ValueError("a few-shot arm needs train_path to draw examples from")
+    system = system_prompt(shots)
+
+    meta = {
+        "arm": arm.config(),
+        "held_out_path": held_out_path,
+        "held_out_sha256": sha256_file(held_out_path),
+        "system_sha256": hashlib.sha256(system.encode()).hexdigest(),
+        "shot_ids": [s["id"] for s in shots],
+        "n_requested": n,
+    }
+    meta_path = out_path + ".meta.json"
+    if os.path.exists(meta_path):
+        with open(meta_path, encoding="utf-8") as fh:
+            existing = json.load(fh)
+        keys = ("arm", "held_out_sha256", "system_sha256")
+        if any(existing.get(k) != meta[k] for k in keys):
+            raise ValueError(f"{out_path} holds another configuration; use a new file")
+    else:
+        from ..evals.runner import git_sha
+
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+        meta["git_sha"] = git_sha()
+        meta["started_at"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+        meta["base_url"] = base_url
+        with open(meta_path, "w", encoding="utf-8") as fh:
+            json.dump(meta, fh, indent=2)
+
+    done: set[str] = set()
+    if os.path.exists(out_path):
+        with open(out_path, encoding="utf-8") as fh:
+            done = {json.loads(line)["id"] for line in fh if line.strip()}
+
+    if llm is None:
+        from ..providers.openai_compat import OpenAICompatLLM
+
+        if arm.self_hosted:
+            if not base_url:
+                raise ValueError(f"{arm.name} is self-hosted: pass the server's base_url")
+            llm = OpenAICompatLLM(base_url=base_url, api_key="EMPTY", model=arm.model)
+        else:
+            llm = OpenAICompatLLM(model=arm.model)
+
+    written = errors = consecutive = 0
+    with open(out_path, "a", encoding="utf-8") as fh:
+        for row in rows:
+            if row["id"] in done:
+                continue
+            record: dict[str, Any] = {"id": row["id"]}
+            started = time.perf_counter()
+            try:
+                completion = llm.complete(
+                    row["messages"][1]["content"],
+                    system=system,
+                    model=arm.model,
+                    temperature=0.0,
+                    max_tokens=arm.max_tokens,
+                    extra_body=arm.extra_body,
+                )
+            except Exception as exc:  # recorded per case, never scored as []
+                record.update(error=str(exc)[:600], latency_ms=int((time.perf_counter() - started) * 1000))
+                errors += 1
+                consecutive += 1
+            else:
+                record.update(
+                    text=completion.text,
+                    latency_ms=int((time.perf_counter() - started) * 1000),
+                    model=completion.model,
+                    **_usage(completion.raw),
+                )
+                consecutive = 0
+            fh.write(json.dumps(record) + "\n")
+            fh.flush()
+            written += 1
+            if progress:
+                progress(f"{arm.name}: {written} written, {errors} errors")
+            if consecutive >= max_consecutive_errors:
+                raise RuntimeError(
+                    f"{arm.name}: {consecutive} consecutive failures, aborted; last: {record['error']}"
+                )
+    return {"arm": arm.name, "cases": len(rows), "skipped": len(done), "written": written, "errors": errors}
+
+
+# ------------------------------------------------------------------- score
+def _by_concept(facts: list[dict[str, Any]], concept: str) -> list[dict[str, Any]]:
+    out = []
+    for fact in facts:
+        norm = normalise_fact(fact)
+        if norm and norm[0] == concept:
+            out.append(fact)
+    return out
+
+
+def score_case(record: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]:
+    """Score one prediction record against its held-out row."""
+    case: dict[str, Any] = {
+        "id": row["id"],
+        "ticker": row["ticker"],
+        "sector": row.get("sector", ""),
+        "negative": not row["facts"],
+        "latency_ms": record.get("latency_ms"),
+        **{k: record.get(k, 0) for k in ("prompt_tokens", "cached_tokens", "completion_tokens", "reasoning_tokens")},
+    }
+    if "error" in record:
+        case["error"] = record["error"]
+        return case
+    predicted = parse_extraction(record["text"])
+    case["parse_ok"] = parse_ok(record["text"])
+    case.update(score_extraction(predicted, row["facts"], ignore=row["dropped"]))
+    case["diagnosis"] = diagnose(predicted, row["facts"], row["passage"], ignore=row["dropped"])
+    case["by_concept"] = {}
+    for concept in CONCEPTS:
+        s = score_extraction(
+            _by_concept(predicted, concept), _by_concept(row["facts"], concept),
+            ignore=_by_concept(row["dropped"], concept),
         )
-        latency = int((time.perf_counter() - started) * 1000)
+        if s["n_pred"] or s["n_expected"]:
+            case["by_concept"][concept] = {k: s[k] for k in ("tp", "n_pred", "n_expected")}
+    return case
 
-        predicted = parse_extraction(completion.text)
-        score = score_extraction(predicted, row["expected"])
 
-        p_rate = (
-            cost_prompt_per_mtok
-            if cost_prompt_per_mtok is not None
-            else s.cost_prompt_per_mtok
+def _micro(cases: list[dict[str, Any]]) -> dict[str, float]:
+    tp = sum(c["tp"] for c in cases)
+    n_pred = sum(c["n_pred"] for c in cases)
+    n_exp = sum(c["n_expected"] for c in cases)
+    p = tp / n_pred if n_pred else 0.0
+    r = tp / n_exp if n_exp else 0.0
+    f1 = 2 * p * r / (p + r) if p + r else 0.0
+    return {"precision": round(p, 4), "recall": round(r, 4), "f1": round(f1, 4),
+            "tp": tp, "n_pred": n_pred, "n_expected": n_exp}
+
+
+def _percentile(values: list[float], q: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    return ordered[min(len(ordered) - 1, int(q * len(ordered)))]
+
+
+def aggregate(
+    cases: list[dict[str, Any]], model: str, gpu_usd_per_hour: float | None = None
+) -> dict[str, Any]:
+    """Every reported number for one arm, from its scored cases."""
+    scored = [c for c in cases if "error" not in c]
+    negatives = [c for c in scored if c["negative"]]
+    diag_totals: dict[str, int] = {}
+    for c in scored:
+        for k, v in c["diagnosis"].items():
+            diag_totals[k] = diag_totals.get(k, 0) + v
+
+    per_concept = {}
+    for concept in CONCEPTS:
+        parts = [c["by_concept"][concept] for c in scored if concept in c["by_concept"]]
+        if parts:
+            per_concept[concept] = _micro(parts)
+    per_company = {
+        t: {**_micro([c for c in scored if c["ticker"] == t]), "cases": sum(1 for c in scored if c["ticker"] == t)}
+        for t in sorted({c["ticker"] for c in scored})
+    }
+
+    latencies = [c["latency_ms"] for c in scored if c.get("latency_ms") is not None]
+    out: dict[str, Any] = {
+        "cases": len(cases),
+        "errors": len(cases) - len(scored),
+        "micro": _micro(scored),
+        "micro_positives_only": _micro([c for c in scored if not c["negative"]]),
+        "macro_f1": round(statistics.fmean(c["f1"] for c in scored), 4) if scored else None,
+        "exact_set_match": round(statistics.fmean(c["exact_set_match"] for c in scored), 4) if scored else None,
+        "negatives": len(negatives),
+        "negatives_with_any_fact": sum(1 for c in negatives if c["n_pred"] > 0),
+        "parse_failures": sum(1 for c in scored if not c["parse_ok"]),
+        "invalid_facts": sum(c["invalid"] for c in scored),
+        "ignored_facts": sum(c["ignored"] for c in scored),
+        "diagnosis": diag_totals,
+        "per_concept": per_concept,
+        "per_company": per_company,
+        "latency_ms": {"p50": _percentile(latencies, 0.5), "p95": _percentile(latencies, 0.95)},
+        "tokens_mean": {
+            k: round(statistics.fmean(c[k] for c in scored), 1) if scored else None
+            for k in ("prompt_tokens", "cached_tokens", "completion_tokens", "reasoning_tokens")
+        },
+    }
+
+    if model in PRICES_USD_PER_MTOK:
+        p_in, p_cached, p_out = PRICES_USD_PER_MTOK[model]
+        total = sum(
+            ((c["prompt_tokens"] - c["cached_tokens"]) * p_in + c["cached_tokens"] * p_cached
+             + c["completion_tokens"] * p_out) / 1e6
+            for c in cases
         )
-        c_rate = (
-            cost_completion_per_mtok
-            if cost_completion_per_mtok is not None
-            else s.cost_completion_per_mtok
-        )
-        cost = (
-            completion.prompt_tokens * p_rate + completion.completion_tokens * c_rate
-        ) / 1_000_000
+        out["cost"] = {
+            "basis": "list price on 16 Oct 2026, tokens as reported, errored calls included",
+            "total_usd": round(total, 6),
+            "per_1k_requests_usd": round(total / len(cases) * 1000, 4) if cases else None,
+        }
+    elif gpu_usd_per_hour is not None and latencies:
+        mean_s = statistics.fmean(latencies) / 1000
+        out["cost"] = {
+            "basis": f"one request at a time on a ${gpu_usd_per_hour}/hr GPU, mean latency {mean_s:.2f}s",
+            "per_1k_requests_usd": round(gpu_usd_per_hour * mean_s / 3.6, 4),
+        }
+    else:
+        out["cost"] = "NOT MEASURED"
+    return out
 
-        scores.append(score)
-        latencies.append(latency)
-        total_cost += cost
-        per_case.append(
-            {
-                "predicted": predicted,
-                "expected": row["expected"],
-                **score,
-                "latency_ms": latency,
-                "cost_usd": round(cost, 8),
-            }
-        )
 
-    latencies.sort()
-    n = len(rows) or 1
-    return ArmResult(
-        name=name,
-        n=len(rows),
-        precision=round(statistics.fmean(s_["precision"] for s_ in scores), 4) if scores else 0.0,
-        recall=round(statistics.fmean(s_["recall"] for s_ in scores), 4) if scores else 0.0,
-        f1=round(statistics.fmean(s_["f1"] for s_ in scores), 4) if scores else 0.0,
-        exact_set_match=round(
-            statistics.fmean(s_["exact_set_match"] for s_ in scores), 4
-        ) if scores else 0.0,
-        p50_latency_ms=int(statistics.median(latencies)) if latencies else 0,
-        p95_latency_ms=latencies[min(len(latencies) - 1, int(0.95 * len(latencies)))]
-        if latencies
-        else 0,
-        total_cost_usd=round(total_cost, 6),
-        cost_per_1k_usd=round(total_cost / n * 1000, 4),
-        notes=notes,
-        per_case=per_case,
-    )
+def score(
+    pred_path: str, held_out_path: str, gpu_usd_per_hour: float | None = None
+) -> dict[str, Any]:
+    """Score one predictions file. Refuses a file made on another held-out set."""
+    with open(pred_path + ".meta.json", encoding="utf-8") as fh:
+        meta = json.load(fh)
+    if meta["held_out_sha256"] != sha256_file(held_out_path):
+        raise ValueError(f"{pred_path} was predicted on another held-out set")
+    rows = {r["id"]: r for r in load_records(held_out_path)}
+    with open(pred_path, encoding="utf-8") as fh:
+        records = [json.loads(line) for line in fh if line.strip()]
+    cases = [score_case(rec, rows[rec["id"]]) for rec in records]
+    return {
+        "arm": meta["arm"]["name"],
+        "pred_path": pred_path,
+        "meta": meta,
+        "metrics": aggregate(cases, meta["arm"]["model"], gpu_usd_per_hour),
+        "cases": cases,
+    }
+
+
+def paired_bootstrap(
+    a: list[dict[str, Any]], b: list[dict[str, Any]], n_boot: int = 2000, seed: int = 0
+) -> dict[str, Any]:
+    """Micro-F1 difference b - a over the cases both scored, with a 95% interval.
+
+    Resampling cases, not facts, because the facts in one passage are not
+    independent: a model that misreads a table's column order misses all of
+    them together.
+    """
+    a_by = {c["id"]: c for c in a if "error" not in c}
+    b_by = {c["id"]: c for c in b if "error" not in c}
+    ids = sorted(a_by.keys() & b_by.keys())
+    if not ids:
+        return {"cases": 0}
+    rng = random.Random(seed)
+    diffs = []
+    for _ in range(n_boot):
+        sample = [rng.choice(ids) for _ in ids]
+        diffs.append(_micro([b_by[i] for i in sample])["f1"] - _micro([a_by[i] for i in sample])["f1"])
+    diffs.sort()
+    return {
+        "cases": len(ids),
+        "f1_diff": round(_micro([b_by[i] for i in ids])["f1"] - _micro([a_by[i] for i in ids])["f1"], 4),
+        "ci95": [round(diffs[int(0.025 * n_boot)], 4), round(diffs[int(0.975 * n_boot) - 1], 4)],
+        "cases_flipped": sum(
+            1 for i in ids if a_by[i]["exact_set_match"] != b_by[i]["exact_set_match"]
+        ),
+    }
 
 
 def compare(
-    held_out_path: str = "data/finetune/held_out.jsonl",
-    limit: int = 100,
-    arms: list[dict[str, Any]] | None = None,
-    out_path: str = "reports/finetune_benchmark.json",
+    pred_paths: list[str],
+    held_out_path: str,
+    out_path: str,
+    gpu_usd_per_hour: dict[str, float] | None = None,
 ) -> dict[str, Any]:
-    """Run every arm over the same held-out rows and emit the comparison.
-
-    Default arms cover the three configurations worth distinguishing. Point
-    `base_url` at a local vLLM server serving the merged adapter for the
-    fine-tuned arm; the provider abstraction means nothing else changes.
-    """
-    rows = _load_held_out(held_out_path, limit)
-    if not rows:
-        raise ValueError(f"no held-out examples found at {held_out_path}")
-
-    arms = arms or [
-        {"name": "zero-shot (frontier)", "few_shot": False,
-         "notes": "baseline: no examples, no training"},
-        {"name": "few-shot (frontier)", "few_shot": True,
-         "notes": "two in-context examples; the honest bar to beat"},
-    ]
-
-    results = [run_arm(rows=rows, **arm) for arm in arms]
-    baseline = results[0]
-
-    table = []
-    for r in results:
-        row = r.as_row()
-        if r is not baseline and baseline.f1:
-            row["f1_delta_vs_baseline"] = round(r.f1 - baseline.f1, 4)
-            row["cost_ratio_vs_baseline"] = (
-                round(r.cost_per_1k_usd / baseline.cost_per_1k_usd, 3)
-                if baseline.cost_per_1k_usd
-                else None
-            )
-        table.append(row)
-
+    """Score every arm and compare each with the first, on the cases both have."""
+    gpu = gpu_usd_per_hour or {}
+    results = [score(p, held_out_path, gpu.get(p)) for p in pred_paths]
+    base = results[0]
     payload = {
-        "held_out_examples": len(rows),
-        "arms": table,
-        "interpretation": _interpret(results),
+        "held_out_path": held_out_path,
+        "held_out_sha256": sha256_file(held_out_path),
+        "arms": [{"arm": r["arm"], "pred_path": r["pred_path"], **r["metrics"]} for r in results],
+        "vs_first": [
+            {"arm": r["arm"], "against": base["arm"], **paired_bootstrap(base["cases"], r["cases"])}
+            for r in results[1:]
+        ],
     }
-
-    import os
-
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=2)
+    with open(out_path.replace(".json", "") + ".cases.jsonl", "w", encoding="utf-8") as fh:
+        for r in results:
+            for case in r["cases"]:
+                fh.write(json.dumps({"arm": r["arm"], **case}) + "\n")
     return payload
 
 
-def _interpret(results: list[ArmResult]) -> str:
-    """State the conclusion in the form a hiring manager wants to hear it."""
-    if len(results) < 2:
-        return "Only one arm was run; there is no comparison to draw."
-
-    best = max(results, key=lambda r: r.f1)
-    cheapest = min(results, key=lambda r: r.cost_per_1k_usd)
-    baseline = results[0]
-
-    parts = [
-        f"Best F1: {best.name} at {best.f1:.3f} "
-        f"({best.f1 - baseline.f1:+.3f} vs the {baseline.name} baseline)."
-    ]
-    if cheapest.name != best.name:
-        parts.append(
-            f"Cheapest: {cheapest.name} at ${cheapest.cost_per_1k_usd:.4f}/1k requests "
-            f"({cheapest.cost_per_1k_usd / baseline.cost_per_1k_usd:.2f}x the baseline) "
-            f"for {cheapest.f1:.3f} F1."
-        )
-        parts.append(
-            "The decision is a tradeoff, not a win: quote both numbers and say "
-            "which constraint your system is actually under."
-        )
-    else:
-        parts.append(
-            f"{best.name} is both the most accurate and the cheapest per request, "
-            "so the tradeoff is only against training and operational cost."
-        )
-    return " ".join(parts)
+def table_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """One flat row per arm, for the CLI table and the README."""
+    rows = []
+    for arm in payload["arms"]:
+        cost = arm["cost"]
+        rows.append({
+            "arm": arm["arm"],
+            "cases": arm["cases"],
+            "errors": arm["errors"],
+            "micro_f1": arm["micro"]["f1"],
+            "precision": arm["micro"]["precision"],
+            "recall": arm["micro"]["recall"],
+            "negatives_with_a_fact": f"{arm['negatives_with_any_fact']}/{arm['negatives']}",
+            "parse_failures": arm["parse_failures"],
+            "p50_ms": arm["latency_ms"]["p50"],
+            "p95_ms": arm["latency_ms"]["p95"],
+            "usd_per_1k": cost["per_1k_requests_usd"] if isinstance(cost, dict) else cost,
+        })
+    return rows

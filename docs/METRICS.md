@@ -1142,8 +1142,8 @@ never tells you).
 
 ## 9. Fine-tuning tradeoff
 
-**Status: the dataset is built and its labels audited. The comparison is NOT
-MEASURED: no paid API run, no training run.**
+**Status: the dataset is built and its labels audited, and the pilot's API half
+has run ($0.58). The comparison is NOT MEASURED: no training run, no full run.**
 
 > Fine-tuned `<model>` with LoRA on `<N>` distantly-supervised extraction
 > examples, lifting F1 from `<baseline>` (few-shot prompting) to `<result>` on a
@@ -1170,11 +1170,12 @@ edgar-intel finetune score reports/finetune/pilot/*.jsonl --out reports/finetune
 |---|---|---|
 | the labeller as shipped | 18,480 of its 19,199 labels on the RAG corpus were diluted EPS ("6.13" searched as "6"); revenue had none | `reports/finetune/old-labeller-76899f0.json` |
 | corpus | 40 companies, ten sectors of four, 120 10-Ks, in a separate database `edgar_ft` so the RAG corpus and its eval set are untouched | `reports/finetune/ingest-edgar_ft*.log` |
-| dataset | **1,756 training examples** (1,405 with facts, 351 without) from 30 companies; **539 held-out** (433 with facts, 106 without, 1,767 labels) from 10 companies, one per sector: ADBE CMCSA COST JNJ LMT NVDA PG SLB UNH V | `data/finetune/split.json`, built at `e05f0a7`; held-out sha256 `146778436fd5a42f…` |
-| label precision | **50 of 50** sampled held-out labels right (95% interval lower bound 92.9%); 10 of 10 negatives state no core fact. Marked by Claude; Aditya's confirmation pending | `reports/finetune/label_audit-round2.json` |
+| dataset (v3, the one the full run uses) | **1,743 training examples** (1,394 with facts, 349 without) from 30 companies; **532 held-out** (427 with facts, 105 without, 1,734 labels) from 10 companies, one per sector: ADBE CMCSA COST JNJ LMT NVDA PG SLB UNH V | `data/finetune/split.json`, built at `627b616`; held-out sha256 `e8e92b026c3c…`. Versions 1 and 2 are archived beside it; what changed and why is in `docs/FINETUNE_PILOT.md` |
+| label precision | **50 of 50** sampled held-out labels right (95% interval lower bound 92.9%); 10 of 10 negatives state no core fact. Marked by Claude, confirmed by Aditya on 17 Oct. Drawn from v2; all 50 are still v3 labels | `reports/finetune/label_audit-round2.json`, `reports/finetune/dataset-v2-v3-check.json` |
 | the audit before it | 49 of 50 on the previous build. The wrong one, a buyback authorisation labelled as equity, led to the same-sentence rule for prose | `reports/finetune/label_audit-round1.json` |
 | example length | longest 1,789 Qwen3 tokens, median 958; 1.70M training tokens per epoch | `reports/finetune/train-smoke-cpu.json` |
-| scorer sanity | the labels returned as answers score micro F1 1.000 on all 539; an always-`[]` answer scores 0.000 | `reports/finetune/scorer-sanity-oracle.json` |
+| scorer sanity | the labels returned as answers score micro F1 1.000 on all 539 v1 cases; an always-`[]` answer scores 0.000 | `reports/finetune/scorer-sanity-oracle.json` |
+| pilot, API half (not the comparison: 47 cases) | gpt-6.1-sol few-shot micro F1 0.994 at $2.30 per 1k; gpt-6-luna few-shot 0.984 at $0.20 per 1k; gpt-6-astra dropped under the pilot's written rule | `reports/finetune/pilot/v2/api-report-v3-labels.json`, `docs/FINETUNE_PILOT.md` |
 | label recall | **NOT MEASURED**. A fact the passage states that the labeller missed counts against every arm; `diagnose()` counts those predictions as `unlabelled` | |
 
 **How the arms are scored.** Micro F1 over (concept, fiscal year, value)
@@ -1183,8 +1184,11 @@ nothing on the 106 negatives. Facts are keyed on the concept, not the XBRL tag:
 an unseen company's choice between `Revenues` and
 `RevenueFromContractWithCustomerExcludingAssessedTax` cannot be known. Values
 match at any reporting scale, on magnitude. A figure the labeller found
-without a nearby concept name (2,143 across the corpus, such as equity-statement
-columns) is ignored when predicted, for every arm alike.
+without a nearby concept name, or on a row naming a variant of it (2,268
+across the corpus, such as equity-statement columns or "net income including
+noncontrolling interests"), is ignored when predicted, for every arm alike. So
+is a prediction for a concept and year XBRL has no fact for: seven of the 40
+companies tag no `StockholdersEquity`.
 
 ---
 

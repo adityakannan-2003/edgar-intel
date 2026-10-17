@@ -158,3 +158,48 @@ carries over. v1 and v2 scores are different exams and are never compared.
 under the rule above. Re-running it on v2 would give it a second chance the
 rule does not allow. **Prediction for v2:** `unlabelled` falls to 5 or fewer
 per arm, and sol and luna stay within 0.03 of each other.
+
+## Pilot v2 results, and the v3 re-grade
+
+**v2** (instruction with the XBRL definitions; held-out sha256 `481a2923…`),
+the same 50 cases, `reports/finetune/pilot/v2/api-report.json`:
+
+| arm, v2 | micro F1 | precision / recall | missed | unlabelled | $ per 1k | p50 / p95 |
+|---|---|---|---|---|---|---|
+| gpt-6.1-sol | 0.979 | 1.000 / 0.959 | 7 | 0 | $2.29 | 2.4 s / 10.0 s |
+| gpt-6-luna | 0.970 | 1.000 / 0.941 | 10 | 0 | $0.21 | 2.4 s / 8.1 s |
+
+Both v2 predictions were right: `unlabelled` fell to 0 for both arms, and
+luna is within 0.03 of sol (−0.009, 95% interval [−0.033, 0.000]).
+
+All 7 of sol's misses were figures on rows that name a variant of the
+concept: Costco's "Net income including noncontrolling interests" (equal to
+net income only in years the interests were zero), JNJ's "Net earnings from
+continuing operations", SLB's "Pretax segment operating income", and NVIDIA
+share counts from equity-statement columns. Labels on rows naming a segment,
+noncontrolling interests, or continuing or discontinued operations are now
+dropped (`627b616`). That covers 1.9% of held-out labels, none of the 50
+audited.
+
+**v3** (held-out sha256 `e8e92b02…`, built at `627b616`): 532 held-out
+examples (427 with facts, 1,734 labels) and 1,743 training examples. Seven
+held-out passages whose only labels were on such rows left the set. Every
+other input is unchanged and all 50 audited labels are still labels
+(`reports/finetune/dataset-v2-v3-check.json`). This is the set the full run
+uses.
+
+**The v2 answers re-graded on v3 labels**, with no model calls, on the 47
+pilot cases still in the set (`reports/finetune/pilot/v2/api-report-v3-labels.json`):
+
+| arm | micro F1 | precision / recall | missed |
+|---|---|---|---|
+| gpt-6.1-sol | 0.994 | 1.000 / 0.987 | 2 |
+| gpt-6-luna | 0.984 | 1.000 / 0.969 | 5 |
+
+The misses left are NVIDIA share counts from an equity-statement column
+(both arms) and luna skipping Costco's "Total assets" row three times. A
+fine-tune has little room above the frontier prompt on accuracy. Its case,
+if it has one, is cost and latency.
+
+**Spend so far:** v1 $0.456, v2 $0.125, total **$0.581** of the $5 cap. The
+GPU half has not started.

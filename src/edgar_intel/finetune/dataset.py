@@ -68,7 +68,15 @@ INSTRUCTION = (
     "year ends in (one ending in the first week of January counts as the year "
     "before), even where the company names its years differently. Give each "
     "value as a plain number, in full units or as printed. "
-    "Return [] if the passage states none of these facts."
+    "Return [] if the passage states none of these facts.\n\n"
+    "The concepts mean what XBRL means by them. Net income and total "
+    "stockholders' equity are the company's own, excluding noncontrolling "
+    "interests: not \"net income including noncontrolling interests\" or a "
+    "\"total equity\" that adds them. Total revenue is all revenue, so where "
+    "net sales and other revenue (such as membership fees) are printed "
+    "separately it is their total, not net sales. Diluted earnings per share "
+    "is the total figure, not continuing operations alone. Cash and cash "
+    "equivalents excludes restricted cash and short-term investments."
 )
 
 # A 10-K's income statement prints three years and its balance sheet two.
@@ -167,6 +175,13 @@ class Example:
     # not named near it. Never trained on; the scorer ignores a prediction of
     # one rather than calling it right or wrong (`score_extraction(ignore=)`).
     dropped: list[dict[str, Any]] = field(default_factory=list)
+    # The (concept, year) pairs XBRL has a fact for in this filing's window.
+    # A prediction outside them cannot be checked: JNJ and Visa tag no
+    # StockholdersEquity at all, only the version that includes noncontrolling
+    # interests, and Visa tags EPS only per share class. The pilot's first run
+    # scored JNJ's correctly read "Total shareholders' equity | 81,544" as a
+    # false positive for every arm.
+    verifiable: list[list[Any]] = field(default_factory=list)
 
     def years(self) -> list[int]:
         return list(range(self.filing_fy - YEARS_PRINTED + 1, self.filing_fy + 1))
@@ -382,6 +397,7 @@ def build_examples(
                 facts=labels,
                 sector=sector_of(filing["ticker"]),
                 dropped=dropped,
+                verifiable=sorted([c, y] for c, y in candidates),
             )
             counts["labels"] += len(labels)
             counts["dropped"] += len(dropped)

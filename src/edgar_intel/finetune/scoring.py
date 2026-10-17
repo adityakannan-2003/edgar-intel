@@ -154,15 +154,22 @@ def _keyed(facts: list[dict[str, Any]]) -> tuple[dict[tuple[str, int], float], i
 
 
 def _drop_ignored(
-    pred: dict[tuple[str, int], float], ignore: list[dict[str, Any]] | None, tol: float
-) -> tuple[dict[tuple[str, int], float], int]:
-    if not ignore:
-        return pred, 0
-    skip, _ = _keyed(ignore)
+    pred: dict[tuple[str, int], float],
+    ignore: list[dict[str, Any]] | None,
+    tol: float,
+    verifiable: list[list[Any]] | None = None,
+) -> tuple[dict[tuple[str, int], float], int, int]:
+    """(kept, ignored, unverifiable): predictions left to score, and why the rest went."""
+    skip, _ = _keyed(ignore or [])
     kept = {
         k: v for k, v in pred.items() if not (k in skip and values_match(v, skip[k], tol))
     }
-    return kept, len(pred) - len(kept)
+    ignored = len(pred) - len(kept)
+    if verifiable is None:
+        return kept, ignored, 0
+    checkable = {(c, int(y)) for c, y in verifiable}
+    scored = {k: v for k, v in kept.items() if k in checkable}
+    return scored, ignored, len(kept) - len(scored)
 
 
 def score_extraction(
@@ -170,6 +177,7 @@ def score_extraction(
     expected: list[dict[str, Any]],
     tol: float = 0.005,
     ignore: list[dict[str, Any]] | None = None,
+    verifiable: list[list[Any]] | None = None,
 ) -> dict[str, float]:
     """Set-level precision/recall/F1 over (concept, fiscal_year, value) triples.
 
@@ -183,10 +191,14 @@ def score_extraction(
     penalised, for every arm alike: "BALANCE AT SEPTEMBER 3, 2023 | ... |
     25,058" is total equity only by its column heading, which the passage may
     not contain.
+
+    `verifiable`, when given, lists the (concept, year) pairs XBRL has a fact
+    for; a prediction of any other pair is set aside as unverifiable, again
+    for every arm alike.
     """
     exp, _ = _keyed(expected)
     pred, invalid = _keyed(predicted)
-    pred, ignored = _drop_ignored(pred, ignore, tol)
+    pred, ignored, unverifiable = _drop_ignored(pred, ignore, tol, verifiable)
 
     tp = sum(
         1 for key, value in pred.items() if key in exp and values_match(value, exp[key], tol)
@@ -207,6 +219,7 @@ def score_extraction(
         "n_expected": n_exp,
         "invalid": invalid,
         "ignored": ignored,
+        "unverifiable": unverifiable,
     }
 
 
@@ -269,7 +282,12 @@ def value_in_passage(passage: str, value: float) -> bool:
         scaled = abs(value) / scale
         if scaled < 1:
             break
-        for form in {f"{scaled:,.0f}", f"{scaled:,.2f}", f"{scaled:,.1f}", f"{scaled:.2f}"}:
+        forms = {f"{scaled:,.2f}", f"{scaled:,.1f}"}
+        # Rounded to a whole number only when that is not most of the figure:
+        # "8" must not count as printing 8.28.
+        if scaled >= 100 or float(scaled).is_integer():
+            forms.add(f"{scaled:,.0f}")
+        for form in forms:
             if re.search(_LEFT + re.escape(form) + _RIGHT, passage):
                 return True
     return False
@@ -281,6 +299,7 @@ def diagnose(
     passage: str,
     tol: float = 0.005,
     ignore: list[dict[str, Any]] | None = None,
+    verifiable: list[list[Any]] | None = None,
 ) -> dict[str, int]:
     """Count each error by kind, deterministically. This is "where it breaks".
 
@@ -306,7 +325,7 @@ def diagnose(
             out["invalid"] += 1
             continue
         pred.setdefault((norm[0], norm[1]), norm[2])
-    pred, _ = _drop_ignored(pred, ignore, tol)
+    pred, _, _ = _drop_ignored(pred, ignore, tol, verifiable)
 
     for key, value in pred.items():
         if key in exp and values_match(value, exp[key], tol):

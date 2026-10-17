@@ -345,29 +345,39 @@ def score_case(record: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]:
         case["error"] = record["error"]
         return case
     predicted = parse_extraction(record["text"])
+    verifiable = row.get("verifiable")
     case["parse_ok"] = parse_ok(record["text"])
-    case.update(score_extraction(predicted, row["facts"], ignore=row["dropped"]))
-    case["diagnosis"] = diagnose(predicted, row["facts"], row["passage"], ignore=row["dropped"])
+    case.update(score_extraction(predicted, row["facts"], ignore=row["dropped"], verifiable=verifiable))
+    case["diagnosis"] = diagnose(
+        predicted, row["facts"], row["passage"], ignore=row["dropped"], verifiable=verifiable
+    )
     case["by_concept"] = {}
     for concept in CONCEPTS:
         s = score_extraction(
             _by_concept(predicted, concept), _by_concept(row["facts"], concept),
-            ignore=_by_concept(row["dropped"], concept),
+            ignore=_by_concept(row["dropped"], concept), verifiable=verifiable,
         )
         if s["n_pred"] or s["n_expected"]:
             case["by_concept"][concept] = {k: s[k] for k in ("tp", "n_pred", "n_expected")}
     return case
 
 
-def _micro(cases: list[dict[str, Any]]) -> dict[str, float]:
+def _micro(cases: list[dict[str, Any]]) -> dict[str, Any]:
+    """Pooled precision/recall/F1. None where there was nothing to score: a
+    company whose sampled passages state no fact, answered [] each time, has
+    no F1 -- the first pilot report printed it as 0.0."""
     tp = sum(c["tp"] for c in cases)
     n_pred = sum(c["n_pred"] for c in cases)
     n_exp = sum(c["n_expected"] for c in cases)
-    p = tp / n_pred if n_pred else 0.0
-    r = tp / n_exp if n_exp else 0.0
-    f1 = 2 * p * r / (p + r) if p + r else 0.0
-    return {"precision": round(p, 4), "recall": round(r, 4), "f1": round(f1, 4),
-            "tp": tp, "n_pred": n_pred, "n_expected": n_exp}
+    p = tp / n_pred if n_pred else (None if not n_exp else 0.0)
+    r = tp / n_exp if n_exp else (None if not n_pred else 0.0)
+    if p is None or r is None:
+        f1 = None
+    else:
+        f1 = round(2 * p * r / (p + r), 4) if p + r else 0.0
+    return {"precision": None if p is None else round(p, 4),
+            "recall": None if r is None else round(r, 4),
+            "f1": f1, "tp": tp, "n_pred": n_pred, "n_expected": n_exp}
 
 
 def _percentile(values: list[float], q: float) -> float | None:
@@ -414,6 +424,7 @@ def aggregate(
         "parse_failures": sum(1 for c in scored if not c["parse_ok"]),
         "invalid_facts": sum(c["invalid"] for c in scored),
         "ignored_facts": sum(c["ignored"] for c in scored),
+        "unverifiable_facts": sum(c.get("unverifiable", 0) for c in scored),
         "diagnosis": diag_totals,
         "per_concept": per_concept,
         "per_company": per_company,
@@ -491,15 +502,20 @@ def paired_bootstrap(
     ids = sorted(a_by.keys() & b_by.keys())
     if not ids:
         return {"cases": 0}
+    def f1(cases: list[dict[str, Any]]) -> float:
+        # A resample with no fact to find in either arm has no F1 in either;
+        # counting both as 0 makes their difference 0, which is the truth.
+        return _micro(cases)["f1"] or 0.0
+
     rng = random.Random(seed)
     diffs = []
     for _ in range(n_boot):
         sample = [rng.choice(ids) for _ in ids]
-        diffs.append(_micro([b_by[i] for i in sample])["f1"] - _micro([a_by[i] for i in sample])["f1"])
+        diffs.append(f1([b_by[i] for i in sample]) - f1([a_by[i] for i in sample]))
     diffs.sort()
     return {
         "cases": len(ids),
-        "f1_diff": round(_micro([b_by[i] for i in ids])["f1"] - _micro([a_by[i] for i in ids])["f1"], 4),
+        "f1_diff": round(f1([b_by[i] for i in ids]) - f1([a_by[i] for i in ids]), 4),
         "ci95": [round(diffs[int(0.025 * n_boot)], 4), round(diffs[int(0.975 * n_boot) - 1], 4)],
         "cases_flipped": sum(
             1 for i in ids if a_by[i]["exact_set_match"] != b_by[i]["exact_set_match"]

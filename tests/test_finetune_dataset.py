@@ -261,3 +261,23 @@ class TestSplit:
         a = {e.ticker for e in split(self._examples())[1]}
         b = {e.ticker for e in split(self._examples())[1]}
         assert a == b
+
+
+class TestVerifiable:
+    def test_an_uncheckable_prediction_is_set_aside_not_scored(self):
+        # JNJ tags no StockholdersEquity, so its printed equity cannot be checked.
+        expected = [{"concept": "total revenue", "fiscal_year": 2024, "value": 88_821_000_000}]
+        pred = expected + [{"concept": "total stockholders' equity", "fiscal_year": 2024, "value": 71_490}]
+        verifiable = [["total revenue", 2024], ["total revenue", 2023]]
+        score = score_extraction(pred, expected, verifiable=verifiable)
+        assert score["precision"] == 1.0 and score["unverifiable"] == 1
+        assert score_extraction(pred, expected)["precision"] == 0.5
+
+    def test_a_whole_number_does_not_count_as_printing_a_decimal(self):
+        from edgar_intel.finetune.scoring import value_in_passage
+
+        assert not value_in_passage("[8 Financial Statements]", 8.28)
+        assert value_in_passage("Diluted | $ 8.28", 8.28)
+
+    def test_the_instruction_gives_the_xbrl_definitions(self):
+        assert "noncontrolling" in INSTRUCTION and "membership fees" in INSTRUCTION

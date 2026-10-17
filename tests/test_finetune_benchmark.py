@@ -30,6 +30,7 @@ def example(i: int, ticker: str, facts: list[dict], passage: str = "") -> Exampl
         filing_fy=2024, period_end="2024-09-28",
         passage=passage or f"Total net sales | 391,035\nNet income | 93,736 ({i})",
         facts=facts, sector="s",
+        verifiable=[["net income", 2024], ["total revenue", 2024]],
     )
 
 
@@ -203,3 +204,11 @@ class TestThroughput:
         cost = aggregate(cases, "extract", 0.72, {"requests_per_s": 2.0, "concurrency": 16})["cost"]
         # $0.72/hr at 7,200 requests/hr is $0.10 per 1,000.
         assert cost["at_load"]["per_1k_requests_usd"] == pytest.approx(0.10)
+
+
+class TestMicro:
+    def test_nothing_to_score_is_none_not_zero(self):
+        from edgar_intel.finetune.benchmark import _micro
+
+        assert _micro([{"tp": 0, "n_pred": 0, "n_expected": 0}])["f1"] is None
+        assert _micro([{"tp": 0, "n_pred": 1, "n_expected": 0}])["precision"] == 0.0

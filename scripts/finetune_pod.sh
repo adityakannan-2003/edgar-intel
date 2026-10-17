@@ -21,10 +21,14 @@
 # test passed on (reports/finetune/train-smoke-cpu.json).
 set -euo pipefail
 
+# /workspace is the small persistent volume: code, data, adapters, logs.
+# The environments and the 16 GB of model weights go on the container disk,
+# which stops billing when the pod stops; they are rebuilt in minutes.
 W=/workspace
+C=/root/ft
 REPO=$W/edgar-intel
-export HF_HOME=$W/hf            # model downloads land on the pod's disk, once
-mkdir -p "$W/logs" "$W/adapters"
+export HF_HOME=$C/hf
+mkdir -p "$W/logs" "$W/adapters" "$C"
 
 stage=${1:?usage: finetune_pod.sh setup|train NAME [ARGS]|serve NAME}
 shift
@@ -33,26 +37,26 @@ case "$stage" in
 setup)
   nvidia-smi | tee "$W/logs/nvidia-smi.txt"
   python -m pip install -q uv
-  uv venv -q --python 3.12 "$W/train-env"
-  VIRTUAL_ENV=$W/train-env uv pip install -q \
+  uv venv -q --python 3.12 "$C/train-env"
+  VIRTUAL_ENV=$C/train-env uv pip install -q \
     torch==2.14.1 transformers==5.20.1 peft==0.21.2 trl==1.16.0 datasets==5.1.0 \
     accelerate bitsandbytes -e "$REPO"
-  uv venv -q --python 3.12 "$W/serve-env"
-  VIRTUAL_ENV=$W/serve-env uv pip install -q vllm
-  "$W/train-env/bin/python" -c "import torch; assert torch.cuda.is_available(); print('train env: cuda', torch.version.cuda, torch.cuda.get_device_name(0))"
-  "$W/serve-env/bin/python" -c "import vllm; print('serve env: vllm', vllm.__version__)"
+  uv venv -q --python 3.12 "$C/serve-env"
+  VIRTUAL_ENV=$C/serve-env uv pip install -q vllm
+  "$C/train-env/bin/python" -c "import torch; assert torch.cuda.is_available(); print('train env: cuda', torch.version.cuda, torch.cuda.get_device_name(0))"
+  "$C/serve-env/bin/python" -c "import vllm; print('serve env: vllm', vllm.__version__)"
   ;;
 train)
   name=${1:?adapter name}; shift
   cd "$REPO"
-  "$W/train-env/bin/edgar-intel" finetune train \
+  "$C/train-env/bin/edgar-intel" finetune train \
     --train-file "$W/data/train.jsonl" --output-dir "$W/adapters/$name" "$@" \
     2>&1 | tee "$W/logs/train-$name.log"
   ;;
 serve)
   name=${1:?adapter name}
   pkill -f "vllm serve" || true
-  nohup "$W/serve-env/bin/vllm" serve Qwen/Qwen3-8B \
+  nohup "$C/serve-env/bin/vllm" serve Qwen/Qwen3-8B \
     --enable-lora --lora-modules "extract=$W/adapters/$name" --max-lora-rank 16 \
     --max-model-len 8192 --gpu-memory-utilization 0.90 --seed 0 --port 8000 \
     > "$W/logs/serve-$name.log" 2>&1 &

@@ -22,7 +22,7 @@ That single property is what everything else here rests on.
 | **Hybrid retrieval** | Dense + lexical fused with RRF, cross-encoder reranking, four chunking strategies measured against each other | Turns "we use recursive chunking" from a guess into a measured decision |
 | **Bounded agent** | Six typed tools, step ceiling, retry budget, loop detection, confidence floor, citation + numeric grounding checks | "Mitigating cascade failures" is a literal JD requirement. This is what it means. |
 | **MCP server** | Same tool registry exposed over MCP | One set of definitions serves the agent, the HTTP API, and any MCP client |
-| **Fine-tuning benchmark** | LoRA on structured extraction, benchmarked against a prompting baseline on the same held-out set | The comparison is the point, not the training |
+| **Fine-tuning benchmark** | LoRA on structured extraction, benchmarked against few-shot prompting on the same company-disjoint held-out set | Measured: the frontier prompt wins on accuracy (0.98 against 0.91 F1), and the fine-tune wins only on cost at load. [Results below](#fine-tune-vs-prompting-measured) |
 | **Serving + benchmark** | FastAPI, liveness/readiness split, p50/p95/p99, throughput, $/1k requests, concurrency sweep | Cost and latency are named constraints in most senior AI JDs |
 | **Observability** | OpenTelemetry spans, per-operation token ledger | 78% of AI companies ask for it |
 
@@ -110,6 +110,73 @@ validate_numeric_grounding("Revenue was $999,999 million.", tool_outputs)
 If a figure in the answer never appeared in any tool output, the agent is told
 so and made to re-check or escalate. Same for citations: a passage id that no
 tool returned is rejected outright.
+
+---
+
+## Fine-tune vs prompting, measured
+
+**The task.** Given one passage from a 10-K, list the financial facts it
+states (concept, fiscal year, value) as JSON.
+- **Labels:** every label comes from the SEC's XBRL data, not from a model,
+  and the scorer is deterministic.
+- **Data:** 40 companies in ten sectors, in a database of their own
+  (`edgar_ft`).
+- **Split:** 1,743 training examples from 30 companies, and 532 held-out
+  examples from 10 companies the fine-tune never saw, one per sector.
+
+| arm | micro F1 | $ per 1k requests | p50 / p95 |
+|---|---|---|---|
+| gpt-6.1-sol, few-shot (2 passes) | **0.980**, 0.980 | $2.07, $1.54 | 2.2 s / 5.5 s |
+| gpt-6-luna, few-shot (2 passes) | 0.973, 0.966 | $0.22 | 2.5 s / 11.1 s |
+| Qwen3-8B + LoRA (2 training seeds) | **0.908**, 0.912 | $0.58 one at a time, **$0.061 at load** | 1.9 s / 7.1 s |
+| Qwen3-8B, few-shot, untuned | 0.439 | $0.68 | 2.1 s / 7.0 s |
+
+**What the numbers say:**
+- **Accuracy:** sol beats the fine-tune by 0.07. Its 95% interval is
+  [−0.089, −0.056], ten times the largest run-to-run spread measured (0.007,
+  luna's two passes). The two LoRA seeds differ by 0.004.
+- **What fine-tuning bought:** the same 8B model went from 0.44 to 0.91, at
+  0.77 GPU-hours per seed on one RTX 4090. Untuned, it reads the right
+  figures and writes "in millions" with one or two zeros too many.
+- **Cost:** under load (measured 4.07 requests/s with 32 in flight on a
+  $0.89/hr GPU), the fine-tune is about 3.5× cheaper than luna and 25–34×
+  cheaper than sol. One request at a time on a dedicated GPU, it costs more
+  than luna.
+- **Where it breaks:**
+  - The fine-tune misses more facts, and reports figures that aren't labels.
+  - It invents a few: 16 not in the passage, and facts on 2 of 105 no-fact
+    passages, which no API model did.
+  - Sol's errors are mostly omissions: 40 of its 70.
+
+> **Resume bullet:** Fine-tuned Qwen3-8B with LoRA on 1,743 XBRL-labelled
+> extraction examples (0.77 GPU-hours on one RTX 4090), lifting micro F1 from
+> 0.44 (the same model, few-shot) to 0.91 on a 532-case company-disjoint
+> held-out set. That is still 0.07 below gpt-6.1-sol few-shot (0.98, beyond
+> run-to-run noise of ±0.007), at $0.06 per 1k requests under load against
+> $1.54–2.07 for sol and $0.22 for gpt-6-luna.
+
+**How it was run.** The labeller as first written was mostly noise: 18,480 of
+its 19,199 labels were diluted EPS. It was rewritten and audited by hand twice:
+49 of 50 sampled labels right, a fix, then 50 of 50.
+
+A pilot under a $5 cap ($1.09 spent) found three dataset problems before any
+full training run:
+1. An instruction that never defined net income or total revenue.
+2. Seven companies that tag no `StockholdersEquity` at all.
+3. Labels on rows naming a variant of a concept, such as "including
+   noncontrolling interests".
+
+Predictions were committed before each paid run and scored afterwards: 7 of
+the full run's 10 right, 2 half right, 1 wrong. The full run cost $4.70; the
+whole project, $5.87.
+
+Every number above traces to a results file:
+- [`docs/METRICS.md` §9](docs/METRICS.md#9-fine-tuning-tradeoff)
+- [`docs/FINETUNE_RUN.md`](docs/FINETUNE_RUN.md): results, scored predictions,
+  spend
+- [`docs/FINETUNE_PILOT.md`](docs/FINETUNE_PILOT.md): what the pilot found and
+  changed
+- `reports/finetune/full/report.json` (local, gitignored)
 
 ---
 
@@ -210,7 +277,10 @@ you then fail. The work that converts it into something you can defend:
 | `chunking/strategies.py` | Why does section-aware help on filings specifically? When would semantic chunking be worth its cost? |
 | `agent/loop.py` | What happens when the model loops? How do you catch a hallucinated number without a second model? |
 | `agent/tools.py` | Why six tools and not twenty? Why is escalation a tool? |
-| `finetune/benchmark.py` | Why fine-tune for extraction and not for analysis? What did the fine-tune cost you, and was it worth it? |
+| `finetune/dataset.py` | How do you label 7,161 facts without an LLM? How do you know the labels are right, and what did your first labeller get wrong? Why split by company and not by passage? |
+| `finetune/scoring.py` | Why score on the concept and not the XBRL tag? Isn't setting aside "unverifiable" predictions a way to flatter the model? Why micro F1 and not the per-passage mean? |
+| `finetune/benchmark.py` | Why fine-tune for extraction and not for analysis? Your fine-tune lost by 0.07 F1: when would you ship it anyway? How do you know 0.07 is not noise? What did it cost, and was it worth it? |
+| `finetune/train_lora.py` | Why LoRA and not full fine-tuning? Why loss on the answer only? Why did the untuned model get the digits right and the value wrong? |
 | `ingest/parse.py` | What breaks when you flatten a 10-K naively? |
 
 If you can't answer one of those from your own experience, that module is not
@@ -225,6 +295,10 @@ embeddings on CPU, lexical search in Postgres. Only generation and judging cost
 money. A full 200-case evaluation run against a small frontier model is
 typically well under a dollar; the harness reports exact `total_cost_usd` and
 `cost_per_1k_usd` on every run, so you never have to guess.
+
+The fine-tune benchmark cost **$5.87** in total: $2.73 of API calls and
+$3.14 of rented GPU time, from RunPod's billing read. The full run was $4.70
+of that, and the pilot $1.09.
 
 ## Licence
 

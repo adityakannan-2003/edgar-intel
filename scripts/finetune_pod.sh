@@ -11,6 +11,7 @@
 #   bash scripts/finetune_pod.sh setup                       # two environments, once
 #   bash scripts/finetune_pod.sh train pilot --max-examples 300 --epochs 1
 #   bash scripts/finetune_pod.sh serve pilot                 # Qwen3-8B + adapter "extract" on :8000
+#   bash scripts/finetune_pod.sh serve s17 s29               # two adapters, "extract-s17" and "extract-s29"
 #
 # And from the Mac, through a tunnel so nothing is exposed publicly:
 #   ssh -N -L 8000:localhost:8000 POD
@@ -30,7 +31,7 @@ REPO=$W/edgar-intel
 export HF_HOME=$C/hf
 mkdir -p "$W/logs" "$W/adapters" "$C"
 
-stage=${1:?usage: finetune_pod.sh setup|train NAME [ARGS]|serve NAME}
+stage=${1:?usage: finetune_pod.sh setup|train NAME [ARGS]|serve NAME [NAME...]}
 shift
 
 case "$stage" in
@@ -59,6 +60,14 @@ train)
   ;;
 serve)
   name=${1:?adapter name}
+  # One adapter is served as "extract" (the pilot's arm); several as
+  # "extract-NAME" each, all beside the one copy of the base weights.
+  if [ "$#" -eq 1 ]; then
+    loras=("extract=$W/adapters/$name")
+  else
+    loras=()
+    for n in "$@"; do loras+=("extract-$n=$W/adapters/$n"); done
+  fi
   # vLLM compiles kernels at startup with ninja, which it looks for on PATH:
   # called by full path without its environment on PATH, it fails with
   # "No such file or directory: 'ninja'" after loading the model.
@@ -66,9 +75,9 @@ serve)
   VIRTUAL_ENV=$C/serve-env uv pip install -q ninja
   pkill -f "[v]llm serve" || true
   nohup "$C/serve-env/bin/vllm" serve Qwen/Qwen3-8B \
-    --enable-lora --lora-modules "extract=$W/adapters/$name" --max-lora-rank 16 \
+    --enable-lora --lora-modules "${loras[@]}" --max-loras "$#" --max-lora-rank 16 \
     --max-model-len 8192 --gpu-memory-utilization 0.90 --seed 0 --port 8000 \
-    > "$W/logs/serve-$name.log" 2>&1 &
+    > "$W/logs/serve-$(IFS=-; echo "$*").log" 2>&1 &
   pid=$!
   # The first start downloads 16 GB of weights; give it 20 minutes, and stop
   # waiting the moment the server dies rather than polling a dead port.
@@ -77,11 +86,11 @@ serve)
       curl -s localhost:8000/v1/models
       exit 0
     fi
-    kill -0 "$pid" 2>/dev/null || { tail -40 "$W/logs/serve-$name.log"; exit 1; }
+    kill -0 "$pid" 2>/dev/null || { tail -40 "$W/logs/serve-$(IFS=-; echo "$*").log"; exit 1; }
     sleep 5
   done
   echo "vLLM not ready after 20 minutes" >&2
-  tail -40 "$W/logs/serve-$name.log"
+  tail -40 "$W/logs/serve-$(IFS=-; echo "$*").log"
   exit 1
   ;;
 *)

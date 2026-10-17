@@ -85,8 +85,18 @@ ARMS: dict[str, Arm] = {
     "qwen3-8b-lora": Arm(
         "Qwen3-8B + LoRA", "extract", few_shot=False, self_hosted=True,
         extra_body=_QWEN_NO_THINK,
-        notes="vLLM serving the adapter under the name 'extract'",
+        notes="vLLM serving the adapter under the name 'extract' (the pilot's)",
     ),
+    # The full run trains two seeds so the fine-tune's own run-to-run spread is
+    # measured, not assumed; vLLM serves each adapter under its own name.
+    **{
+        f"qwen3-8b-lora-s{seed}": Arm(
+            f"Qwen3-8B + LoRA, seed {seed}", f"extract-s{seed}", few_shot=False,
+            self_hosted=True, extra_body=_QWEN_NO_THINK,
+            notes=f"full training set, 2 epochs, seed {seed}",
+        )
+        for seed in (17, 29)
+    },
 }
 
 

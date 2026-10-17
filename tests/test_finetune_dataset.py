@@ -281,3 +281,24 @@ class TestVerifiable:
 
     def test_the_instruction_gives_the_xbrl_definitions(self):
         assert "noncontrolling" in INSTRUCTION and "membership fees" in INSTRUCTION
+
+
+class TestVariantRows:
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "Net income including noncontrolling interests | $ | 7,367",
+            "Net earnings from continuing operations | 7,367",
+            "Pretax segment operating income | 7,367",
+        ],
+    )
+    def test_a_row_naming_a_variant_is_dropped(self, line):
+        concept = "operating income" if "operating" in line else "net income"
+        labels, dropped, _ = label_passage(line, {(concept, 2024): [7_367_000_000.0]})
+        assert labels == [] and len(dropped) == 1
+
+    def test_a_heading_above_does_not_make_a_total_a_variant(self):
+        cands = {("total revenue", 2024): [60_922_000_000.0]}
+        passage = "Segment information\nYear Ended Jan 28, 2024\nTotal revenue | $ | 60,922"
+        labels, _, _ = label_passage(passage, cands)
+        assert len(labels) == 1

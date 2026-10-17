@@ -212,3 +212,27 @@ class TestMicro:
 
         assert _micro([{"tp": 0, "n_pred": 0, "n_expected": 0}])["f1"] is None
         assert _micro([{"tp": 0, "n_pred": 1, "n_expected": 0}])["precision"] == 0.0
+
+
+class TestRegrade:
+    def test_corrected_labels_rescore_stored_answers_without_a_call(self, files, tmp_path):
+        held, train, tmp = files
+        out = str(tmp / "p.jsonl")
+        predict(ARM, held, out, train_path=train, llm=ScriptedLLM([RIGHT] * 5))
+        rows = [json.loads(x) for x in open(held)]
+        rows[0]["facts"] = rows[0]["facts"][:1]          # a label corrected
+        fixed = tmp_path / "fixed.jsonl"
+        fixed.write_text("".join(json.dumps(r) + "\n" for r in rows))
+        result = score(out, str(fixed))
+        assert result["regraded"] and result["metrics"]["cases"] == 5
+
+    def test_changed_inputs_are_refused(self, files, tmp_path):
+        held, train, tmp = files
+        out = str(tmp / "p.jsonl")
+        predict(ARM, held, out, train_path=train, n=1, llm=ScriptedLLM([RIGHT]))
+        rows = [json.loads(x) for x in open(held)]
+        rows[0]["messages"][1]["content"] += " changed"
+        other = tmp_path / "other.jsonl"
+        other.write_text("".join(json.dumps(r) + "\n" for r in rows))
+        with pytest.raises(ValueError, match="another held-out set"):
+            score(out, str(other))

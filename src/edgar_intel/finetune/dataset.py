@@ -142,6 +142,18 @@ ANCHOR_LINES = 3
 # "capitalized software totaled $1.4 billion" labelled as cash, because "cash"
 # appeared elsewhere in the paragraph.
 PROSE_LINE_CHARS = 300
+
+# A row that names a variant of its concept states the variant, not the
+# concept, even when the two are equal. The pilot's v2 run: every one of
+# sol's 7 misses was such a row -- Costco's "Net income including
+# noncontrolling interests" (equal to net income only in years the interests
+# were zero), JNJ's "Net earnings from continuing operations", SLB's "Pretax
+# segment operating income". A figure on one is dropped, so it is neither
+# required nor penalised. 1.6% of training labels and 1.9% of held-out
+# labels sat on such rows; none of the 50 audited ones did.
+VARIANT_WORDS = re.compile(
+    r"noncontrolling|non-controlling|continuing\s+operations|discontinued|segment", re.I
+)
 PROSE_BEFORE, PROSE_AFTER = 150, 40
 _SENTENCE_BREAK = re.compile(r"\.\s|;\s|\n|•")
 
@@ -271,8 +283,15 @@ def _is_prose_match(match: re.Match[str]) -> bool:
 
 
 def _anchored(passage: str, match: re.Match[str], concept: str) -> bool:
-    lo, hi = _window(passage, match.start(), match.end(), _is_prose_match(match))
-    return bool(CONCEPT_WORDS[concept].search(passage[lo:hi]))
+    prose = _is_prose_match(match)
+    lo, hi = _window(passage, match.start(), match.end(), prose)
+    if not CONCEPT_WORDS[concept].search(passage[lo:hi]):
+        return False
+    # The variant check reads only the figure's own row or sentence, not the
+    # heading lines above it: "Segment information" three lines up does not
+    # make a "Total revenue" row a segment figure.
+    row_lo = lo if prose else passage.rfind("\n", 0, match.start()) + 1
+    return not VARIANT_WORDS.search(passage[max(row_lo, lo):hi])
 
 
 def candidate_facts(

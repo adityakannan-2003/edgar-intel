@@ -153,6 +153,16 @@ def select(rows: list[dict[str, Any]], n: int | None, seed: int = 17) -> list[di
     return [rows[i] for i in sorted(order[:n])]
 
 
+def inputs_sha256(rows: list[dict[str, Any]]) -> str:
+    """A hash of what the models see -- ids, instruction, user message -- and
+    nothing else. Labels can then be corrected and stored answers re-scored
+    without a model call, the way `eval regrade` re-marks stored answers."""
+    digest = hashlib.sha256()
+    for row in rows:
+        digest.update(json.dumps([row["id"], row["messages"][0], row["messages"][1]]).encode())
+    return digest.hexdigest()
+
+
 def _usage(raw: dict[str, Any]) -> dict[str, int]:
     usage = raw.get("usage") or {}
     prompt_details = usage.get("prompt_tokens_details") or {}
@@ -195,6 +205,7 @@ def predict(
         "arm": arm.config(),
         "held_out_path": held_out_path,
         "held_out_sha256": sha256_file(held_out_path),
+        "inputs_sha256": inputs_sha256(load_records(held_out_path)),
         "system_sha256": hashlib.sha256(system.encode()).hexdigest(),
         "shot_ids": [s["id"] for s in shots],
         "n_requested": n,
@@ -203,7 +214,7 @@ def predict(
     if os.path.exists(meta_path):
         with open(meta_path, encoding="utf-8") as fh:
             existing = json.load(fh)
-        keys = ("arm", "held_out_sha256", "system_sha256")
+        keys = ("arm", "inputs_sha256", "system_sha256")
         if any(existing.get(k) != meta[k] for k in keys):
             raise ValueError(f"{out_path} holds another configuration; use a new file")
     else:
@@ -470,18 +481,28 @@ def score(
     gpu_usd_per_hour: float | None = None,
     throughput: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Score one predictions file. Refuses a file made on another held-out set."""
+    """Score one predictions file against a held-out set with the same inputs.
+
+    The labels may differ from the ones the file was predicted with -- that is
+    a re-grade, and the report says so -- but the inputs may not: an answer to
+    another question is not an answer to this one.
+    """
     with open(pred_path + ".meta.json", encoding="utf-8") as fh:
         meta = json.load(fh)
-    if meta["held_out_sha256"] != sha256_file(held_out_path):
+    records_in = load_records(held_out_path)
+    if meta.get("inputs_sha256", meta["held_out_sha256"]) not in (
+        inputs_sha256(records_in), sha256_file(held_out_path)
+    ):
         raise ValueError(f"{pred_path} was predicted on another held-out set")
-    rows = {r["id"]: r for r in load_records(held_out_path)}
+    rows = {r["id"]: r for r in records_in}
     with open(pred_path, encoding="utf-8") as fh:
         records = [json.loads(line) for line in fh if line.strip()]
     cases = [score_case(rec, rows[rec["id"]]) for rec in records]
     return {
         "arm": meta["arm"]["name"],
         "pred_path": pred_path,
+        "labels_sha256": sha256_file(held_out_path),
+        "regraded": meta["held_out_sha256"] != sha256_file(held_out_path),
         "meta": meta,
         "metrics": aggregate(cases, meta["arm"]["model"], gpu_usd_per_hour, throughput),
         "cases": cases,
@@ -537,7 +558,10 @@ def compare(
     payload = {
         "held_out_path": held_out_path,
         "held_out_sha256": sha256_file(held_out_path),
-        "arms": [{"arm": r["arm"], "pred_path": r["pred_path"], **r["metrics"]} for r in results],
+        "arms": [
+            {"arm": r["arm"], "pred_path": r["pred_path"], "regraded": r["regraded"], **r["metrics"]}
+            for r in results
+        ],
         "vs_first": [
             {"arm": r["arm"], "against": base["arm"], **paired_bootstrap(base["cases"], r["cases"])}
             for r in results[1:]

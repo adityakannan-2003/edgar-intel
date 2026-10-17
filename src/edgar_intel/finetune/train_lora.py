@@ -26,6 +26,7 @@ any GPU was rented (16 Oct 2026, TRL 1.16, transformers 5.20):
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from dataclasses import asdict, dataclass
@@ -65,6 +66,8 @@ class TrainConfig:
     seed: int = 17
     log_steps: int = 10
     save_steps: int = 200
+    # The pilot trains on a seeded subset to measure speed; None = every example.
+    max_examples: int | None = None
     # Only for the CPU smoke test; a real run leaves both alone.
     use_cpu: bool = False
     max_steps: int = -1
@@ -116,7 +119,12 @@ def train(config: TrainConfig | None = None) -> dict[str, Any]:  # pragma: no co
         ) from exc
 
     os.makedirs(cfg.output_dir, exist_ok=True)
-    examples = [to_prompt_completion(r) for r in load_records(cfg.train_file)]
+    records = load_records(cfg.train_file)
+    if cfg.max_examples is not None and cfg.max_examples < len(records):
+        import random
+
+        records = random.Random(cfg.seed).sample(records, cfg.max_examples)
+    examples = [to_prompt_completion(r) for r in records]
 
     tokenizer = AutoTokenizer.from_pretrained(cfg.base_model)
     if tokenizer.pad_token is None:
@@ -198,6 +206,9 @@ def train(config: TrainConfig | None = None) -> dict[str, Any]:  # pragma: no co
         "git_sha": git_sha(),
         "train_file_sha256": sha256_file(cfg.train_file),
         "n_examples": len(examples),
+        "example_ids_sha256": hashlib.sha256(
+            "\n".join(sorted(r["id"] for r in records)).encode()
+        ).hexdigest(),
         "tokens_max": max(lengths),
         "tokens_total": sum(lengths),
         "trainable_params": trainable,

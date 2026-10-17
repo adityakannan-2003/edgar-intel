@@ -182,3 +182,24 @@ class TestCompare:
         b = [{**c, "tp": 1, "exact_set_match": 1.0} for c in a]
         assert paired_bootstrap(a, b) == paired_bootstrap(a, b)
         assert paired_bootstrap(a, b)["f1_diff"] == 0.5
+
+
+class TestThroughput:
+    def test_requests_per_second_at_concurrency(self, files):
+        from edgar_intel.finetune.benchmark import measure_throughput
+
+        held, train, _ = files
+        result = measure_throughput(
+            Arm("lora", "extract", few_shot=False, self_hosted=True), held, "http://x/v1",
+            n=5, concurrency=2, llm=ScriptedLLM([RIGHT] * 5),
+        )
+        assert result["requests"] == 5 and result["requests_per_s"] > 0
+
+    def test_at_load_cost_is_gpu_price_over_throughput(self):
+        cases = [{"id": "a", "ticker": "A", "negative": False, "latency_ms": 3600, "tp": 1,
+                  "n_pred": 1, "n_expected": 1, "f1": 1.0, "exact_set_match": 1.0, "parse_ok": True,
+                  "invalid": 0, "ignored": 0, "diagnosis": {}, "by_concept": {},
+                  "prompt_tokens": 0, "cached_tokens": 0, "completion_tokens": 0, "reasoning_tokens": 0}]
+        cost = aggregate(cases, "extract", 0.72, {"requests_per_s": 2.0, "concurrency": 16})["cost"]
+        # $0.72/hr at 7,200 requests/hr is $0.10 per 1,000.
+        assert cost["at_load"]["per_1k_requests_usd"] == pytest.approx(0.10)

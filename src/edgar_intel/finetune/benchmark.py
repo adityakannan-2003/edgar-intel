@@ -271,6 +271,56 @@ def predict(
     return {"arm": arm.name, "cases": len(rows), "skipped": len(done), "written": written, "errors": errors}
 
 
+def measure_throughput(
+    arm: Arm,
+    held_out_path: str,
+    base_url: str,
+    *,
+    train_path: str | None = None,
+    n: int = 50,
+    concurrency: int = 16,
+    llm: Any = None,
+) -> dict[str, Any]:
+    """Requests per second with `concurrency` requests in flight.
+
+    This is the input to a self-hosted arm's cost at full load: GPU dollars
+    per hour divided by requests per hour. Answers are discarded -- quality
+    comes from `predict`, one request at a time, like every other arm.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    rows = select(load_records(held_out_path), n)
+    system = system_prompt(pick_shots(train_path) if arm.few_shot else [])
+    if llm is None:
+        from ..providers.openai_compat import OpenAICompatLLM
+
+        llm = OpenAICompatLLM(base_url=base_url, api_key="EMPTY", model=arm.model)
+
+    def one(row: dict[str, Any]) -> tuple[int, int]:
+        started = time.perf_counter()
+        completion = llm.complete(
+            row["messages"][1]["content"], system=system, model=arm.model,
+            temperature=0.0, max_tokens=arm.max_tokens, extra_body=arm.extra_body,
+        )
+        return int((time.perf_counter() - started) * 1000), completion.completion_tokens
+
+    started = time.perf_counter()
+    with ThreadPoolExecutor(max_workers=concurrency) as pool:
+        results = list(pool.map(one, rows))
+    wall_s = time.perf_counter() - started
+    latencies = [r[0] for r in results]
+    return {
+        "arm": arm.name,
+        "base_url": base_url,
+        "requests": len(rows),
+        "concurrency": concurrency,
+        "wall_s": round(wall_s, 2),
+        "requests_per_s": round(len(rows) / wall_s, 3),
+        "completion_tokens_per_s": round(sum(r[1] for r in results) / wall_s, 1),
+        "latency_ms": {"p50": _percentile(latencies, 0.5), "p95": _percentile(latencies, 0.95)},
+    }
+
+
 # ------------------------------------------------------------------- score
 def _by_concept(facts: list[dict[str, Any]], concept: str) -> list[dict[str, Any]]:
     out = []
@@ -328,7 +378,10 @@ def _percentile(values: list[float], q: float) -> float | None:
 
 
 def aggregate(
-    cases: list[dict[str, Any]], model: str, gpu_usd_per_hour: float | None = None
+    cases: list[dict[str, Any]],
+    model: str,
+    gpu_usd_per_hour: float | None = None,
+    throughput: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Every reported number for one arm, from its scored cases."""
     scored = [c for c in cases if "error" not in c]
@@ -389,13 +442,22 @@ def aggregate(
             "basis": f"one request at a time on a ${gpu_usd_per_hour}/hr GPU, mean latency {mean_s:.2f}s",
             "per_1k_requests_usd": round(gpu_usd_per_hour * mean_s / 3.6, 4),
         }
+        if throughput:
+            rps = throughput["requests_per_s"]
+            out["cost"]["at_load"] = {
+                "basis": f"{throughput['concurrency']} requests in flight, {rps} requests/s measured",
+                "per_1k_requests_usd": round(gpu_usd_per_hour / (rps * 3600) * 1000, 4),
+            }
     else:
         out["cost"] = "NOT MEASURED"
     return out
 
 
 def score(
-    pred_path: str, held_out_path: str, gpu_usd_per_hour: float | None = None
+    pred_path: str,
+    held_out_path: str,
+    gpu_usd_per_hour: float | None = None,
+    throughput: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Score one predictions file. Refuses a file made on another held-out set."""
     with open(pred_path + ".meta.json", encoding="utf-8") as fh:
@@ -410,7 +472,7 @@ def score(
         "arm": meta["arm"]["name"],
         "pred_path": pred_path,
         "meta": meta,
-        "metrics": aggregate(cases, meta["arm"]["model"], gpu_usd_per_hour),
+        "metrics": aggregate(cases, meta["arm"]["model"], gpu_usd_per_hour, throughput),
         "cases": cases,
     }
 
@@ -450,10 +512,11 @@ def compare(
     held_out_path: str,
     out_path: str,
     gpu_usd_per_hour: dict[str, float] | None = None,
+    throughput: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Score every arm and compare each with the first, on the cases both have."""
-    gpu = gpu_usd_per_hour or {}
-    results = [score(p, held_out_path, gpu.get(p)) for p in pred_paths]
+    gpu, load = gpu_usd_per_hour or {}, throughput or {}
+    results = [score(p, held_out_path, gpu.get(p), load.get(p)) for p in pred_paths]
     base = results[0]
     payload = {
         "held_out_path": held_out_path,
@@ -491,5 +554,7 @@ def table_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
             "p50_ms": arm["latency_ms"]["p50"],
             "p95_ms": arm["latency_ms"]["p95"],
             "usd_per_1k": cost["per_1k_requests_usd"] if isinstance(cost, dict) else cost,
+            "usd_per_1k_at_load": cost.get("at_load", {}).get("per_1k_requests_usd")
+            if isinstance(cost, dict) else None,
         })
     return rows

@@ -1490,17 +1490,21 @@ def ft_audit(
 
 @ft_app.command("train")
 def ft_train(
-    base_model: str = typer.Option("meta-llama/Llama-3.1-8B-Instruct"),
+    base_model: str = typer.Option("Qwen/Qwen3-8B"),
     train_file: str = typer.Option("data/finetune/train.jsonl"),
     output_dir: str = typer.Option("artifacts/lora-extract"),
     epochs: float = typer.Option(2.0),
+    seed: int = typer.Option(17),
+    max_examples: int = typer.Option(0, help="A seeded subset, for the pilot; 0 = all."),
 ) -> None:
+    """LoRA-train on a CUDA GPU. Writes the adapter and manifest.json to output_dir."""
     from .finetune.train_lora import TrainConfig, train
 
     manifest = train(TrainConfig(
-        base_model=base_model, train_file=train_file,
-        output_dir=output_dir, epochs=epochs,
+        base_model=base_model, train_file=train_file, output_dir=output_dir,
+        epochs=epochs, seed=seed, max_examples=max_examples or None,
     ))
+    manifest.pop("log_history", None)
     console.print_json(json.dumps(manifest, indent=2))
 
 
@@ -1533,6 +1537,27 @@ def ft_predict(
     console.print_json(json.dumps(summary))
 
 
+@ft_app.command("throughput")
+def ft_throughput(
+    arm: str = typer.Option(..., help="A self-hosted arm key from `finetune arms`."),
+    base_url: str = typer.Option(..., help="The vLLM server's /v1 URL."),
+    out: str = typer.Option(..., help="Result JSON."),
+    n: int = typer.Option(50),
+    concurrency: int = typer.Option(16),
+    held_out: str = typer.Option("data/finetune/held_out.jsonl"),
+    train: str = typer.Option("data/finetune/train.jsonl"),
+) -> None:
+    """Requests per second with `concurrency` in flight, for the at-load cost. Not scored."""
+    from .finetune.benchmark import ARMS, measure_throughput
+
+    result = measure_throughput(
+        ARMS[arm], held_out, base_url, train_path=train, n=n, concurrency=concurrency
+    )
+    with open(out, "w", encoding="utf-8") as fh:
+        json.dump(result, fh, indent=2)
+    console.print_json(json.dumps(result))
+
+
 @ft_app.command("score")
 def ft_score(
     preds: Annotated[
@@ -1544,12 +1569,21 @@ def ft_score(
         list[str] | None,
         typer.Option(help="PATH=PRICE for self-hosted arms, e.g. preds/lora.jsonl=0.74"),
     ] = None,
+    throughput: Annotated[
+        list[str] | None,
+        typer.Option(help="PATH=THROUGHPUT_JSON for self-hosted arms, from `finetune throughput`"),
+    ] = None,
 ) -> None:
     """Score predictions files. No model calls."""
     from .finetune.benchmark import compare, table_rows
 
     gpu = {k: float(v) for k, v in (item.rsplit("=", 1) for item in gpu_usd_per_hour or [])}
-    payload = compare(preds, held_out, out, gpu)
+    load = {}
+    for item in throughput or []:
+        path, result = item.rsplit("=", 1)
+        with open(result, encoding="utf-8") as fh:
+            load[path] = json.load(fh)
+    payload = compare(preds, held_out, out, gpu, load)
     _table("fine-tune vs prompting", table_rows(payload))
     for row in payload["vs_first"]:
         console.print(

@@ -93,3 +93,65 @@ adapter, and serve the base model plus the adapter. The Mac reaches the server
 through an SSH tunnel, so nothing is exposed publicly, and the benchmark runs
 from the Mac. That way every arm's latency includes the same kind of internet
 round trip.
+
+## Pilot v1 results, and what changed before v2
+
+Written 17 Oct 2026, after the v1 API half and before the v2 re-run.
+
+**Spend:** $0.456 at list prices, from reported tokens
+(`reports/finetune/pilot/v1/api-report.json`). The rejected first call
+cost nothing.
+
+| arm, v1 | cases | micro F1 | precision / recall | $ per 1k | p50 / p95 |
+|---|---|---|---|---|---|
+| gpt-6.1-sol | 50 | 0.943 | 0.916 / 0.970 | $2.35 | 2.1 s / 5.4 s |
+| gpt-6-luna | 50 | 0.944 | 0.936 / 0.953 | $0.21 | 3.0 s / 12.2 s |
+| gpt-6-astra | 25 | 0.958 | 0.919 / 1.000 | $13.10 | 2.0 s / 4.4 s |
+
+**Predictions, scored:**
+
+1. Right: luna rejected `temperature=0`.
+2. Partly right. sol (0.943) is inside 0.80–0.92? No: it is above the range.
+   luna (0.944) is also above its range. Astra is within 0.03 of sol (+0.023).
+3. Right: 0 parse failures.
+4. Wrong: the top error was `unlabelled` for every arm, not `wrong_year`,
+   and `wrong_year` was 0 for all three.
+5. Right for all three: sol $2.35, luna $0.21 and astra $13.10 per 1,000
+   are inside the predicted ranges.
+6. Wrong for luna: its p50 is 3.0 s. It reasons by default, 169 hidden
+   tokens on average and up to 1,086. Right for sol and astra.
+7. Not yet measured (GPU).
+
+**The astra rule:** astra beat sol by 0.023 on the 25 shared cases, with a
+95% interval of [0.000, 0.063]. That interval does not exclude zero, so
+astra is out of the full run.
+
+**What the errors showed.** I read the 18 distinct `unlabelled` predictions
+across the three arms.
+
+- 13 were the instruction's fault:
+  - 10 noncontrolling-interest totals ("Net income including noncontrolling
+    interests", UNH's and CMCSA's "Total equity").
+  - 3 Costco "Total net sales" read as total revenue.
+
+  XBRL's net income and equity exclude noncontrolling interests, and total
+  revenue includes membership fees, but the instruction never said so.
+- The rest were XBRL's gaps. JNJ and Visa tag no `StockholdersEquity` at
+  all, so JNJ's correctly read "Total shareholders' equity | 81,544" counted
+  against every arm. Seven of the 40 companies lack that tag.
+
+**Changes for v2:**
+
+- The instruction states the XBRL definitions.
+- Each record lists the (concept, year) pairs XBRL has facts for, and a
+  prediction outside them is set aside as unverifiable.
+- A company with no facts in its sampled cases has no F1, where v1 printed
+  PG's as 0.0.
+
+The v2 held-out set (sha256 `481a2923…`, built at `df3dc36`) has the same
+539 ids, passages, labels and dropped labels as v1; only the instruction
+differs (`reports/finetune/dataset-v1-v2-check.json`), so the label audit
+carries over. v1 and v2 scores are different exams and are never compared.
+
+**Prediction for v2** (the same 50/50/25 cases): `unlabelled` falls to 5 or
+fewer per arm, and sol and luna stay within 0.03 of each other.

@@ -66,7 +66,7 @@ class Arm:
 
 # The GPT-6 models reject `max_tokens` and any temperature but the default
 # of 1. The pilot's first call, 17 Oct 2026, returned "'temperature' does not
-# support 0.0 with this model" (reports/finetune/pilot/
+# support 0.0 with this model" (reports/finetune/pilot/v1/
 # luna-rejected-temperature.jsonl). At temperature 1 an answer can change
 # between runs, which is what the full run's two passes per arm measure.
 _OPENAI_REASONING = {"max_tokens": None, "max_completion_tokens": 2048, "temperature": None}

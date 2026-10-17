@@ -193,14 +193,22 @@ What the LoRA bought over its own base: 0.439 → 0.908–0.912, both seeds.
 | **full run** | **$4.70** of the $7 cap | |
 | pilot, for reference | $1.09 | `FINETUNE_PILOT.md` |
 
-RunPod's billing read at 21:32 UTC showed $2.27 across both pods ($2.22 GPU,
-$0.05 disk). That is less than the timestamps imply, so its records were
-still catching up.
+RunPod's billing read at 22:42 UTC, after both pods were terminated:
+**$3.065 GPU + $0.072 disk = $3.137** across the pilot and full-run pods.
+The GPU figure matches the timestamps ($0.512 + $2.553). Billing was still
+catching up at 21:32, when it showed $2.27.
 
-Both pods are stopped (`EXITED`, confirmed by a fresh read). Each keeps a
-10 GB volume, which bills until it is terminated. The trained adapters
-(87 MB each) are on those volumes; only their manifests and configs were
-copied to the Mac.
+**Wrapping up:**
+- The full-run pod could not restart on a GPU: its host had none free. It
+  was started on CPUs from the console for about a minute ($0.46/hr), and
+  both adapters were downloaded. Their sha256 matched the pod's copies:
+  seed 17 `62c24520…`, seed 29 `95ed78b6…`. They are in the gitignored
+  `artifacts/finetune/qwen3-8b-lora-s17` and `-s29`.
+- Both pods were then terminated. A fresh read of each returns 404, and
+  the account lists no pods.
+
+**Project total:** $2.73 API ($0.58 pilot + $2.15 full run) + $3.14
+RunPod = **$5.87**.
 
 ## The reading
 

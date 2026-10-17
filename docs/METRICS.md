@@ -1142,8 +1142,8 @@ never tells you).
 
 ## 9. Fine-tuning tradeoff
 
-**Status: the dataset is built and its labels audited, and the pilot's API half
-has run ($0.58). The comparison is NOT MEASURED: no training run, no full run.**
+**Status: the dataset is built and its labels audited, and the pilot has run
+($1.09 of a $5 cap). The comparison is NOT MEASURED: no full training run.**
 
 > Fine-tuned `<model>` with LoRA on `<N>` distantly-supervised extraction
 > examples, lifting F1 from `<baseline>` (few-shot prompting) to `<result>` on a
@@ -1175,7 +1175,8 @@ edgar-intel finetune score reports/finetune/pilot/*.jsonl --out reports/finetune
 | the audit before it | 49 of 50 on the previous build. The wrong one, a buyback authorisation labelled as equity, led to the same-sentence rule for prose | `reports/finetune/label_audit-round1.json` |
 | example length | longest 1,789 Qwen3 tokens, median 958; 1.70M training tokens per epoch | `reports/finetune/train-smoke-cpu.json` |
 | scorer sanity | the labels returned as answers score micro F1 1.000 on all 539 v1 cases; an always-`[]` answer scores 0.000 | `reports/finetune/scorer-sanity-oracle.json` |
-| pilot, API half (not the comparison: 47 cases) | gpt-6.1-sol few-shot micro F1 0.994 at $2.30 per 1k; gpt-6-luna few-shot 0.984 at $0.20 per 1k; gpt-6-astra dropped under the pilot's written rule | `reports/finetune/pilot/v2/api-report-v3-labels.json`, `docs/FINETUNE_PILOT.md` |
+| pilot (not the comparison: 47 cases, a 300-example one-epoch adapter) | micro F1: gpt-6.1-sol few-shot 0.994 ($2.30 per 1k), gpt-6-luna few-shot 0.984 ($0.20 per 1k), Qwen3-8B + pilot LoRA 0.786 ($0.50 per 1k one at a time, $0.043 at load on a $0.89/hr 4090), untuned Qwen3-8B few-shot 0.141; gpt-6-astra dropped under the pilot's written rule | `reports/finetune/pilot/pilot-report-v3-labels.json`, `docs/FINETUNE_PILOT.md` |
+| training speed | 1,490 tokens/s, QLoRA Qwen3-8B on one RTX 4090; the pilot's 300 examples took 0.06 GPU-hours | `reports/finetune/pilot/gpu/manifest.json` |
 | label recall | **NOT MEASURED**. A fact the passage states that the labeller missed counts against every arm; `diagnose()` counts those predictions as `unlabelled` | |
 
 **How the arms are scored.** Micro F1 over (concept, fiscal year, value)

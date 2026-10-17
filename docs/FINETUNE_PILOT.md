@@ -203,3 +203,85 @@ if it has one, is cost and latency.
 
 **Spend so far:** v1 $0.456, v2 $0.125, total **$0.581** of the $5 cap. The
 GPU half has not started.
+
+## Pilot GPU half (17 Oct 2026)
+
+**Pod:** one RTX 4090 on RunPod Secure Cloud, `8ftc88t9ux400t`, US-NC-1,
+host CUDA 13.2, $0.89/hr per the create response. Community Cloud had no
+4090s available at the time, per the catalog read. The pod ran
+17:37:22–18:11:54 UTC: **34.5 minutes, $0.51** from those timestamps.
+RunPod's pod-billing read showed no records yet. About 14 of those minutes
+were idle after the first setup failed (see below). The pod is stopped, and
+its 10 GB volume (code, data, adapter, logs) keeps billing while stopped.
+
+**Training** (`reports/finetune/pilot/gpu/manifest.json`):
+
+| | |
+|---|---|
+| data | 300 seeded examples from v3 training (321,134 tokens), one epoch |
+| setup | Qwen3-8B, QLoRA r=16, 4-bit base, effective batch 16 |
+| trainer runtime | 215.5 s, **0.06 GPU-hours** |
+| speed | **1,490 tokens/s** |
+| final loss | 0.146 |
+| versions | torch 2.14.1, transformers 5.20.1, peft 0.21.2, trl 1.16.0, bitsandbytes 0.50.2 |
+
+**Serving:** vLLM 0.31.0 served Qwen3-8B (bf16, 15.36 GiB) with the adapter
+beside it. The Mac reached it through an SSH tunnel.
+
+**All four arms on the same 47 cases, v3 labels**
+(`reports/finetune/pilot/pilot-report-v3-labels.json`):
+
+| arm | micro F1 | precision / recall | $ per 1k, one at a time | $ per 1k at load | p50 / p95 |
+|---|---|---|---|---|---|
+| gpt-6.1-sol few-shot | 0.994 | 1.000 / 0.987 | $2.30 | n/a | 2.4 s / 9.8 s |
+| gpt-6-luna few-shot | 0.984 | 1.000 / 0.969 | $0.20 | n/a | 2.3 s / 6.7 s |
+| Qwen3-8B + pilot LoRA | 0.786 | 0.799 / 0.774 | $0.50 | **$0.043** | 1.7 s / 6.2 s |
+| Qwen3-8B few-shot, no LoRA | 0.141 | 0.133 / 0.151 | $0.57 | not measured | 1.7 s / 6.1 s |
+
+- **GPU cost.** It is the $0.89/hr rate times the measured time:
+  - *One at a time* uses mean latency.
+  - *At load* uses 5.70 requests/s with 32 in flight over 200 requests
+    (`throughput-lora-c32-n200.json`; at 16 in flight over 50 it was
+    3.99/s).
+  - On a $0.34/hr Community 4090 the same arithmetic gives $0.19 and
+    $0.017. That is a catalog price, not a measured run.
+- **Paired bootstrap against sol:**
+  - LoRA −0.208, 95% interval [−0.306, −0.123].
+  - Untuned Qwen −0.853, [−0.944, −0.750].
+- **Untuned Qwen3-8B reads the right cells and botches the scale.** "16,286"
+  in millions becomes 1,628,600,000,000, one or two zeros too many. That is
+  112 `wrong_value` errors.
+- **The 300-example adapter has mostly learned the conversion** (10
+  `wrong_value`). It misses more than it gets wrong: 36 `missed`, 11
+  `unlabelled`, 8 `not_in_passage`.
+
+**Two setup failures, both fixed in the pod script:**
+- The first setup run died on Ubuntu 24.04's refusal to `pip install`
+  outside a venv (`faa2a1f`). My status check matched its own command line
+  and reported the dead script as running, so the pod sat idle for about
+  14 minutes.
+- vLLM's first start could not find `ninja` on PATH (`85e9839`).
+
+**Predictions, scored:**
+- 2, untuned Qwen3-8B 0.55–0.80: **wrong** (0.141).
+- 3, at most 2 of 50 parse failures for untuned Qwen: **right** (0 parse
+  failures; 3 unusable facts).
+- 7, training at 1,500–3,000 tokens/s: **wrong**, just under (1,490).
+- 6, latency for the self-hosted arms: not predicted.
+
+**Pilot total: $0.58 API + $0.51 GPU = $1.09 of the $5 cap.**
+
+## Full-run budget (needs a second OK)
+
+All figures come from the pilot's measured rates. The set is v3's 532
+held-out cases.
+
+| item | basis | estimate |
+|---|---|---|
+| sol few-shot, 2 passes | 1,064 calls × $2.30 per 1k | $2.45 |
+| luna few-shot, 2 passes | 1,064 calls × $0.20 per 1k | $0.21 |
+| LoRA training, 2 seeds | 1,743 examples × 1,070 tokens × 2 epochs ÷ 1,490 tokens/s = 0.70 h per seed | 1.4 GPU-h |
+| serving and predictions | 2 adapters + untuned base on 532 cases, one at a time, about 2 s each; throughput at load | about 1.0 GPU-h |
+| setup and slack | | about 0.4 GPU-h |
+| GPU total | 2.8 GPU-h × $0.89 Secure (or $0.34 Community if available) | $2.49 ($0.95) |
+| **total** | | **about $5.15, cap $7** |

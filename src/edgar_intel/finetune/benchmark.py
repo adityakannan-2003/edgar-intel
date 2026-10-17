@@ -153,13 +153,20 @@ def select(rows: list[dict[str, Any]], n: int | None, seed: int = 17) -> list[di
     return [rows[i] for i in sorted(order[:n])]
 
 
+def input_sha256(row: dict[str, Any]) -> str:
+    """A hash of what a model sees for one case -- instruction and user
+    message -- and nothing else. Labels can then be corrected and stored
+    answers re-scored without a model call, the way `eval regrade` re-marks
+    stored answers."""
+    return hashlib.sha256(json.dumps(row["messages"][:2]).encode()).hexdigest()
+
+
 def inputs_sha256(rows: list[dict[str, Any]]) -> str:
-    """A hash of what the models see -- ids, instruction, user message -- and
-    nothing else. Labels can then be corrected and stored answers re-scored
-    without a model call, the way `eval regrade` re-marks stored answers."""
+    """One hash over every case's id and input, binding a predictions file to
+    a held-out version for resuming."""
     digest = hashlib.sha256()
     for row in rows:
-        digest.update(json.dumps([row["id"], row["messages"][0], row["messages"][1]]).encode())
+        digest.update(json.dumps([row["id"], input_sha256(row)]).encode())
     return digest.hexdigest()
 
 
@@ -206,6 +213,7 @@ def predict(
         "held_out_path": held_out_path,
         "held_out_sha256": sha256_file(held_out_path),
         "inputs_sha256": inputs_sha256(load_records(held_out_path)),
+        "input_sha256_by_id": {r["id"]: input_sha256(r) for r in load_records(held_out_path)},
         "system_sha256": hashlib.sha256(system.encode()).hexdigest(),
         "shot_ids": [s["id"] for s in shots],
         "n_requested": n,
@@ -489,20 +497,32 @@ def score(
     """
     with open(pred_path + ".meta.json", encoding="utf-8") as fh:
         meta = json.load(fh)
-    records_in = load_records(held_out_path)
-    if meta.get("inputs_sha256", meta["held_out_sha256"]) not in (
-        inputs_sha256(records_in), sha256_file(held_out_path)
-    ):
-        raise ValueError(f"{pred_path} was predicted on another held-out set")
-    rows = {r["id"]: r for r in records_in}
+    rows = {r["id"]: r for r in load_records(held_out_path)}
     with open(pred_path, encoding="utf-8") as fh:
         records = [json.loads(line) for line in fh if line.strip()]
-    cases = [score_case(rec, rows[rec["id"]]) for rec in records]
+
+    by_id = meta.get("input_sha256_by_id")
+    if by_id is None:
+        if meta["held_out_sha256"] != sha256_file(held_out_path):
+            raise ValueError(f"{pred_path} was predicted on another held-out set")
+    else:
+        changed = [r["id"] for r in records if r["id"] in rows and by_id.get(r["id"]) != input_sha256(rows[r["id"]])]
+        if changed:
+            raise ValueError(
+                f"{pred_path} was predicted on another held-out set: {len(changed)} inputs differ"
+            )
+    # A case that left the set (its only labels were dropped) is not scored;
+    # a file sharing no case with this set was made on another one.
+    left_set = [r["id"] for r in records if r["id"] not in rows]
+    if records and len(left_set) == len(records):
+        raise ValueError(f"{pred_path} was predicted on another held-out set: no case in common")
+    cases = [score_case(rec, rows[rec["id"]]) for rec in records if rec["id"] in rows]
     return {
         "arm": meta["arm"]["name"],
         "pred_path": pred_path,
         "labels_sha256": sha256_file(held_out_path),
         "regraded": meta["held_out_sha256"] != sha256_file(held_out_path),
+        "cases_no_longer_in_set": len(left_set),
         "meta": meta,
         "metrics": aggregate(cases, meta["arm"]["model"], gpu_usd_per_hour, throughput),
         "cases": cases,
@@ -559,7 +579,8 @@ def compare(
         "held_out_path": held_out_path,
         "held_out_sha256": sha256_file(held_out_path),
         "arms": [
-            {"arm": r["arm"], "pred_path": r["pred_path"], "regraded": r["regraded"], **r["metrics"]}
+            {"arm": r["arm"], "pred_path": r["pred_path"], "regraded": r["regraded"],
+             "cases_no_longer_in_set": r["cases_no_longer_in_set"], **r["metrics"]}
             for r in results
         ],
         "vs_first": [

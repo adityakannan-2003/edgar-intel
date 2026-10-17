@@ -1142,16 +1142,48 @@ never tells you).
 
 ## 9. Fine-tuning tradeoff
 
-**Status: the dataset is built and its labels audited, and the pilot has run
-($1.09 of a $5 cap). The comparison is NOT MEASURED: no full training run.**
+**Status: measured, 17 Oct 2026.** The full run cost $4.70 of a $7 cap
+(`docs/FINETUNE_RUN.md`; `reports/finetune/full/report.json`).
 
-> Fine-tuned `<model>` with LoRA on `<N>` distantly-supervised extraction
-> examples, lifting F1 from `<baseline>` (few-shot prompting) to `<result>` on a
-> company-disjoint held-out set at `<X>`× lower cost per request, against
-> `<H>` GPU-hours of training.
+| arm (532 company-disjoint held-out cases) | micro F1 | $ per 1k requests | p50 / p95 |
+|---|---|---|---|
+| gpt-6.1-sol few-shot (2 passes) | **0.980**, 0.980 | $2.07, $1.54 | 2.2 s / 5.5 s |
+| gpt-6-luna few-shot (2 passes) | 0.973, 0.966 | $0.22 | 2.5 s / 11.1 s |
+| Qwen3-8B + LoRA (seeds 17, 29) | **0.908**, 0.912 | $0.58 one at a time, **$0.061 at load** | 1.9 s / 7.1 s |
+| Qwen3-8B few-shot, no LoRA | 0.439 | $0.68 | 2.1 s / 7.0 s |
 
-**The comparison is the bullet, not the training.** The placeholders stay
-until the run that fills them.
+**Noise:**
+- Same-configuration spreads: sol +0.0002, luna −0.007, LoRA seeds +0.004.
+- Sol beats the LoRA by 0.068–0.072, with 95% intervals of [−0.089, −0.056]
+  and [−0.084, −0.053].
+- Training took 0.765 and 0.763 GPU-hours per seed on one RTX 4090 ($0.89/hr,
+  Secure Cloud).
+- The at-load figure is $0.89/hr ÷ 4.07 requests/s measured with 32 in
+  flight.
+
+**Bullet shape — usable now**
+
+> Fine-tuned Qwen3-8B with LoRA on 1,743 XBRL-labelled extraction examples
+> (0.77 GPU-hours on one RTX 4090), lifting micro F1 from 0.44 (the same
+> model, few-shot) to 0.91 on a 532-case company-disjoint held-out set. That
+> is still 0.07 below gpt-6.1-sol few-shot (0.98, beyond run-to-run noise of
+> ±0.007), at $0.06 per 1k requests under load against $1.54–2.07 for sol and
+> $0.22 for gpt-6-luna.
+
+**The comparison is the bullet, not the training.** Lead with the loss: the
+frontier prompt is more accurate, and the fine-tune wins only on cost at
+sustained load. One request at a time on a dedicated GPU, it costs more
+than luna. It also invents a few facts (16 not in the passage; facts on 2
+of 105 no-fact passages) that no API arm did.
+
+**Expect to be asked:**
+- *Why does a fine-tuned 8B lose to a prompt?* Ten companies it never saw,
+  figures that need a scale conversion, and a frontier model given the same
+  definitions and four worked examples.
+- *What would close the gap?* Untested. Before believing it, measure a
+  larger base model or more training data with the same harness.
+- *Is the at-load cost real?* It is measured throughput times a rental
+  price, not a month of production traffic.
 
 **Produce it**
 
@@ -1230,8 +1262,8 @@ companies tag no `StockholdersEquity`.
 | "the agent is more accurate than RAG" | ⚠️ **true on this exam (0.96 against 0.86) and misleading**: its numeric questions are lookups in the table the answer key came from; say it no longer gets in its own way, not that it reads better |
 | concurrency / throughput sweep | ❌ needs a deployed instance |
 | regression gate in CI | ✅ running since 5 Oct against a committed baseline; fails on a deliberate regression; nothing caught yet (§4) |
-| LoRA fine-tune comparison | ❌ not run; the dataset and harness are ready (§9) |
-| fine-tune labels: 50 of 50 audited held-out labels right, after a first audit's 49 of 50 led to a fix | ⚠️ measured, awaiting Aditya's confirmation (§9) |
+| LoRA fine-tune comparison: Qwen3-8B + LoRA 0.91 against gpt-6.1-sol few-shot 0.98 micro F1 on 532 company-disjoint cases; $0.06 against $1.54–2.07 per 1k at load; 0.77 GPU-hours | ✅ measured (§9) |
+| fine-tune labels: 50 of 50 audited held-out labels right, after a first audit's 49 of 50 led to a fix | ✅ measured, confirmed by Aditya (§9) |
 | live URL | ❌ not deployed — see `docs/DEPLOY.md` |
 
 ## Metrics that carry the most weight, ranked

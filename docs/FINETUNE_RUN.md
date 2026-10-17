@@ -143,12 +143,17 @@ What the LoRA bought over its own base: 0.439 → 0.908–0.912, both seeds.
 
 **Where each arm breaks** (per-concept F1 in `report.json`):
 
-- **sol** fails only by omission: 40 `missed`, 17 `unlabelled`, 8
-  `wrong_value`, 2 `wrong_year`. Its weakest concept is common shares
-  outstanding (0.903); its weakest company is UNH (0.942).
+- **sol** fails mostly by omission: 40 `missed`, 17 `unlabelled`, 8
+  `wrong_value`, 2 `wrong_year`, 3 `not_in_passage`. Its weakest concept is
+  common shares outstanding (0.903); its weakest company is UNH (0.942).
+  33 of these 70 items are label artifacts, including all 8 wrong values
+  and all 3 `not_in_passage` (see "Why the fine-tune loses" below).
 - **The LoRA** misses more (139 `missed`) and reports figures that are not
-  labels (101 `unlabelled`). It invents a few: 16 `not_in_passage`, and
-  facts on 2 of the 105 no-fact passages, which no API arm did.
+  labels (101 `unlabelled`). It reports 16 `not_in_passage`, and facts on 2
+  of the 105 no-fact passages, which no API arm did.
+  - 13 of the 16 are figures the passage does not print. The other 3 are
+    Nvidia's restated EPS, which is printed; sol reports it too.
+  - The 2 no-fact facts are misread printed lines, not inventions.
   - Weakest concepts: shares outstanding (0.760), cash (0.841), equity
     (0.855).
   - Weakest companies: UNH (0.850) and COST (0.869).
@@ -222,4 +227,319 @@ three. One request at a time on a dedicated $0.89/hr GPU, it costs $0.58
 per 1,000, more than luna.
 
 So the fine-tune pays only at sustained volume, and even then it gives up
-about 7 points of F1 and invents a few facts the API models never did.
+about 7 points of F1 and invents a few facts the API models never did
+(13 figures its passages do not print; sol has none outside the label
+artifacts below).
+
+## Why the fine-tune loses
+
+Read on 17 Oct 2026 from the stored answers. There were no model calls, and
+the scorer, the labels and every reported score are unchanged. Each error
+item `diagnose` counts for the LoRA (seed 17) was read beside sol's (pass 1)
+answer to the same passage and given one cause.
+
+- **Where the counts live:** `reports/finetune/full/lora-s17-error-causes.json`
+  lists every item with its cause, the line it came from and sol's answer.
+  Every count in this section comes from it.
+- **How it is made:** `edgar-intel finetune causes` regenerates it, from
+  `src/edgar_intel/finetune/causes.py`.
+  - The causes are a reading, so each assignment must pass a rule on the
+    passage text. For example, a parent-company cause needs "Parent Company
+    Only" printed; an assignment that breaks its rule stops the run.
+  - Omissions are split into prose and table by rule alone: prose when the
+    line printing the figure has no table cell.
+- **The unit:** an *item* is one count in the diagnosis. The 322 items are
+  the LoRA's 139 missed, 101 unlabelled, 48 wrong_value, 18 wrong_year and
+  16 not_in_passage. A wrong value always comes with a missed label for the
+  same fact, so one wrong figure is two items.
+- **"F1 if fixed":** the LoRA's micro F1 with only those items right: a
+  missed label reported, and a figure no label has withdrawn. Its actual
+  F1 is 0.908.
+
+### The answer
+
+**290 of the 322 items are the model's, and sol gets 270 of those right on
+the same passages.** The other 32 are label artifacts. They cost sol 33 of
+its own 70 items, so they are not why the LoRA loses. Set the 26 affected
+(case, concept, year) keys aside for both arms and both scores rise by
+0.0094, to 0.9177 against 0.9892. The gap is 0.0715 either way.
+
+The model's errors fall into four groups, plus a few wrong cells:
+
+| group | items | sol right | LoRA F1 if fixed |
+|---|---|---|---|
+| definitions the prompt states | 120 | 110 | 0.941 |
+| which year a figure belongs to | 65 | 61 | 0.926 |
+| figures left out | 74 | 70 | 0.931 |
+| figures the passage does not print | 21 | 21 | 0.914 |
+| wrong row or column | 10 | 8 | 0.911 |
+| **all model errors** | **290** | **270** | 0.990 |
+| label artifacts | 32 | 1 | 0.919 |
+
+Fixing only the 270 items sol gets right would take the LoRA to 0.985,
+above sol's 0.980.
+
+**In plain English:**
+- **Definitions (the largest group).** The LoRA doesn't apply the rules the
+  prompt spells out: noncontrolling interests, Costco's membership fees,
+  company totals rather than segments or the parent company.
+- **Years.** It misplaces years where the table's shape, not a header next
+  to the figure, says which year a figure is.
+- **Omissions.** It leaves out figures that sit in unusual places: shares
+  inside a row label, a row named "Earnings from operations", a figure in a
+  sentence.
+- **Unprinted figures.** It writes figures the passage doesn't print, which
+  sol never does.
+- **Scale.** Scale handling, the untuned model's main failure, is gone. One
+  item in 322 looks like a scale slip: Adobe's printed "240" (millions)
+  given as 2,400,000,000 (`scale_slips`).
+
+### Every cause
+
+| cause | items | missed | unlabelled | wrong value | wrong year | not in passage | sol right | companies |
+|---|---|---|---|---|---|---|---|---|
+| noncontrolling interests | 57 | 3 | 51 | 3 | 0 | 0 | 55 | CMCSA 27, PG 19, SLB 11 |
+| net sales as total revenue | 26 | 6 | 14 | 6 | 0 | 0 | 26 | COST 26 |
+| parent-company statements | 24 | 0 | 24 | 0 | 0 | 0 | 18 | UNH 24 |
+| segment table | 13 | 3 | 6 | 3 | 0 | 1 | 11 | NVDA 8, ADBE 3, UNH 2 |
+| year from the wrong header | 32 | 14 | 0 | 9 | 9 | 0 | 28 | UNH 8, NVDA 8, LMT 4, COST 4, PG 4, V 4 |
+| multi-year row misread | 26 | 16 | 0 | 10 | 0 | 0 | 26 | LMT 20, NVDA 4, JNJ 2 |
+| year guessed | 7 | 0 | 0 | 0 | 7 | 0 | 7 | LMT 5, ADBE 1, UNH 1 |
+| shares outstanding | 24 | 22 | 0 | 2 | 0 | 0 | 24 | UNH 6, NVDA 6, LMT 6, ADBE 4, COST 2 |
+| "Earnings from operations" skipped | 9 | 9 | 0 | 0 | 0 | 0 | 9 | UNH 9 |
+| table figure omitted | 31 | 31 | 0 | 0 | 0 | 0 | 27 | 8 companies |
+| prose figure omitted | 10 | 10 | 0 | 0 | 0 | 0 | 10 | LMT 7, COST 2, UNH 1 |
+| digits added to a rounded figure | 8 | 4 | 0 | 4 | 0 | 0 | 8 | LMT 6, V 2 |
+| figure not printed | 13 | 0 | 0 | 0 | 1 | 12 | 13 | PG 5, JNJ 3, ADBE 3, UNH 1, COST 1 |
+| wrong row or column | 10 | 3 | 4 | 3 | 0 | 0 | 8 | PG 4, UNH 2, ADBE 2, NVDA 1, LMT 1 |
+| *label:* beyond rounding | 16 | 8 | 0 | 8 | 0 | 0 | 0 | LMT 16 |
+| *label:* restated figure | 6 | 0 | 2 | 0 | 1 | 3 | 0 | NVDA 3, JNJ 3 |
+| *label:* year not printed | 10 | 10 | 0 | 0 | 0 | 0 | 1 | LMT 5, UNH 2, V 2, ADBE 1 |
+| **total** | **322** | **139** | **101** | **48** | **18** | **16** | **271** | |
+
+**Definitions the prompt states: 120 items, sol right on 110.**
+
+- **Noncontrolling interests, 57 (sol right 55).** The prompt says net
+  income and equity exclude noncontrolling interests. The LoRA reports:
+  - Comcast's "Total equity | $ | 83,226 | $ | 81,627 | $ | 97,490" as
+    stockholders' equity (9 items)
+  - the "Net income (loss) | (15) | 9 | 25" rows under Comcast's
+    noncontrolling-interest sections as net income (9)
+  - the net income line that includes the interests (33), in:
+    - comprehensive-income statements (Comcast, P&G)
+    - cash-flow statements (SLB)
+    - P&G's segment "Total Company" column
+  - P&G's "Net earnings | 14,974" where the next row is "Net earnings
+    attributable to Procter & Gamble | 14,879", and SLB's equity-statement
+    total column (6)
+
+  sol makes the same mistake twice, on P&G's segment net earnings.
+- **Net sales as total revenue, 26 (sol right 26). All Costco.**
+  - The prompt names this case: where net sales and membership fees are
+    printed separately, total revenue is their sum.
+  - The LoRA takes "Net sales | $ | 269,912" where the statement goes on to
+    "Total revenue | 275,235" (12 items).
+  - It also reports net sales as revenue in tables and sentences that print
+    no total (14).
+- **Parent-company statements, 24 (sol right 18).**
+  - UnitedHealth's Schedule I is headed "Condensed Financial Information
+    of Registrant (Parent Company Only)".
+  - The LoRA reports its figures as the group's: cash of 776 against the
+    group's 25,427, its total assets and liabilities, and "Total revenues |
+    154 | 368 | 312".
+  - sol does the same in one of the five passages (6 items).
+- **Segment tables, 13 (sol right 11).**
+  - Nvidia's "Operating income (loss) | $ | 5,083 | $ | 4,552 | $ | (5,411)
+    | $ | 4,224" (segment, segment, all-other, total) is read as three years
+    (5 items).
+  - The total column of Nvidia's segment table is reported as operating
+    income (3). That column sums the segments and is not the company's
+    figure.
+  - Adobe's segment gross profit is read as years (3, including the scale
+    slip).
+  - UnitedHealth's Optum subtotal is taken instead of the consolidated
+    column (2).
+
+**Which year a figure belongs to: 65 items, sol right on 61.**
+
+- **Year from the wrong header, 32 (sol right 28).**
+  - **Equity roll-forwards (16 items: Costco, Nvidia twice, P&G).** Activity
+    after a year-end balance belongs to the next year. The LoRA gives the
+    net income after "BALANCE AT AUGUST 28, 2022" to 2022, and the net
+    income after "Balances, Jan 30, 2022" to fiscal 2022 rather than 2023.
+  - **Statements stacked one block per year (12).** In UnitedHealth's
+    segment blocks and Visa's EPS tables, the LoRA gives a row the year of
+    the header below it, or reports a block printed under "2024" as 2025.
+  - **Lockheed's second sales table (4)** sits under a printed year, "74
+    2022" or "70 2023", and the LoRA gives it the year after.
+  - **The 4 items sol doesn't get right** are wrong values on labels whose
+    year the passage doesn't print. sol avoids the wrong figure, but can't
+    report the label either.
+- **Multi-year rows misread, 26 (sol right 26).**
+  - **Lockheed cash-flow rows (20).**
+    - In 17, the chunk starts below its year header, and the LoRA maps the
+      columns to the wrong years, mostly reversed: in "Cash and cash
+      equivalents at end of year | $ | 4,121 | $ | 2,483 | $ | 1,442" it
+      gives 4,121 to 2023.
+    - In 3, it takes the "at beginning of year" line for the year-end
+      balance.
+  - **J&J (2):** the same beginning-of-year line.
+  - **Nvidia (4):** "Total shareholders' equity | 42,978 | 22,101" is given
+    to the wrong years.
+- **Year guessed, 7 (sol right 7).**
+  - A sales or cash table that prints no year (Lockheed's sales by contract
+    type, Adobe's cash note) is reported under the filing's own year, in all
+    7.
+  - sol leaves these out, which is what the prompt asks.
+  - The labels on these figures are counted as the "year not printed"
+    artifact below.
+
+**Figures left out: 74 items, sol right on 70.**
+
+- **Shares outstanding, 24 (sol right 24).** This is the LoRA's weakest
+  concept (0.760 above).
+  - It skips counts that sit inside a row label (12: UNH, COST, ADBE), as
+    in "Common stock, $0.01 par value - 3,000 shares authorized; 906 and 915
+    issued and outstanding | 9 | 9".
+  - It skips the share column of equity-statement balances (6: NVDA), as
+    in "Balances, Jan 29, 2023 | 2,466 | …".
+  - Lockheed's note reads "Of the 242 million and 255 million shares of
+    common stock issued and outstanding …, 240 million and 254 million
+    shares were considered outstanding for consolidated balance sheet
+    presentation purposes". The LoRA takes the first pair (4) or nothing
+    (2).
+- **"Earnings from operations" skipped, 9 (sol right 9).**
+  - In three UnitedHealth results tables, the LoRA reads revenue, net
+    earnings and EPS but skips "Earnings from operations | 32,358 | 28,435
+    | 23,970".
+  - In a fourth table it reads the same row. The same row is also among
+    the segment-block omissions below.
+- **Table figure omitted, 31 (sol right 27).** No single cause.
+  - 6 are the oldest column of a row whose other years it read.
+  - The rest include:
+    - Lockheed's cash-flow summary row "Net earnings | 6,920 | 5,732 |
+      6,315" (3)
+    - Adobe's revenue total "Revenue | $ | 19,409 | $ | 17,606 | $ | 15,785"
+      (3)
+    - revenue and operating-income rows in UnitedHealth's segment blocks
+      (4)
+  - Costco's "TOTAL EQUITY | 23,622 | 25,058" sits in passages that also
+    show a noncontrolling-interest column. sol leaves it out too (4).
+- **Prose figure omitted, 10 (sol right 10).**
+  - The EPS in Lockheed's "We reported net earnings of $6.9 billion ($27.55
+    per share) in 2023" (4).
+  - The R&D in "totaled $1.6 billion, $1.5 billion and $1.7 billion in
+    2024, 2023 and 2022" (3).
+  - Three more, at Costco and UnitedHealth.
+
+**Figures the passage does not print: 21 items, sol right on all 21.**
+
+- **Digits added to a rounded figure, 8 (sol right 8).**
+  - For "$6.9 billion" the LoRA writes 6,866,000,000; for "$12.0 billion",
+    12,047,000,000.
+  - The label is the exact value, 6,920,000,000. sol's 6,900,000,000 is
+    within the scorer's 0.5% of it; the LoRA's invented digits are not.
+  - **The training data rewards it.** The training set has 153 labels
+    printed only as a rounded prose figure, and each target is XBRL's exact
+    value.
+  - The same habit on labels that no reading can match is counted under
+    the label artifacts, not here.
+- **Figure not printed, 13 (sol right 13).**
+  - **Prior-year figures the passage does not print,** beside
+    current-year ones it does (5):
+    - J&J's prior-year sales, next to sentences like "worldwide sales
+      increased 6.0% to $94.2 billion" (3 passages)
+    - Costco's 2025 net sales next to "Net sales increased 10% to
+      $297,247" (1)
+    - UnitedHealth's 2022 cash next to its 2023 cash (1)
+  - **P&G (5):** operating income, net earnings and prior-year net sales, in
+    a passage that prints them only as percentages of net sales and as
+    "Net sales increased $245 million to $84.3 billion".
+  - **Adobe (3):** gross profit figures that appear nowhere.
+  - Outside the label artifacts, sol reports no figure its passage does not
+    print.
+
+**Wrong row or column: 10 items, sol right on 8.**
+
+- P&G's non-GAAP "Core EPS" column instead of "As Reported" (4). sol
+  misses the 2026 pair too.
+- UnitedHealth's fair-value table: the Level 1 column instead of the total
+  (2).
+- For cash and cash equivalents (1 each):
+  - Adobe's "Cash | $ | 787" line
+  - Adobe's "Total cash, cash equivalents and short-term investments"
+- The LoRA's facts on 2 of the 105 no-fact passages are here (1 each), and
+  both are misread printed lines:
+  - "Corporate debt securities | $ | 18,504 | … | 18,526" as Nvidia's cash
+  - Lockheed's pension line, "Total FAS (expense) income | $ | (924)", as
+    operating income
+
+### Label artifacts: 32 of the LoRA's items, 33 of sol's
+
+| artifact | LoRA items | sol items | sol right on the LoRA's |
+|---|---|---|---|
+| label beyond rounding | 16 | 16 | 0 |
+| restated figure not a label | 6 | 8 | 0 |
+| year not printed | 10 | 9 | 1 |
+
+- **Label beyond rounding.**
+  - Eight Lockheed labels are printed only as a rounded prose figure, "cash
+    and cash equivalents of $1.4 billion", and the label is XBRL's
+    1,442,000,000.
+  - The label builder accepts the rounded form. The scorer allows 0.5%,
+    and 1.4 billion is 2.9% away, so no reading of the passage can match.
+  - Every arm loses all 8, as a missed label and a wrong value each. These
+    are all 8 of sol's wrong values.
+  - 8 of the 63 held-out labels printed only in rounded prose are like
+    this, and 26 of the 153 in the training set.
+- **Restated figure not a label.**
+  - **What happens:** a 10-K's oldest column can be a later restatement:
+    - Nvidia's FY2025 10-K prints FY2023 diluted EPS as 0.17 after the
+      10:1 split ("Diluted | $ | 2.94 | $ | 1.19 | $ | 0.17").
+    - J&J's FY2023 10-K prints 2021 sales as 78,740 after the Kenvue
+      separation.
+  - **Why it scores wrong:** the label builder takes a year's value from
+    that year's 10-K and the next one, never the current filing's
+    restatement, so a correct reading scores as a false positive.
+  - **The not_in_passage counts:** all 3 of sol's `not_in_passage` are
+    these, and so are 3 of the LoRA's 16. The figures are printed, but
+    `diagnose` treats numbers under 1 as never printed.
+- **Year not printed.**
+  - The figure is printed with no year above it. Examples: the first
+    Lockheed sales table in a chunk, and a Visa EPS block whose year line is
+    in the previous chunk.
+  - The prompt asks only for years printed with a figure, yet the key wants
+    these.
+  - sol reports one of the ten, inferring the year from the order of
+    UnitedHealth's blocks.
+
+### By company, and prose against table
+
+| company | items | sol right | LoRA F1 if fixed |
+|---|---|---|---|
+| LMT | 74 | 51 | 0.9297 |
+| UNH | 64 | 55 | 0.9265 |
+| COST | 41 | 37 | 0.9199 |
+| PG | 36 | 32 | 0.9182 |
+| NVDA | 31 | 28 | 0.9172 |
+| CMCSA | 27 | 27 | 0.9154 |
+| ADBE | 18 | 17 | 0.9134 |
+| SLB | 13 | 13 | 0.9118 |
+| JNJ | 10 | 7 | 0.9111 |
+| V | 8 | 4 | 0.9105 |
+
+- **Lockheed** has the most items. 21 of its 74 are label artifacts (16
+  beyond rounding, 5 with no year printed), and 20 are cash-flow rows
+  mapped to the wrong years.
+- **UnitedHealth's** 64 include:
+  - its parent-company schedule (24)
+  - its "Earnings from operations" row (9)
+  - its stacked segment blocks: wrong headers (8), the segment subtotal
+    (2), and the year guesses and missing years beside them
+- **Comcast** is one cause: noncontrolling interests, all 27. **Costco** is
+  mostly one: net sales, 26 of its 41.
+- **Prose against table:**
+  - 42 items are figures printed in prose: 26 model errors, all of which
+    sol gets right, and the 16 rounding artifacts.
+  - 266 are table figures; sol gets 231 right.
+  - 14 are figures printed nowhere.

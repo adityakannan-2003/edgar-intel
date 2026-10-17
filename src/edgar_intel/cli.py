@@ -1592,6 +1592,34 @@ def ft_score(
         )
 
 
+@ft_app.command("causes")
+def ft_causes(
+    arm: str = typer.Option(..., help="Predictions file of the arm to explain (the LoRA, seed 17)."),
+    baseline: str = typer.Option(..., help="Predictions file it is compared with (sol, pass 1)."),
+    out: str = typer.Option(..., help="Results JSON: causes, totals and every error item."),
+    held_out: str = typer.Option("data/finetune/held_out.jsonl"),
+    train: str = typer.Option("data/finetune/train.jsonl", help="Counted for rounded prose labels."),
+) -> None:
+    """Give every error item of one arm a cause. No model calls."""
+    from .finetune.causes import KINDS, analyse
+
+    payload = analyse(held_out, arm, baseline, train)
+    with open(out, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, indent=1)
+    rows = [
+        {"cause": c["name"], "side": c["side"], **{k: c[k] for k in KINDS},
+         "items": c["items"], "baseline right": c["baseline_right"], "F1 if fixed": c["f1_if_fixed"]}
+        for c in payload["by_cause"].values()
+    ]
+    _table("error causes", rows)
+    aside = payload["labels_set_aside"]
+    console.print(
+        f"micro F1 {payload['arm_micro']['f1']} vs {payload['baseline_micro']['f1']} (gap {payload['gap']}); "
+        f"with {aside['keys']} label-artifact keys set aside: {aside['arm']['f1']} vs "
+        f"{aside['baseline']['f1']} (gap {aside['gap']})"
+    )
+
+
 # -------------------------------------------------------------------- bench
 @bench_app.command("run")
 def bench_run(

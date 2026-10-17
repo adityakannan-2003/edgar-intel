@@ -245,10 +245,15 @@ def predict(
         with open(meta_path, "w", encoding="utf-8") as fh:
             json.dump(meta, fh, indent=2)
 
+    # Resuming retries a case whose stored record is a failed call; `score`
+    # keeps the last record per case, so the retry is what gets scored.
     done: set[str] = set()
     if os.path.exists(out_path):
         with open(out_path, encoding="utf-8") as fh:
-            done = {json.loads(line)["id"] for line in fh if line.strip()}
+            done = {
+                rec["id"] for rec in (json.loads(line) for line in fh if line.strip())
+                if "error" not in rec
+            }
 
     if llm is None:
         from ..providers.openai_compat import OpenAICompatLLM
@@ -509,7 +514,12 @@ def score(
         meta = json.load(fh)
     rows = {r["id"]: r for r in load_records(held_out_path)}
     with open(pred_path, encoding="utf-8") as fh:
-        records = [json.loads(line) for line in fh if line.strip()]
+        last: dict[str, dict[str, Any]] = {}
+        for line in fh:
+            if line.strip():
+                rec = json.loads(line)
+                last[rec["id"]] = rec
+    records = list(last.values())
 
     by_id = meta.get("input_sha256_by_id")
     if by_id is None:

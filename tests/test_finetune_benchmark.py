@@ -236,3 +236,16 @@ class TestRegrade:
         other.write_text("".join(json.dumps(r) + "\n" for r in rows))
         with pytest.raises(ValueError, match="another held-out set"):
             score(out, str(other))
+
+
+class TestRetry:
+    def test_resume_retries_failed_calls_and_scores_the_retry(self, files):
+        held, train, tmp = files
+        out = str(tmp / "p.jsonl")
+        first = [RIGHT, RuntimeError("timeout"), RIGHT, RIGHT, RIGHT]
+        predict(ARM, held, out, train_path=train, llm=ScriptedLLM(first))
+        llm = ScriptedLLM([RIGHT])
+        summary = predict(ARM, held, out, train_path=train, llm=llm)
+        assert len(llm.calls) == 1 and summary["written"] == 1
+        m = score(out, held)["metrics"]
+        assert m["cases"] == 5 and m["errors"] == 0

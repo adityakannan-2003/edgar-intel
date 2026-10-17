@@ -111,8 +111,9 @@ cost nothing.
 **Predictions, scored:**
 
 1. Right: luna rejected `temperature=0`.
-2. Partly right. sol (0.943) is inside 0.80–0.92? No: it is above the range.
-   luna (0.944) is also above its range. Astra is within 0.03 of sol (+0.023).
+2. Wrong for sol and luna, which both scored above their predicted ranges
+   (sol 0.943 against 0.80–0.92, luna 0.944 against 0.65–0.85). Right for
+   astra, which came within 0.03 of sol (+0.023).
 3. Right: 0 parse failures.
 4. Wrong: the top error was `unlabelled` for every arm, not `wrong_year`,
    and `wrong_year` was 0 for all three.
@@ -153,5 +154,7 @@ The v2 held-out set (sha256 `481a2923…`, built at `df3dc36`) has the same
 differs (`reports/finetune/dataset-v1-v2-check.json`), so the label audit
 carries over. v1 and v2 scores are different exams and are never compared.
 
-**Prediction for v2** (the same 50/50/25 cases): `unlabelled` falls to 5 or
-fewer per arm, and sol and luna stay within 0.03 of each other.
+**v2 runs luna and sol only**, on the same 50 cases, because astra is out
+under the rule above. Re-running it on v2 would give it a second chance the
+rule does not allow. **Prediction for v2:** `unlabelled` falls to 5 or fewer
+per arm, and sol and luna stay within 0.03 of each other.

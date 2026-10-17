@@ -36,7 +36,11 @@ shift
 case "$stage" in
 setup)
   nvidia-smi | tee "$W/logs/nvidia-smi.txt"
-  python -m pip install -q uv
+  # Ubuntu 24.04's system Python refuses pip outside a venv (PEP 668), so uv
+  # goes in its own venv; everything else is in the two environments below.
+  command -v uv >/dev/null || {
+    python3 -m venv "$C/uv-env" && "$C/uv-env/bin/pip" install -q uv && ln -sf "$C/uv-env/bin/uv" /usr/local/bin/uv
+  }
   uv venv -q --python 3.12 "$C/train-env"
   VIRTUAL_ENV=$C/train-env uv pip install -q \
     torch==2.14.1 transformers==5.20.1 peft==0.21.2 trl==1.16.0 datasets==5.1.0 \

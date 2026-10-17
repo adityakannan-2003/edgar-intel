@@ -59,7 +59,12 @@ train)
   ;;
 serve)
   name=${1:?adapter name}
-  pkill -f "vllm serve" || true
+  # vLLM compiles kernels at startup with ninja, which it looks for on PATH:
+  # called by full path without its environment on PATH, it fails with
+  # "No such file or directory: 'ninja'" after loading the model.
+  export PATH="$C/serve-env/bin:$PATH"
+  VIRTUAL_ENV=$C/serve-env uv pip install -q ninja
+  pkill -f "[v]llm serve" || true
   nohup "$C/serve-env/bin/vllm" serve Qwen/Qwen3-8B \
     --enable-lora --lora-modules "extract=$W/adapters/$name" --max-lora-rank 16 \
     --max-model-len 8192 --gpu-memory-utilization 0.90 --seed 0 --port 8000 \

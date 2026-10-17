@@ -264,7 +264,7 @@ def run(
             cik = entry["cik"]
             try:
                 subs = client.submissions(cik)
-                rows = recent_filings(subs, [form], limit=1)
+                rows = recent_filings(subs, [form], limit=1, fetch_page=client.submissions_page)
                 if not rows:
                     diagnoses.append(
                         FilingDiagnosis(ticker, "-", None, error=f"no recent {form}")

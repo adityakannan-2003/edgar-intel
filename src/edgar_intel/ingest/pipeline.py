@@ -209,11 +209,14 @@ def ingest_universe(
             # ---- filings + sections
             try:
                 subs = client.submissions(cik)
+                rows = recent_filings(
+                    subs, forms, limit=years_back, fetch_page=client.submissions_page
+                )
             except Exception as exc:
                 stats.errors.append(f"{ticker}: submissions failed: {exc}")
                 continue
 
-            for row in recent_filings(subs, forms, limit=years_back):
+            for row in rows:
                 if progress:
                     progress(f"{ticker} {row['form']} {row['filing_date']}")
                 url = client.filing_url(cik, row["accession"], row["primary_doc"])

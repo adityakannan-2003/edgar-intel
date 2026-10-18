@@ -1638,12 +1638,14 @@ def bench_sweep(
     base_url: str = typer.Option("http://localhost:8000"),
     endpoint: str = typer.Option("/search"),
     requests_per_level: int = typer.Option(100),
+    out: str = typer.Option("reports/bench.json"),
 ) -> None:
     from .serving.bench import sweep
 
-    payload = sweep(base_url, endpoint, requests_per_level=requests_per_level)
+    payload = sweep(base_url, endpoint, requests_per_level=requests_per_level, out_path=out)
     _table("concurrency sweep", payload["levels"])
     console.print(f"\n[bold]{payload['interpretation']}[/bold]")
+    console.print(f"wrote {out}")
 
 
 # ---------------------------------------------------------------------- mcp

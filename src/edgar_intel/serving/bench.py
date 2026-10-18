@@ -174,7 +174,13 @@ def sweep(
             knee = prev.concurrency
             break
 
+    # What was measured, in the file itself: a sweep against localhost and one
+    # against a deployed URL produce files that are otherwise indistinguishable.
     payload = {
+        "base_url": base_url,
+        "endpoint": endpoint,
+        "requests_per_level": requests_per_level,
+        "measured_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "levels": [r.as_dict() for r in results],
         "knee_concurrency": knee,
         "interpretation": (

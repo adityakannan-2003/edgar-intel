@@ -59,7 +59,7 @@ schema, and a database whose tables already exist makes that restore stop on
 ## 2. Load the corpus — copy it, do not rebuild it
 
 The local database already holds everything the deployed instance needs: 24
-filings, 264 sections, 1,338 XBRL facts, the `section_aware` index the service
+filings, 264 sections, 1,363 XBRL facts, the `section_aware` index the service
 reads — 5,468 chunks, every one embedded — and the eval-run history that
 `/stats/eval` serves. **Copy that, and only that.**
 
@@ -121,7 +121,7 @@ extensions from §1 are already there — re-run with those lines stripped:
 Two things to check before trusting it:
 
 ```bash
-# counts: 24 filings / 264 sections / 5468 chunks / 5468 embedded / 1338 facts
+# counts: 24 filings / 264 sections / 5468 chunks / 5468 embedded / 1363 facts
 psql "$REMOTE_DSN" -c "SELECT 'filings' t, count(*) FROM filings
   UNION ALL SELECT 'sections', count(*) FROM sections
   UNION ALL SELECT 'chunks', count(*) FROM chunks
@@ -165,11 +165,17 @@ EDGAR_DB_DSN="$REMOTE_DSN" edgar-intel eval retrieval --out reports/retrieval_ne
 ```
 
 It embeds the queries locally and only reads the remote database. Compare it
-with `reports/retrieval_current_d7.json` configuration by configuration — match
+configuration by configuration with the local sweep taken on the same labels —
+`reports/retrieval_d15_20261005.json` for the D15 `evalset/golden.json`, not the
+pre-D15 `retrieval_current_d7.json`, which grades a different key — and match
 rows on `mode`, `rerank`, `k` and `top_n`, because the newer sweep names its
 rows from the `use_rerank` setting. Same data, same queries: the figures should
 agree. Ties in the lexical ranking can move a case or two; a drop in the
 dense-only row is the signal this check exists for.
+
+Measured on the 18 Oct deploy (`reports/retrieval_neon_20261018.json`): dense-only
+identical on every metric, hybrid hit@5 0.7619 in both, hit@10 0.8528 → 0.8615.
+No iterative scan was needed.
 
 If dense-only falls, turn on pgvector's iterative index scans for the database
 (pgvector 0.8 or later), so a filtered scan keeps going until it has k rows, and
@@ -189,13 +195,32 @@ provider's free-tier limit before the restore rather than halfway through it.
 ## 3. Deploy
 
 ```bash
-fly launch --no-deploy                  # accept the existing fly.toml
-fly secrets set \
+fly launch --no-deploy                  # accept the existing fly.toml; skip if the app exists
+fly secrets set --stage \
   EDGAR_DB_DSN='postgresql://...' \
   EDGAR_LLM_API_KEY='sk-...' \
   EDGAR_API_KEY="$(openssl rand -hex 24)"
-fly deploy
+fly deploy --remote-only --ha=false     # one machine, built on Fly's builder
 ```
+
+`--ha=false` matters. Fly's first deploy otherwise creates two machines, which
+doubles the bill and, because the rate limiter is in-process, doubles what `/ask`
+lets one client spend.
+
+Check what the machine actually received, by length only, before reading
+anything into a failing `/ready`:
+
+```bash
+fly ssh console -C "python -c \"import os; [print(k, len(os.environ.get(k) or '')) for k in ('EDGAR_DB_DSN','EDGAR_API_KEY','EDGAR_LLM_API_KEY')]\""
+```
+
+The 18 Oct deploy needed it twice. An `EDGAR_DB_DSN` of length 0 shows up in the
+logs as psycopg trying the local socket `/var/run/postgresql/.s.PGSQL.5432`. It
+came from a shell file whose quotes an editor had removed: an unquoted `?` in the
+DSN fails under zsh, so the variable was never set. And an OpenAI key with a
+trailing space: pydantic strips `.env` values, but not environment variables. A
+secret's digest in `fly secrets list` changes only when its value does, so an
+unchanged digest after a "re-set" means nothing was sent.
 
 The image build installs torch from the CPU wheel index and pre-downloads both
 models, so it is large and slow to build once, then fast to start.
@@ -241,10 +266,10 @@ amount of restarting will fix.**
 
 | | |
 |---|---|
-| Fly machine, 1 GB shared-cpu-1, suspending when idle | free allowance covers a portfolio deployment |
+| Fly machine, 1 GB shared-cpu-1, suspending when idle | **not free.** Fly has no free allowance for new organizations; a card is required after a 2-machine-hour / 7-day trial. $6.70 a month if always on (`ewr`), $0.0093 per hour awake; while suspended or stopped only the root filesystem bills, at $0.15 per GB-month (the image is 799 MB compressed). Shared IPv4 and IPv6 are free; a dedicated IPv4 would be $2 a month. Prices from Fly's pricing page, 17 Oct 2026. |
 | Neon / Supabase free tier | 0 |
 | `/search` | 0 — local embeddings, Postgres only |
-| `/ask` | not measured: `/ask` runs the agent, which takes several model calls per question. The single-call evaluation path costs $0.78 per 1k questions at `gpt-4o-mini`, so expect a multiple of that. |
+| `/ask` | $0.000425 for the one live call on 18 Oct (3 agent steps, `gpt-4o-mini`); the agent's full 232-question evaluation run averages $0.00036 a question (`docs/METRICS.md` §6). |
 
 The rate limit at 20/min per IP caps a single abusive client at roughly $0.60 an
 hour. That is the number the limit was chosen against, and it is why the limit is
@@ -256,9 +281,11 @@ to everyone else for the price of a rounding error.
 - The rate limiter is **in-process**, so it is per-machine: two instances allow
   twice the budget. Correct at `min_machines_running = 0` with one machine; a
   shared counter would mean Redis.
-- Cold start pays the model load. `/ready` embeds a probe string to warm it, but
-  the first request after a suspend is still slower than p95 from the evaluation
-  runs, which were measured against a warm local process.
-- `p50 892 ms / p95 1732 ms` in `docs/METRICS.md` are **local** figures. Do not
-  quote them for the deployed instance until `edgar-intel bench sweep` has run
-  against the URL.
+- Cold start: measured on 18 Oct, the first request after a suspend took 1.57 s,
+  and the first after a full stop 26.2 s (`reports/fly_coldstart_20261018.json`).
+  Fly normally suspends this machine; it stopped it once, after a secrets update
+  restarted it. `/ready` embeds a probe string, so the request after the wake
+  pays no model load.
+- The local latencies in `docs/METRICS.md` (§8, "Local") are end-to-end
+  `eval run` figures on a laptop. The deployed instance's are the `/search`
+  sweep in §8, "Deployed": about 25 req/s on one machine. Never quote one as the other.

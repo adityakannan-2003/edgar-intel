@@ -26,6 +26,7 @@ on the ones that have not been.
 | Set | 232 cases — 160 numeric single-hop · 48 numeric comparative · 24 narrative. Rebuilt 5 Oct with the D12–D14 fixes, then re-linked for D15 the same day (labels only; the exam is unchanged), 231 with linked evidence |
 | Corpus | 8 companies (AAPL CAT COST JNJ MSFT NVDA PG UNH), **24 10-K filings**, FY2023–FY2026 · 264 sections · 1,363 XBRL facts (1,338 before the D13 refresh) · 23,499 chunks across four strategies, all embedded — `section_aware` 5,468 is the evaluated and served index. (A 32,171-chunk `section_aware_t144` experiment also exists locally; it is not shipped — §1.) |
 | Config | `section_aware` · `hybrid` · `use_rerank=false` · `k=50` · `top_n=8` · `gpt-4o-mini` · MiniLM-L6-v2 (384-d) · `rrf_k=60` · `numeric_tolerance=0.005` · `context_max_chars=20000` · answering prompt at `bee5dc0` · judge contract `v2`, shown the source context |
+| Deployed instance (§8) | https://edgar-intel.fly.dev since 18 Oct 2026: one Fly `shared-cpu-1x` 1 GB machine in `ewr`, Neon free-tier Postgres 18.6 in `us-east-1` holding the trimmed `section_aware` corpus (81 MB). Same config as above, read back from `/config`. Sweep files `reports/bench_fly_search_20261018.json` and `_run2.json`; retrieval on it `reports/retrieval_neon_20261018.json` |
 
 Two standing cautions, both earned the hard way:
 
@@ -1089,11 +1090,14 @@ a tool value the model had no reason to doubt.
 **Produce it**
 
 ```bash
-edgar-intel bench sweep --endpoint /search     # concurrency sweep: NOT RUN
+edgar-intel bench sweep --base-url https://edgar-intel.fly.dev --endpoint /search \
+  --out reports/bench_fly_search_20261018.json     # and _run2.json, a minute later
 ```
 
-**Status: end-to-end latency measured locally; the concurrency sweep has not been
-run.**
+**Status: end-to-end latency measured locally; the concurrency sweep measured
+against the deployed instance on 18 Oct 2026, twice.**
+
+### Local, end to end (`eval run`)
 
 With the shipped 20,000-character context, two clean runs measured **p50 981 and
 1230 ms, p95 2441 and 2936 ms** end to end (`exp-ctx20k` and the reference;
@@ -1126,13 +1130,96 @@ it measured p50 2.3 s and p95 3.9 s at 2.2 model calls per question, and $0.084
 per full run, because its prompts carry fact lookups rather than a
 20,000-character context.
 
-These are local figures on a warm process. A deployed instance's numbers come
-from `bench sweep` against its URL, not from here.
+These are local figures on a warm process. The deployed instance's numbers are
+below and come from `bench sweep` against its URL; never quote one set as the other.
 
-**Bullet shape — blocked**
+### Deployed, `/search` under concurrency (`bench sweep`)
 
-> ~~Benchmarked the retrieval API across concurrency levels 1–32…~~ Requires a
-> deployed instance and `bench sweep`. Not yet run.
+The instance: **https://edgar-intel.fly.dev**, one Fly machine (`shared-cpu-1x`,
+1 GB, `ewr`) built from `fd1e8d8` plus this section's commit's
+`bench sweep --out` change, which is client-side (`0242806`, fine-tune docs and
+code only, landed in between and is not in the image), reading a Neon free-tier
+Postgres 18.6 (pgvector 0.8.6, `us-east-1`, pooled connection) that holds the
+trimmed corpus: 24 filings, 264 sections, 5,468 `section_aware` chunks, all
+embedded, 1,363 facts, 81 MB. Config as served by `/config`: hybrid,
+`use_rerank=false`, `k=50`, MiniLM-L6-v2 on the machine's CPU. Each level sends
+100 requests drawn round-robin from the sweep's six fixed queries, `top_n=5`, no
+ticker filter, from Aditya's Mac over a home connection.
+
+| concurrency | req/s (run 1 / run 2) | p50 ms | p95 ms | p99 ms | failures |
+|---|---|---|---|---|---|
+| 1 | 5.15 / 4.71 | 167 / 201 | 234 / 288 | 2059 / 411 | 0 / 0 |
+| 4 | 17.00 / 17.75 | 229 / 213 | 316 / 297 | 521 / 429 | 0 / 0 |
+| 8 | 21.44 / 23.27 | 363 / 316 | 568 / 562 | 827 / 607 | 0 / 0 |
+| 16 | **26.46 / 25.08** | 534 / 594 | 919 / 923 | 1007 / 992 | 0 / 0 |
+| 32 | 24.43 / 24.41 | 1128 / 1132 | 1647 / 1608 | 1701 / 1873 | 0 / 0 |
+
+Files: `reports/bench_fly_search_20261018.json` (run 1, 18:16 UTC) and
+`reports/bench_fly_search_20261018_run2.json` (run 2, 18:17 UTC). Each file
+records its own base URL, endpoint and timestamp.
+
+How to read it:
+
+- **Capacity is about 25 requests a second, reached at 8–16 concurrent
+  requests.** Beyond that, latency grows and throughput does not: at 32, p50 is
+  1.1 s because each request waits behind the others. Queueing alone predicts
+  32 ÷ 24.4 req/s ≈ 1.3 s; the sweep measured a mean of 1.15 and 1.17 s. The sweep's knee rule says 16 in run 1
+  and 8 in run 2. Between 8 and 16, throughput grew 1.23× in one run and 1.08×
+  in the other, either side of the rule's 1.2 cut-off, so quote the range, not
+  one number.
+- **What saturates is not measured.** Candidates are the single shared vCPU (the
+  query is embedded on it) and the 8-connection database pool. The sweep cannot
+  tell them apart.
+- **About 60 ms of every figure is the trip from the Mac to Fly and back.**
+  `GET /health`, which does no work, measured p50 63.5 ms / p95 83.1 ms over 30
+  requests (`reports/fly_health_rtt_20261018.json`). So at concurrency 1 the
+  service itself takes roughly 100–140 ms of the 167–201 ms p50.
+- **p99 here is one request.** With 100 requests per level, p99 is the slowest
+  request, which is why it equals the maximum in every row. Run 1's 2,059 ms at
+  concurrency 1 is a single slow request that run 2 did not repeat (411 ms).
+- **1,000 requests, 0 failures**, including 200 at concurrency 32.
+
+**Live checks, in `docs/DEPLOY.md` §4's order** (`reports/fly_verify_20261018.json`):
+`/health` 200; `/ready` `ready: true`, `section_aware`, 5,468 indexed chunks,
+embedder 384-d; `/config` `ask_requires_api_key: true`, `use_rerank: false`;
+`/stats/eval` serves `exp-prompt-conventions-c0f6e105` (0.8606) and withholds
+`narrative_pass_rate` and `overall_score`; `/search` returns 5 AAPL Item 1A hits,
+`reranked: false`; `/ask` returns **401** without the key and, with it, answered
+"$416.16 billion", citing XBRL accession `0000320193-25-000079`.
+
+**Cold start.** The machine suspends after a couple of idle minutes (about 2.5
+minutes after the last sweep request). The first request after a suspend took
+**1.57 s** (`GET /health`), and the next `/search` took 0.46 s. From *stopped*,
+which is what Fly did once after a secrets update restarted the machine, the
+first request took **26.2 s**: a full boot. One observation each, in
+`reports/fly_coldstart_20261018.json`.
+
+**Retrieval on the deployed database matches the local index.** `eval
+retrieval` against Neon (`reports/retrieval_neon_20261018.json`), compared
+configuration by configuration with the 5 Oct sweep on the same D15 labels
+(`reports/retrieval_d15_20261005.json`): dense-only is identical on every
+metric (hit@5 0.7013, recall@5 0.3274), so pgvector's post-filtering of HNSW
+candidates is not dropping rows and `hnsw.iterative_scan` is not needed. The
+shipped hybrid row keeps hit@1 0.4026 and hit@5 0.7619; hit@10 moves 0.8528 →
+0.8615 and MRR 0.5552 → 0.5537; lexical-only moves by about one case. That is
+two cases of 231, the size of tie movement in the lexical ranking, not a
+change in the index.
+
+**Cost, deployed**
+
+| | |
+|---|---|
+| `/search` | $0 in API calls. At the measured ~25 req/s, the machine's list price ($6.70 a month, $0.0093 an hour) works out to about $0.0001 per 1k searches at capacity. That is derived, not invoiced. |
+| `/ask` | **$0.000425** and 4,674 ms for the one live call (trace `6c14fb69…`, 3 steps), in line with the agent's $0.084 per 232-question run (§6), i.e. $0.00036 a question. One call, not a distribution. |
+| machine while idle | it suspends when idle; while stopped or suspended only its root filesystem bills, at $0.15 per GB-month. The image is 799 MB compressed. |
+| Neon | free plan: 81 MB of the 1 GB per-project limit |
+
+**Bullet shape — usable now**
+
+> Deployed the retrieval API (FastAPI, pgvector on Neon, Fly.io) with the paid
+> agent endpoint behind a key and a per-IP rate limit. Benchmarked `/search` at
+> concurrency 1–32: one shared-CPU machine sustains about 25 req/s, p95 234–288 ms
+> at concurrency 1 rising to 1.6 s at 32, 0 failures in 1,000 requests.
 
 **Expect to be asked:** why p95 and not mean (a service averaging 400 ms with a
 p99 of nine seconds is visibly broken for one user in a hundred, and the mean
@@ -1260,11 +1347,11 @@ companies tag no `StockholdersEquity`.
 | agent escalation rate: **48.3%** as deployed → 22.4% → 12.5% → **2.6%**; its 6 wrong answers all came at confidence 0.9–1.0, so escalation catches none of its errors | ✅ measured (§6) |
 | a calendar prompt rule for the agent: −6 to −7 cases, more claims a year is unreported; rejected under a pre-written adoption rule | ✅ measured (§6) |
 | "the agent is more accurate than RAG" | ⚠️ **true on this exam (0.96 against 0.86) and misleading**: its numeric questions are lookups in the table the answer key came from; say it no longer gets in its own way, not that it reads better |
-| concurrency / throughput sweep | ❌ needs a deployed instance |
+| concurrency / throughput sweep on the deployed `/search`: about 25 req/s on one shared-CPU machine from concurrency 8–16; p50 167–201 / p95 234–288 ms at 1, p95 1.6 s at 32; 0 failures in 1,000 requests; two runs | ✅ measured 18 Oct (§8), `reports/bench_fly_search_20261018.json` and `_run2.json`; about 60 ms of each latency is the Mac-to-Fly round trip |
 | regression gate in CI | ✅ running since 5 Oct against a committed baseline; fails on a deliberate regression; nothing caught yet (§4) |
 | LoRA fine-tune comparison: Qwen3-8B + LoRA 0.91 against gpt-6.1-sol few-shot 0.98 micro F1 on 532 company-disjoint cases; $0.06 against $1.54–2.07 per 1k at load; 0.77 GPU-hours | ✅ measured (§9) |
 | fine-tune labels: 50 of 50 audited held-out labels right, after a first audit's 49 of 50 led to a fix | ✅ measured, confirmed by Aditya (§9) |
-| live URL | ❌ not deployed — see `docs/DEPLOY.md` |
+| live URL: **https://edgar-intel.fly.dev** — `/ask` returns 401 without the key and answers with it; `/stats/eval` serves the reference run | ✅ deployed 18 Oct, verified in `docs/DEPLOY.md` §4's order (§8) |
 
 ## Metrics that carry the most weight, ranked
 

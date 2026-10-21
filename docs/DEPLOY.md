@@ -266,7 +266,7 @@ amount of restarting will fix.**
 
 | | |
 |---|---|
-| Fly machine, 1 GB shared-cpu-1, suspending when idle | **not free.** Fly has no free allowance for new organizations; a card is required after a 2-machine-hour / 7-day trial. $6.70 a month if always on (`ewr`), $0.0093 per hour awake; while suspended or stopped only the root filesystem bills, at $0.15 per GB-month (the image is 799 MB compressed). Shared IPv4 and IPv6 are free; a dedicated IPv4 would be $2 a month. Prices from Fly's pricing page, 17 Oct 2026. |
+| Fly machine, 1 GB shared-cpu-1, always on | **$6.70 a month** (`ewr`, $0.0093 an hour). Fly has no free allowance for new organizations; a card is required after a 2-machine-hour / 7-day trial. Until 21 Oct it suspended when idle, when only the root filesystem bills, at $0.15 per GB-month (the image is 799 MB compressed); see Known limitations for why it no longer does. Shared IPv4 and IPv6 are free; a dedicated IPv4 would be $2 a month. Prices from Fly's pricing page, 17 Oct 2026. |
 | Neon / Supabase free tier | 0 |
 | `/search` | 0 — local embeddings, Postgres only |
 | `/ask` | $0.000425 for the one live call on 18 Oct (3 agent steps, `gpt-4o-mini`); the agent's full 232-question evaluation run averages $0.00036 a question (`docs/METRICS.md` §6). |
@@ -279,13 +279,15 @@ to everyone else for the price of a rounding error.
 ## Known limitations, stated rather than hidden
 
 - The rate limiter is **in-process**, so it is per-machine: two instances allow
-  twice the budget. Correct at `min_machines_running = 0` with one machine; a
-  shared counter would mean Redis.
-- Cold start: measured on 18 Oct, the first request after a suspend took 1.57 s,
-  and the first after a full stop 26.2 s (`reports/fly_coldstart_20261018.json`).
-  Fly normally suspends this machine; it stopped it once, after a secrets update
-  restarted it. `/ready` embeds a probe string, so the request after the wake
-  pays no model load.
+  twice the budget. Correct with one machine; a shared counter would mean Redis.
+- Always on, because suspending failed. On 18 Oct the first request after a
+  suspend took 1.57 s, and the first after a full stop 26.2 s
+  (`reports/fly_coldstart_20261018.json`). On 21 Oct the machine suspended at
+  10:19 UTC; a request at 18:43 woke it, the app answered Fly's internal
+  `/health` check, and the proxy still "gave up after 15 attempts" to connect,
+  so public requests timed out at 30 s and the `/ready` check read "connect: no
+  route to host". A stop and start fixed it at once. `auto_stop_machines =
+  "off"` with `min_machines_running = 1` keeps it from recurring.
 - The local latencies in `docs/METRICS.md` (§8, "Local") are end-to-end
   `eval run` figures on a laptop. The deployed instance's are the `/search`
   sweep in §8, "Deployed": about 25 req/s on one machine. Never quote one as the other.

@@ -1192,7 +1192,9 @@ minutes after the last sweep request). The first request after a suspend took
 **1.57 s** (`GET /health`), and the next `/search` took 0.46 s. From *stopped*,
 which is what Fly did once after a secrets update restarted the machine, the
 first request took **26.2 s**: a full boot. One observation each, in
-`reports/fly_coldstart_20261018.json`.
+`reports/fly_coldstart_20261018.json`. Since 21 Oct the machine is always on,
+after a resume from suspend left it unreachable for 8 hours (`docs/DEPLOY.md`,
+Known limitations), so neither cold start applies to the live URL now.
 
 **Retrieval on the deployed database matches the local index.** `eval
 retrieval` against Neon (`reports/retrieval_neon_20261018.json`), compared
@@ -1211,7 +1213,7 @@ change in the index.
 |---|---|
 | `/search` | $0 in API calls. At the measured ~25 req/s, the machine's list price ($6.70 a month, $0.0093 an hour) works out to about $0.0001 per 1k searches at capacity. That is derived, not invoiced. |
 | `/ask` | **$0.000425** and 4,674 ms for the one live call (trace `6c14fb69…`, 3 steps), in line with the agent's $0.084 per 232-question run (§6), i.e. $0.00036 a question. One call, not a distribution. |
-| machine while idle | it suspends when idle; while stopped or suspended only its root filesystem bills, at $0.15 per GB-month. The image is 799 MB compressed. |
+| machine | always on since 21 Oct: $6.70 a month, idle or not. |
 | Neon | free plan: 81 MB of the 1 GB per-project limit |
 
 **Bullet shape — usable now**

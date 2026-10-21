@@ -8,11 +8,12 @@
 #    points at a managed Postgres that has pgvector already (Neon or Supabase,
 #    both free-tier). `docs/DEPLOY.md` has the loading steps.
 #
-# 2. `min_machines_running = 0`. The instance sleeps when idle and cold-starts on
-#    the first request. A cold start pays the model load -- which is why /ready
-#    embeds a probe string, warming it -- and in exchange the deployment costs
-#    nothing while nobody is looking at it. For a URL on a resume that is the
-#    right trade; for a service with users it would not be.
+# 2. Always on: one machine, never stopped or suspended. Suspending when idle
+#    cost almost nothing, but on 21 Oct a resume from suspend left the machine
+#    unreachable for over 8 hours: the app answered Fly's health check from
+#    inside while the proxy could not connect, so every public request timed out.
+#    A full stop instead costs a 26 s cold start. A link on a resume has to
+#    answer, so it is $6.70 a month (docs/DEPLOY.md, Cost).
 
 app = "edgar-intel"
 primary_region = "ewr"
@@ -36,9 +37,9 @@ primary_region = "ewr"
 [http_service]
   internal_port = 8000
   force_https = true
-  auto_stop_machines = "suspend"
+  auto_stop_machines = "off"
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
 
   [[http_service.checks]]
     # Liveness. Cheap, and must not depend on Postgres: restarting the process

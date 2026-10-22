@@ -76,3 +76,22 @@ jobs:
         with:
           name: eval-report
           path: reports/
+
+  # Ship only what passed. `needs` means a failing test or a regression the eval
+  # gate catches stops the deploy; the `if` keeps pull requests and other
+  # branches off the live machine. flyctl waits for both health checks to pass,
+  # so a build that boots but cannot serve fails this job too.
+  deploy:
+    needs: [test, eval-gate]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # One deploy at a time; a newer push queues behind a running one.
+    concurrency:
+      group: fly-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only --ha=false
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

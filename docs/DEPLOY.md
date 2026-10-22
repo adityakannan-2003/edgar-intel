@@ -194,6 +194,11 @@ provider's free-tier limit before the restore rather than halfway through it.
 
 ## 3. Deploy
 
+After the first deploy, every push to `main` deploys itself: the `deploy` job in
+`.github/workflows/ci.yml` runs only when `test` and `eval-gate` both pass. It
+needs one repository secret, `FLY_API_TOKEN`, from
+`fly tokens create deploy -a edgar-intel`. The first deploy is by hand:
+
 ```bash
 fly launch --no-deploy                  # accept the existing fly.toml; skip if the app exists
 fly secrets set --stage \

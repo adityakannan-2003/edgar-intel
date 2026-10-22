@@ -256,6 +256,11 @@ def get_fact(args: GetFactArgs) -> ToolResult:
     )
 
 
+def _cite(accessions: list[str | None]) -> list[str]:
+    """Citations in get_fact's form, one per filing, in order, skipping unknowns."""
+    return [f"xbrl:{a}" for a in dict.fromkeys(accessions) if a]
+
+
 def compare_fact(args: CompareFactArgs) -> ToolResult:
     # One tag for both years, never one per year: a change between two different
     # concepts is not a change, and the golden set only builds year-over-year
@@ -268,7 +273,7 @@ def compare_fact(args: CompareFactArgs) -> ToolResult:
     for tag in tags:
         rows = db.query(
             """
-            SELECT x.fiscal_year, x.value, x.unit, x.prior_year_value
+            SELECT x.fiscal_year, x.value, x.unit, x.prior_year_value, x.accession
               FROM xbrl_facts x JOIN companies co ON co.cik = x.cik
              WHERE co.ticker = %s AND x.tag = %s
                AND x.fiscal_year = ANY(%s) AND x.fiscal_period = 'FY'
@@ -299,8 +304,11 @@ def compare_fact(args: CompareFactArgs) -> ToolResult:
     # filings does not read as a change (D12).
     earlier, later = sorted((args.year_a, args.year_b))
     printed = {int(r["fiscal_year"]): r["prior_year_value"] for r in rows}
+    filed = {int(r["fiscal_year"]): r.get("accession") for r in rows}
+    sources = [filed[earlier], filed[later]]
     if later - earlier == 1 and printed.get(later) is not None:
         by_year[earlier] = float(printed[later])
+        sources = [filed[later]]  # both figures as the later filing prints them
     a, b = by_year[args.year_a], by_year[args.year_b]
     if a == 0:
         return ToolResult(ok=False, summary="Base year value is zero; percentage change undefined.")
@@ -314,6 +322,7 @@ def compare_fact(args: CompareFactArgs) -> ToolResult:
             f"FY{args.year_b} {format_value(b, unit)}, {direction} {abs(pct):.1f}%"
         ),
         data={"year_a": a, "year_b": b, "pct_change": round(pct, 4), "unit": unit, "tag": tag},
+        citations=_cite(sources),
     )
 
 
@@ -322,7 +331,7 @@ def compute_ratio(args: RatioArgs) -> ToolResult:
     denominators = resolve_tag(args.denominator_tag)
     rows = db.query(
         """
-        SELECT x.tag, x.value, x.unit
+        SELECT x.tag, x.value, x.unit, x.accession
           FROM xbrl_facts x JOIN companies co ON co.cik = x.cik
          WHERE co.ticker = %s AND x.tag = ANY(%s)
            AND x.fiscal_year = %s AND x.fiscal_period = 'FY'
@@ -330,6 +339,7 @@ def compute_ratio(args: RatioArgs) -> ToolResult:
         (args.ticker, [*numerators, *denominators], args.fiscal_year),
     )
     values = {r["tag"]: float(r["value"]) for r in rows}
+    filed = {r["tag"]: r.get("accession") for r in rows}
     # Each side takes the first of its tags that was reported, in `resolve_tag`
     # order -- not whichever row the database returned first.
     num = next((t for t in numerators if t in values), None)
@@ -359,6 +369,7 @@ def compute_ratio(args: RatioArgs) -> ToolResult:
             num: values[num],
             den: denom,
         },
+        citations=_cite([filed[num], filed[den]]),
     )
 
 

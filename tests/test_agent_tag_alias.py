@@ -118,6 +118,7 @@ class FakeFacts:
                     "value": r["value"],
                     "unit": r["unit"],
                     "prior_year_value": r.get("prior_year_value"),
+                    "accession": r.get("accession"),
                 }
                 for (t, g, y), r in self.rows.items()
                 if t == ticker and g == tag and y in years
@@ -126,7 +127,7 @@ class FakeFacts:
             ticker, tags, fiscal_year = params
             self.tags_queried.extend(tags)
             return [
-                {"tag": g, "value": r["value"], "unit": r["unit"]}
+                {"tag": g, "value": r["value"], "unit": r["unit"], "accession": r.get("accession")}
                 for (t, g, y), r in self.rows.items()
                 if t == ticker and g in tags and y == fiscal_year
             ]
@@ -322,6 +323,18 @@ class TestCompareFact:
         assert result.data["year_a"] == 26_000_000_000.0
         assert result.data["pct_change"] == 3.7462
 
+    def test_cites_the_filing_each_figure_came_from(self, facts):
+        facts(("CAT", CAT_FY2023), ("CAT", CAT_FY2024))
+        result = compare_fact("CAT", "revenue", 2023, 2024)
+        assert result.citations == ["xbrl:0000018230-24-000009", "xbrl:0000018230-25-000008"]
+
+    def test_on_the_later_filings_basis_it_cites_that_filing_alone(self, facts):
+        """Both figures are as FY2023's 10-K prints them (D12), so that is the source."""
+        restated = {**NVDA_REVENUES_FY2023, "prior_year_value": 26_000_000_000.0}
+        facts(("NVDA", NVDA_CONTRACT_FY2022), ("NVDA", NVDA_REVENUES_FY2022), ("NVDA", restated))
+        result = compare_fact("NVDA", "revenue", 2022, 2023)
+        assert result.citations == ["xbrl:0001045810-23-000017"]
+
     def test_two_different_tags_are_not_a_change(self, facts):
         """Constructed: no one tag covers both years. Mixing them would report
         the difference between two concepts as growth."""
@@ -369,6 +382,12 @@ class TestComputeRatio:
         assert result.data["ratio"] == 0.284565
         assert result.data[CONTRACT] == 94_193_000_000.0
         assert "Revenues" not in result.data
+
+    def test_cites_the_filing_and_skips_a_figure_with_no_accession(self, facts):
+        """CAT_OPERATING_INCOME_FY2025 carries no accession; the revenue does."""
+        facts(("CAT", CAT_OPERATING_INCOME_FY2025), ("CAT", CAT_FY2025))
+        result = compute_ratio("CAT", "OperatingIncomeLoss", "revenue", 2025)
+        assert result.citations == ["xbrl:0000018230-26-000008"]
 
     def test_a_missing_side_fails_and_names_what_it_tried(self, facts):
         facts(("JNJ", JNJ_NET_INCOME_FY2025))

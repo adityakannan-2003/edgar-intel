@@ -111,6 +111,15 @@ class TestAgainstABaselineFile:
         assert not result.passed
         assert "recall@5 regressed by 0.1000 (1.0000 -> 0.9000)" in result.render()
 
+    def test_a_ranking_regression_fails_though_recall_holds(self, latest, baseline_file, golden):
+        ranked = {**SUMMARY, "retrieval": {**SUMMARY["retrieval"], "mrr": 0.875}}
+        path = baseline_file(ranked)
+        latest(run({**ranked, "retrieval": {**ranked["retrieval"], "mrr": 0.6}}))
+        result = report.gate(baseline_file=path, golden_path=golden)
+        assert not result.passed
+        assert "mrr regressed by 0.2750 (0.8750 -> 0.6000)" in result.render()
+        assert result.deltas["recall@5"] == 0.0
+
     def test_a_drop_within_tolerance_passes(self, latest, baseline_file, golden):
         path = baseline_file()
         latest(run(with_recall(0.98)))
@@ -184,7 +193,7 @@ class TestSaveBaseline:
 
 
 class TestTheCommittedBaseline:
-    def test_it_gates_the_three_metrics_on_the_fixture_exam(self):
+    def test_it_holds_every_gated_metric_for_the_fixture_exam(self):
         saved = json.loads(pathlib.Path("tests/fixtures/ci_baseline.json").read_text())
         assert saved["golden"]["n_cases"] == saved["summary"]["n_cases"] == 24
         assert len(saved["golden"]["sha256"]) == 16

@@ -92,6 +92,9 @@ GATED_METRICS: tuple[tuple[str, str], ...] = (
     ("overall_score", "overall_score"),
     ("numeric_accuracy", "numeric_accuracy"),
     ("retrieval.recall@5", "recall@5"),
+    # recall@5 cannot see order: with the fixture's 4 candidates a change that
+    # only reverses the ranking keeps it at 1.0. MRR is what ranking costs.
+    ("retrieval.mrr", "mrr"),
 )
 
 

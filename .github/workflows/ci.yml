@@ -14,7 +14,8 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - run: pip install -e ".[dev]"
+      # serving and mcp too, so the API and MCP tests run here instead of skipping.
+      - run: pip install -e ".[dev,serving,mcp]"
       - run: ruff check src tests
       - run: pytest --cov=edgar_intel --cov-report=term-missing
 

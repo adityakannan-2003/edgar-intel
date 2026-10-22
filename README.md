@@ -21,10 +21,41 @@ That single property is what everything else here rests on.
 | **Evaluation harness** | Golden set generated from XBRL, LLM-as-judge for narrative, Cohen's κ calibration, regression gate in CI | Evals appear in ~68% of AI-company job postings. Almost no portfolio has one. |
 | **Hybrid retrieval** | Dense + lexical fused with RRF, cross-encoder reranking, four chunking strategies measured against each other | Turns "we use recursive chunking" from a guess into a measured decision |
 | **Bounded agent** | Six typed tools, step ceiling, retry budget, loop detection, confidence floor, citation + numeric grounding checks | "Mitigating cascade failures" is a literal JD requirement. This is what it means. |
-| **MCP server** | Same tool registry exposed over MCP | One set of definitions serves the agent, the HTTP API, and any MCP client |
+| **MCP server** | Same tool registry exposed over MCP, hosted at [`/mcp`](#use-it-from-claude-mcp) | One set of definitions serves the agent, the HTTP API, and any MCP client |
 | **Fine-tuning benchmark** | LoRA on structured extraction, benchmarked against few-shot prompting on the same company-disjoint held-out set | Measured: the frontier prompt wins on accuracy (0.98 against 0.91 F1), and the fine-tune wins only on cost at load. [Results below](#fine-tune-vs-prompting-measured) |
 | **Serving + benchmark** | FastAPI, liveness/readiness split, p50/p95/p99, throughput, $/1k requests, concurrency sweep | Cost and latency are named constraints in most senior AI JDs |
 | **Observability** | OpenTelemetry spans, per-operation token ledger | 78% of AI companies ask for it |
+
+---
+
+## Use it from Claude (MCP)
+
+The agent's tools are served over MCP at `https://edgar-intel.fly.dev/mcp`.
+Nothing to install, no key: every tool is a database read, and none calls a
+paid model.
+
+**Claude Code**, one command:
+
+```bash
+claude mcp add --transport http edgar-intel https://edgar-intel.fly.dev/mcp
+```
+
+**Claude Desktop:** Settings → Connectors → Add custom connector, and paste the
+URL above.
+
+| Tool | What it returns |
+|---|---|
+| `get_fact` | One reported XBRL figure for a company and fiscal year, with its filing accession |
+| `compare_fact` | One figure across two fiscal years, with the percentage change |
+| `compute_ratio` | One figure divided by another, same company and year |
+| `search_filings` | Passages from Risk Factors, MD&A and Business, by hybrid search |
+| `list_coverage` | Which companies and fiscal years the database holds |
+
+Try: *"Using edgar-intel, how did Apple's revenue change between fiscal 2024
+and 2025, and what does its 10-K say drove it?"*
+
+To run it against your own database instead, `edgar-intel mcp serve` speaks
+stdio (`pip install -e '.[mcp]'`).
 
 ---
 

@@ -24,6 +24,8 @@ models = [
 serving = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.30",
+    # The API serves the agent's tools over MCP at /mcp.
+    "mcp>=2.3,<3",
 ]
 finetune = [
     "transformers>=4.42",
@@ -38,7 +40,8 @@ obs = [
     "opentelemetry-exporter-otlp>=1.25",
 ]
 mcp = [
-    "mcp>=1.0",
+    # 2.x registers handlers in the Server constructor; the 1.x decorators are gone.
+    "mcp>=2.3,<3",
 ]
 dev = [
     "pytest>=8.2",

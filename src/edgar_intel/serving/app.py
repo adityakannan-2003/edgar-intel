@@ -18,15 +18,21 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from mcp.server.streamable_http_manager import StreamableHTTPASGIApp
 from pydantic import BaseModel, Field
 
 from .. import db
 from ..agent.loop import outcome_stats, run_agent
+from ..agent.mcp_server import http_session_manager
 from ..config import get_settings
 from ..db import close_pool
 from ..evals.report import latest_run
 from ..obs.tracing import init_tracing, span
 from ..retrieval.search import search
+
+# Its session manager is set per app start in `lifespan`: a manager's `.run()`
+# works once, and the test suite starts the app many times.
+_mcp_app = StreamableHTTPASGIApp(None)
 
 
 @asynccontextmanager
@@ -38,8 +44,14 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     teardown half runs even when startup raises.
     """
     init_tracing()
-    yield
-    close_pool()
+    _mcp_app.session_manager = http_session_manager()
+    try:
+        # A routed ASGI app's own lifespan never runs, so the MCP session
+        # manager's task group is started here.
+        async with _mcp_app.session_manager.run():
+            yield
+    finally:
+        close_pool()
 
 
 app = FastAPI(
@@ -48,6 +60,11 @@ app = FastAPI(
     description="Retrieval, evaluation and agent API over SEC filings.",
     lifespan=lifespan,
 )
+
+# The agent's tools over MCP. Open like /search: every tool is a database read
+# with local embeddings, and none calls the paid model. A route, not a mount, so
+# a POST to /mcp is not redirected to /mcp/.
+app.add_route("/mcp", _mcp_app, include_in_schema=False)
 
 
 @app.middleware("http")

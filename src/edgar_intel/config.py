@@ -79,7 +79,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------- retrieval
     default_strategy: str = "section_aware"
     retrieve_k: int = 50
-    rerank_top_n: int = 8
+    rerank_top_n: int = 1
     # Reciprocal-rank-fusion constant. 60 is the value from the original RRF
     # paper; it is deliberately not tuned, because tuning it on the same set
     # used for reporting would leak.

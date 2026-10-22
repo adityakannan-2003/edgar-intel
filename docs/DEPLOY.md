@@ -197,7 +197,16 @@ provider's free-tier limit before the restore rather than halfway through it.
 After the first deploy, every push to `main` deploys itself: the `deploy` job in
 `.github/workflows/ci.yml` runs only when `test` and `eval-gate` both pass. It
 needs one repository secret, `FLY_API_TOKEN`, from
-`fly tokens create deploy -a edgar-intel`. The first deploy is by hand:
+`fly tokens create deploy -a edgar-intel`.
+
+Verified on 22 Oct: commit `47d6a27` cut the passages sent to the model from 8 to
+1, a plausible "save tokens" change that every unit test passes, and was pushed
+to `main`. `test` passed, `eval-gate` failed at "Fail on regression greater than
+3 points", and `deploy` was skipped; the machine stayed on the release before it
+([run 39838701704](https://github.com/adityakannan-2003/edgar-intel/actions/runs/39838701704)).
+The next commit reverted it.
+
+The first deploy is by hand:
 
 ```bash
 fly launch --no-deploy                  # accept the existing fly.toml; skip if the app exists

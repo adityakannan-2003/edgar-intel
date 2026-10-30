@@ -28,6 +28,7 @@ ft_app = typer.Typer(help="Fine-tuning dataset, training and benchmark.")
 bench_app = typer.Typer(help="Serving benchmarks.")
 mcp_app = typer.Typer(help="MCP server.")
 fixture_app = typer.Typer(help="Frozen test corpus.")
+router_app = typer.Typer(help="Model routing for the agent: one model, a cascade, a difficulty router.")
 
 app.add_typer(ingest_app, name="ingest")
 app.add_typer(index_app, name="index")
@@ -37,6 +38,7 @@ app.add_typer(ft_app, name="finetune")
 app.add_typer(bench_app, name="bench")
 app.add_typer(mcp_app, name="mcp")
 app.add_typer(fixture_app, name="fixture")
+app.add_typer(router_app, name="router")
 
 
 def _table(title: str, rows: list[dict[str, Any]]) -> None:
@@ -1671,6 +1673,99 @@ def fixture_load(path: str = typer.Option("tests/fixtures/mini_corpus.json")) ->
     from .ingest.pipeline import load_fixture
 
     console.print_json(json.dumps(load_fixture(path).as_dict(), indent=2))
+
+
+# ------------------------------------------------------------------- router
+@router_app.command("run")
+def router_run(
+    arm: str = typer.Option(
+        ..., help="single:<model> | cascade:<cheap>,<strong> | difficulty:<cheap>,<strong>"
+    ),
+    label: str = typer.Option(
+        ..., help="Writes reports/router/<label>.jsonl. Run it again to resume."
+    ),
+    path: str = typer.Option("evalset/golden.json"),
+    sample: int = typer.Option(0, help="A seeded draw of about N cases, stratified; 0 = all."),
+) -> None:
+    """Run the golden set through one routing arm, graded as `eval agent` grades.
+
+    Marks: . passed, ~ abstained, E escalated, X exhausted or failed, F wrong,
+    ! error (retried on resume).
+    """
+    from .evals.goldenset import load
+    from .evals.router import run_router, sample_cases
+    from .evals.runner import RunAborted
+
+    cases = load(path)
+    if sample:
+        cases = sample_cases(cases, sample)
+
+    def progress(i: int, total: int, row: dict) -> None:
+        if row.get("error"):
+            mark = "!"
+        elif row["passed"]:
+            mark = "."
+        elif row["outcome"] == "escalated":
+            mark = "E"
+        elif row["outcome"] != "answered":
+            mark = "X"
+        else:
+            mark = "~" if row["abstained"] else "F"
+        console.print(mark, end="")
+        if i % 50 == 0 or i == total:
+            console.print(f" {i}/{total}")
+
+    try:
+        out = run_router(arm, cases, label, progress=progress)
+    except RunAborted as exc:
+        console.print()
+        console.print(f"[red]run aborted[/red] {exc}")
+        raise typer.Exit(2) from exc
+    console.print(f"wrote {out}")
+
+
+@router_app.command("score")
+def router_score(
+    paths: Annotated[list[str], typer.Argument(help="Results files from `router run`.")],
+    reference: str = typer.Option("", help="The arm the others are compared with."),
+    out: str = typer.Option("", help="Also write the scores here as JSON."),
+) -> None:
+    """Accuracy, cost per 1,000 questions and per 1,000 correct answers, latency."""
+    from .evals.router import score
+
+    result = score(paths, reference=reference or None)
+    _table("runs", [
+        {
+            "run": r["label"],
+            "numeric": f"{r['numeric']['correct']}/{r['numeric']['n']}",
+            "wrong": r["numeric"]["wrong"],
+            "not answered": r["numeric"]["not_answered"],
+            "errors": r["errors"],
+            "strong share": r["strong_share"],
+            "$/1k q": r["cost_usd"]["per_1k_questions"],
+            "$/1k correct": r["cost_usd"]["per_1k_correct_numeric"],
+            "p50 ms": r["latency_ms"]["p50"],
+            "p95 ms": r["latency_ms"]["p95"],
+        }
+        for a in result["arms"].values() for r in a["runs"]
+    ])
+    _table(f"arms, on the {result['numeric_cases_common']} numeric cases every run finished", [
+        {
+            "arm": spec,
+            "accuracy": a["numeric_common"]["accuracy_mean"],
+            "95% CI": a["numeric_common"]["ci95"],
+            "by run": a["numeric_common"]["correct_by_run"],
+            "flips": a["numeric_common"].get("flips_run1_to_run2"),
+            "vs ref (cases)": a.get("vs_reference", {}).get("diff_cases"),
+            "vs ref 95% CI": a.get("vs_reference", {}).get("ci95"),
+            "claimed": a.get("vs_reference", {}).get("claimed"),
+        }
+        for spec, a in result["arms"].items()
+    ])
+    if out:
+        with open(out, "w", encoding="utf-8") as fh:
+            json.dump(result, fh, indent=2)
+        console.print(f"wrote {out}")
 
 
 @app.command("config")

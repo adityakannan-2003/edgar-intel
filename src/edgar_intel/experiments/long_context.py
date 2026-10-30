@@ -39,6 +39,7 @@ from typing import Any
 from .. import db
 from ..config import get_settings
 from ..evals.evidence import index_shape, labels_for
+from ..evals.goldenset import _comparative_source_facts, _numeric_value_needles
 from ..evals.judge import grade_numeric, is_abstention
 from ..evals.runner import ANSWER_SYSTEM, ANSWER_TEMPLATE
 from ..evals.schemas import ANSWER_SCHEMA, EvalCase
@@ -159,6 +160,26 @@ def answer_from(text: str) -> str:
         return str(parse_json_strict(text).get("answer", "")).strip()
     except Exception:
         return text.strip()
+
+
+def figure_in_context(case: EvalCase, context: str) -> bool | None:
+    """Whether every figure the answer needs is printed in the context, in a
+    filing-style rendering (METRICS section 5's method). It splits a failure
+    into evidence never shown and evidence misread. None for narrative cases
+    and for values with no usable rendering."""
+    if case.kind != "numeric":
+        return None
+    if case.difficulty == "comparative":
+        values: list[tuple[float, str | None]] = [(v, None) for _, v in _comparative_source_facts(case.notes)]
+    else:
+        values = [(case.expected_value, case.unit)] if case.expected_value is not None else []
+    found = []
+    for value, unit in values:
+        needles = _numeric_value_needles(value, unit)
+        if not needles:
+            return None
+        found.append(any(n in context for n in needles))
+    return all(found) if found else None
 
 
 def grade(case: EvalCase, answer: str) -> dict[str, Any]:
@@ -352,6 +373,7 @@ def run_arm(
                 # The retrieved context is kept for reading failures; the
                 # long-context one is the filing, reloadable by accession.
                 context_text=context if arm == "rag" else None,
+                figure_in_context=figure_in_context(case, context),
                 retrieval=retrieval,
                 status=data.get("status"),
                 incomplete_reason=(data.get("incomplete_details") or {}).get("reason"),
@@ -441,6 +463,11 @@ def summarise(records: list[dict[str, Any]]) -> dict[str, Any]:
             if numeric else None
         ),
         "narrative_answered": sum(1 for r in ok if r["kind"] == "narrative"),
+        # Failures split by whether the needed figures were printed in what the model read.
+        "numeric_failures_by_evidence": {
+            label: sum(1 for r in numeric if not r["passed"] and r.get("figure_in_context") is value)
+            for label, value in (("figure_in_context", True), ("figure_absent", False), ("unknown", None))
+        },
         "latency_ms": {
             "p50": _pct([r["latency_ms"] for r in ok], 0.5),
             "p95": _pct([r["latency_ms"] for r in ok], 0.95),

@@ -102,6 +102,18 @@ def test_cost_prices_reads_writes_and_uncached_input_apart():
         lc.cost_usd("gpt-6-luna", {**usage, "input_tokens": 300_000})
 
 
+def test_figure_in_context_needs_every_source_figure_in_printed_form():
+    single = case("n1", value=9_980_000_000.0)
+    assert lc.figure_in_context(single, "Cash and cash equivalents | $ | 9,980 | $ | 6,889") is True
+    assert lc.figure_in_context(single, "Cash and cash equivalents | $ | 6,889") is False
+    yoy = EvalCase(case_id="yoy", kind="numeric", question="q", expected="decreased 3.4%",
+                   expected_value=-3.4, unit="percent", difficulty="comparative",
+                   notes="FY2023=67,060,000,000, FY2024=64,809,000,000")
+    assert lc.figure_in_context(yoy, "Total revenues 64,809 67,060") is True
+    assert lc.figure_in_context(yoy, "Total revenues 64,809") is False
+    assert lc.figure_in_context(case("nar", kind="narrative", value=None), "anything") is None
+
+
 def test_order_by_filing_groups_filings_and_keeps_set_order():
     cases = [case("a", "MSFT", 2025), case("b", "AAPL", 2024), case("c", "MSFT", 2025), case("d", "AAPL", 2024)]
     assert [c.case_id for c in lc.order_by_filing(cases)] == ["b", "d", "a", "c"]

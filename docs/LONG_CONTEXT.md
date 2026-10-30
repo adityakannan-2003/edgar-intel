@@ -159,3 +159,72 @@ its context.
 
 If sol is chosen instead (one pass per arm): long context $8–10, RAG $3–5;
 long context 0.90–0.97, RAG 0.85–0.91.
+
+## Pilot (30 Oct 2026)
+
+The predictions above were committed in `5971657` at 19:34:37 UTC; the first
+paid call went out at 19:34:53. Files: `reports/long_context/pilot-*.jsonl`
+(one record per case), `pilot-luna-report.json` and `pilot-sol-report.json`.
+The luna long-context pass ran at `5971657`, the other three at `5bb702d`,
+which only adds the figure-in-context field. **Spend: $1.01** ($0.097 luna,
+$0.913 sol), by tokens reported times list price.
+
+| | numeric | $ / 1k questions | p50 / p95 | cache: requests read · writes · input tokens read |
+|---|---|---|---|---|
+| luna, RAG (3 filings) | 32/35 | $0.52 | 2.4 s / 4.3 s | 0 · 0 · 0% |
+| luna, long context (3 filings) | **35/35** | $2.04 | 2.8 s / 5.9 s | 35 of 38 · 3 · 91.8% |
+| sol, RAG (2 filings) | 20/21 | $9.81 | 3.2 s / 7.4 s | 0 · 0 · 0% |
+| sol, long context (2 filings) | **21/21** | $28.23 | 2.8 s / 4.8 s | 22 of 24 · 2 · 90.9% |
+| gpt-4o-mini RAG, the reference run, same 35 cases | 31/35 | | | |
+
+What it showed:
+- **The cache works as designed.** Each filing was written once, on its first
+  question, and read by every later question on it: no misses after the
+  first. A cold write cost $0.006–0.017 on luna (50K–136K tokens) and a read
+  $0.0011 on average; on sol, $0.13–0.34 and $0.0096.
+- **Real filings are 4.1–4.4 characters a token**, not 4: AAPL FY2024 is
+  50,333 tokens, JNJ FY2024 127,691, CAT FY2025 135,827. gpt-4o-mini's 128K
+  window holds neither of the last two.
+- **Latency hardly depends on the cache.** luna's three cold writes took
+  2.4–3.9 s against a 2.8 s median for reads; reading 136K cached tokens took
+  about as long as reading 4.5K uncached ones through RAG.
+- **All four RAG failures are retrieval misses.** CAT cash (both models) and
+  JNJ gross profit (single and year over year, luna) never had the figure in
+  the retrieved context, and each answer said so. One of them, "does not
+  include ... so I can't determine how it changed", is not matched by the
+  abstention pattern and is counted as a wrong answer; the grader is shared
+  code and is left as it is.
+- **The two models agree on these cases.** On the 21 numeric cases both ran,
+  luna and sol scored the same in each arm.
+
+Pilot predictions:
+1. Cost: luna long context $0.077 (predicted $0.05–0.15) **right**; luna RAG
+   $0.0198 ($0.02–0.07) **wrong**, just under; sol long context $0.677
+   ($0.6–1.3) **right**; sol RAG $0.236 ($0.3–0.8) **wrong**, under: its
+   prompts were 4.5K tokens and its outputs 87, where I allowed for more.
+   Total $1.01 ($1.0–2.4) **right**.
+2. Cache: luna wrote 3 times and read on 35 of the 35 later requests
+   (predicted at least 33); sol wrote 2 and read 22 of 22 (at least 20); RAG
+   wrote nothing. **Right.**
+
+The full-run predictions stand as written. The pilot already suggests one is
+too high: long context's p50 was 2.8 s, below the 4–12 s predicted.
+
+## Proposed full run (awaiting Aditya's go)
+
+Projected from the pilot's measured tokens (the 24 filings' characters at
+the measured 4.1–4.4 characters a token; 2.12M tokens written and 18.4M read
+per long-context pass):
+
+| option | passes | projected spend |
+|---|---|---|
+| **A. luna, as planned** | 2 per arm | **$1.18** (long context $0.47 a pass, RAG $0.12) |
+| B. A, plus sol | A + 1 per arm on sol | $10.8 |
+| C. sol only | 2 per arm | $19.3 |
+
+Recommended: **A**. It measures the noise floor that GPT-6's fixed
+temperature makes necessary, for about a dollar. On the pilot the two models
+scored the same, RAG's misses were all retrieval misses no model can fix, and
+long context left no headroom on luna, so sol would cost $9.60 more mainly to
+confirm the same reading. Without the cache, a luna long-context pass would
+cost $2.07 rather than $0.47.

@@ -1673,6 +1673,80 @@ def fixture_load(path: str = typer.Option("tests/fixtures/mini_corpus.json")) ->
     console.print_json(json.dumps(load_fixture(path).as_dict(), indent=2))
 
 
+# ------------------------------------------------------------ long context
+lc_app = typer.Typer(help="RAG against whole-filing long context (docs/LONG_CONTEXT.md).")
+eval_app.add_typer(lc_app, name="long-context")
+
+
+@lc_app.command("run")
+def lc_run(
+    arm: str = typer.Option(..., help="rag | long_context"),
+    out: str = typer.Option(..., help="Results JSONL; an existing file is resumed."),
+    model: str = typer.Option("gpt-6-luna"),
+    effort: str = typer.Option("medium", help="Reasoning effort."),
+    path: str = typer.Option("evalset/golden.json"),
+    filings: str = typer.Option("", help="Only these filings, e.g. CAT:2025,AAPL:2024 (a pilot)."),
+) -> None:
+    """Answer the golden set in one arm. Spends money: write the predictions first.
+
+    Marks: . passed, ~ abstained, F wrong, n narrative (not judged), E error.
+    """
+    from .evals.goldenset import load
+    from .experiments.long_context import run_arm
+
+    chosen = [(t.split(":")[0], int(t.split(":")[1])) for t in filings.split(",") if t.strip()]
+
+    def progress(i: int, total: int, r: dict) -> None:
+        if r.get("error"):
+            mark = "E"
+        elif r["kind"] == "narrative":
+            mark = "n"
+        else:
+            mark = "." if r["passed"] else ("~" if r["abstained"] else "F")
+        console.print(mark, end="")
+        if i % 50 == 0 or i == total:
+            console.print(f" {i}/{total}")
+
+    records = run_arm(
+        load(path), arm, model, out, effort=effort, golden_path=path,
+        filings=chosen or None, progress=progress,
+    )
+    console.print(f"\n{len(records)} answered this session; wrote {out}")
+
+
+@lc_app.command("report")
+def lc_report(
+    paths: Annotated[list[str], typer.Argument(help="Results JSONL files; every pair is compared.")],
+    out: str = typer.Option(..., help="Report JSON."),
+) -> None:
+    """Accuracy with intervals, cost, latency and cache use per file, and paired differences."""
+    from .experiments.long_context import report
+
+    payload = report(paths, out)
+    rows = [
+        {
+            "run": r["path"].rsplit("/", 1)[-1],
+            "numeric": f"{r['numeric_passed']}/{r['numeric']}",
+            "accuracy": r["numeric_accuracy"],
+            "ci95": r["numeric_accuracy_ci95"],
+            "$/1k": r.get("cost", {}).get("per_1k_questions_usd"),
+            "p50 ms": r["latency_ms"]["p50"],
+            "p95 ms": r["latency_ms"]["p95"],
+            "cache hits": r.get("cache", {}).get("request_hit_rate"),
+            "errors": r["errors"],
+        }
+        for r in payload["runs"]
+    ]
+    _table("long context vs RAG", rows)
+    for p in payload["pairs"]:
+        if p["cases"]:
+            console.print(
+                f"{p['b'].rsplit('/', 1)[-1]} - {p['a'].rsplit('/', 1)[-1]}: {p['accuracy_diff']:+.4f} "
+                f"{p['ci95']}, +{len(p['passed_only_in_b'])}/-{len(p['passed_only_in_a'])}"
+            )
+    console.print(f"wrote {out}")
+
+
 @app.command("config")
 def show_config() -> None:
     s = get_settings()

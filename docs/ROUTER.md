@@ -153,6 +153,74 @@ run):**
     its p95 is higher.
 13. Total full-run spend is between $4 and $9.
 
+## Pilot results (30 Oct, 19:35–20:03 UTC)
+
+All numbers come from `reports/router/pilot-*.jsonl` and
+`reports/router/pilot-score.json`. The pilot ran at `441f436`, on the same
+index as the 6 Oct agent runs (5,468 `section_aware` chunks, ids
+57341–62808). 280 cases ran, with no errors and no rejected parameters.
+**Spend: $0.67**, judge included. That covers two one-case smoke tests and
+the latency re-run below.
+
+| arm | numeric | narrative (judge, not usable) | sent to sol | $ per 1k questions | $ per 1k correct numeric | p50 / p95 |
+|---|---|---|---|---|---|---|
+| gpt-4o-mini for everything | 35/36 | 2/4 | — | $0.36 | $0.37 | 3.1 / 23.8 s |
+| luna for everything | 36/36 | 3/4 | — | $0.38 | $0.24 | 5.1 / 34.1 s |
+| sol for everything | 36/36 | 2/4 | — | $5.90 | $3.95 | 4.9 / 28.7 s |
+| cascade, mini first | 36/36 | 3/4 | 5% | $0.65 | $0.41 | 3.2 / 22.2 s |
+| cascade, luna first | 36/36 | 3/4 | 5% | $1.95 | $0.23 | 5.0 / 44.7 s |
+| router, mini rates | 36/36 | 3/4 | 30% | $3.57 | $1.23 | 4.4 / 33.9 s |
+| router, luna rates | 36/36 | 3/4 | 30% | $3.26 | $1.19 | 5.9 / 28.5 s |
+
+**What it showed:**
+- **Numeric accuracy is at the ceiling for every arm.** gpt-4o-mini's one
+  miss is the AAPL revenue comparison it escalated, the same
+  `Revenues`-tag miss as on 6 Oct. The mini cascade sent it to sol, which
+  answered. On 36 numeric questions nothing separates the arms. The full run
+  needs every case, and the gaps may still sit inside the noise
+  (prediction 9).
+- **Both raters matched the set's own labels on 40 of 40** and sent 30% of
+  questions to sol.
+- **sol on narrative questions drives the cost.** It runs 4–8 text searches
+  per narrative question, at $0.01–0.04 each. The luna cascade's two
+  escalations were both narrative and cost $0.068 of its $0.078. The
+  difficulty routers cost 9–10× gpt-4o-mini per question, with nothing to
+  show for it on these 40.
+- **luna reasoned less than in the fine-tune run:** 60 hidden tokens per call,
+  not 240. On numeric questions it was cheaper than gpt-4o-mini; overall it
+  cost slightly more, because of the narrative questions.
+- **The latency is model time.** Tool time has a median of 20–50 ms; each
+  process pays one ~12 s embedder load on its first search. Every arm's p95
+  is its narrative tail. One gpt-4o-mini call hung for 64 s, a 60 s timeout
+  and then a retry.
+- **The API was slower today than on 6 Oct.** On the same 40 questions,
+  gpt-4o-mini's p50 is 3.1 s against 2.3 s. Re-run alone, it was 3.3 s
+  (`pilot-mini-alone`), so our 4 processes are not the cause. Latency is
+  therefore compared only within one round of the full run, in which all
+  arms run side by side.
+- **Found in passing, not fixed here:** OpenAI rejects the agent's action
+  schema in strict mode. The 400 takes about 270 ms ("'additionalProperties'
+  is required to be supplied and to be false"), then the provider falls back
+  to `json_object`. So every agent step `/ask` takes makes one failed
+  request first. That is the same for every arm, and it is shared code.
+
+**Pilot predictions scored:**
+1. Right: no errors in 280 cases, and no 400s from the GPT-6 overrides.
+2. Right: $0.67, inside $0.30–1.50.
+3. Right, narrowly on its first half. luna cost $0.38 per 1,000 questions
+   against gpt-4o-mini's $0.36, but only because of the narrative
+   questions. On numeric questions it was cheaper ($0.24 against $0.37 per
+   1,000 correct). sol cost 16× gpt-4o-mini, inside 8–25×.
+4. Right: the p50s were gpt-4o-mini 3.1 s, sol 4.9 s and luna 5.1 s.
+
+**Pilot rules:** no arm is dropped (no errors, no `failed` runs).
+
+**Projected full run:** every arm twice on all 232 cases. That is $7.46 in
+model cost at the pilot's per-question rates, plus about $0.10 for the judge.
+The cascades' and routers' costs hang on a few expensive narrative cases, so
+the range is $6–10, under the $15 stop rule. Each round runs all 7 arms side
+by side, about an hour per round.
+
 ## Results
 
-Not yet run.
+Full run not yet started: it waits for Aditya's go.

@@ -175,7 +175,9 @@ def figure_in_context(case: EvalCase, context: str) -> bool | None:
         values = [(case.expected_value, case.unit)] if case.expected_value is not None else []
     found = []
     for value, unit in values:
-        needles = _numeric_value_needles(value, unit)
+        # Three-digit forms ("199" for $199.21B) match exhibit years and
+        # dividend tables, so only 4+ digit or decimal renderings count.
+        needles = [n for n in _numeric_value_needles(value, unit) if "." in n or sum(ch.isdigit() for ch in n) >= 4]
         if not needles:
             return None
         found.append(any(n in context for n in needles))
@@ -524,14 +526,36 @@ def paired(a: list[dict[str, Any]], b: list[dict[str, Any]], n_boot: int = 4000,
     }
 
 
-def report(paths: list[str], out_path: str) -> dict[str, Any]:
+def recheck_figures(records: list[dict[str, Any]], golden_path: str) -> None:
+    """Recompute `figure_in_context` with the current rule, in place: from the
+    stored context for RAG, from the filing (database) for long context."""
+    from ..evals.goldenset import load
+
+    cases = {c.case_id: c for c in load(golden_path)}
+    filings: dict[tuple[str, int], str] = {}
+    for r in records:
+        if r.get("error") or r["kind"] != "numeric":
+            continue
+        context = r.get("context_text")
+        if context is None:
+            key = (r["ticker"], r["fiscal_year"])
+            if key not in filings:
+                filings[key] = filing_context(*key)[1]
+            context = filings[key]
+        r["figure_in_context"] = figure_in_context(cases[r["case_id"]], context)
+
+
+def report(paths: list[str], out_path: str, recheck: bool = False) -> dict[str, Any]:
     """Summaries of every results file, and every pair compared."""
     runs = {p: load_records(p) for p in paths}
     metas = {}
     for p in paths:
         with open(p + ".meta.json", encoding="utf-8") as fh:
             metas[p] = json.load(fh)
+        if recheck:
+            recheck_figures(runs[p], metas[p]["config"]["golden_path"])
     payload = {
+        "figures_rechecked_at": source_sha() if recheck else None,
         "runs": [
             {"path": p, "config": metas[p]["config"], "git_sha": metas[p]["git_sha"], **summarise(runs[p])}
             for p in paths

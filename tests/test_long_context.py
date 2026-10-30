@@ -106,6 +106,10 @@ def test_figure_in_context_needs_every_source_figure_in_printed_form():
     single = case("n1", value=9_980_000_000.0)
     assert lc.figure_in_context(single, "Cash and cash equivalents | $ | 9,980 | $ | 6,889") is True
     assert lc.figure_in_context(single, "Cash and cash equivalents | $ | 6,889") is False
+    # $199.21B renders as "199" too; that form matches an exhibit year, so it does not count.
+    assets = case("a", value=199_210_000_000.0)
+    assert lc.figure_in_context(assets, "Annual Report for the fiscal year ended January 3, 1993") is False
+    assert lc.figure_in_context(assets, "Total assets | 199,210 | 180,104") is True
     yoy = EvalCase(case_id="yoy", kind="numeric", question="q", expected="decreased 3.4%",
                    expected_value=-3.4, unit="percent", difficulty="comparative",
                    notes="FY2023=67,060,000,000, FY2024=64,809,000,000")

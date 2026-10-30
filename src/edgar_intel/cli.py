@@ -1718,11 +1718,14 @@ def lc_run(
 def lc_report(
     paths: Annotated[list[str], typer.Argument(help="Results JSONL files; every pair is compared.")],
     out: str = typer.Option(..., help="Report JSON."),
+    recheck_figures: bool = typer.Option(
+        False, "--recheck-figures", help="Recompute figure_in_context with the current rule (reads filings from the DB)."
+    ),
 ) -> None:
     """Accuracy with intervals, cost, latency and cache use per file, and paired differences."""
     from .experiments.long_context import report
 
-    payload = report(paths, out)
+    payload = report(paths, out, recheck=recheck_figures)
     rows = [
         {
             "run": r["path"].rsplit("/", 1)[-1],

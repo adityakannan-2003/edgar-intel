@@ -186,8 +186,9 @@ What it showed:
   50,333 tokens, JNJ FY2024 127,691, CAT FY2025 135,827. gpt-4o-mini's 128K
   window holds neither of the last two.
 - **Latency hardly depends on the cache.** luna's three cold writes took
-  2.4–3.9 s against a 2.8 s median for reads; reading 136K cached tokens took
-  about as long as reading 4.5K uncached ones through RAG.
+  2.4–3.9 s against a 2.8 s median for reads. A long-context call on 50K–136K
+  tokens took 2.8 s at the median, against 2.1 s for RAG's model call on 4.5K
+  (2.4 s with retrieval).
 - **All four RAG failures are retrieval misses.** CAT cash (both models) and
   JNJ gross profit (single and year over year, luna) never had the figure in
   the retrieved context, and each answer said so. One of them, "does not

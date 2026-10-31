@@ -404,3 +404,8 @@ correct numeric answers.**
   separated from the tool change in `0c7e893` or from noise.
 - The router's rubric, the arms and the claim rule were all fixed before
   the first paid call. Nothing was tuned on these results.
+- The grader fix `527e0f0` (on the RAG-vs-long-context branch; a date's day
+  is no longer read as the figure, and "does not state" counts as a refusal)
+  postdates these runs. Re-grading all 2,903 answered numeric rows with it
+  moved no verdict and no abstention flag. No model calls were made for
+  this.

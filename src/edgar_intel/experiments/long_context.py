@@ -498,9 +498,11 @@ def summarise(records: list[dict[str, Any]]) -> dict[str, Any]:
             "token_hit_rate": round(totals["cached_tokens"] / max(1, totals["input_tokens"]), 4),
             "requests_with_cache_write": sum(1 for r in ok if r["usage"]["cache_write_tokens"] > 0),
             "first_of_filing": sum(1 for r in ok if r["first_of_filing"]),
-            # Every question after the first on its filing should read the cache.
+            # Every question after the first on its filing should read the cache
+            # (RAG never caches, so it has none to miss).
             "misses_after_first": sorted(
-                r["case_id"] for r in ok if not r["first_of_filing"] and r["usage"]["cached_tokens"] == 0
+                r["case_id"] for r in ok
+                if r["arm"] == "long_context" and not r["first_of_filing"] and r["usage"]["cached_tokens"] == 0
             ),
         }
     return out

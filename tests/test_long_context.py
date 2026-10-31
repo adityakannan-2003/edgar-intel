@@ -205,7 +205,7 @@ def test_rag_context_is_the_context_eval_run_builds(monkeypatch):
 
 def test_summary_intervals_and_paired_difference():
     def rec(cid, passed, abstained=False):
-        return {"case_id": cid, "kind": "numeric", "difficulty": "single_hop", "passed": passed,
+        return {"case_id": cid, "arm": "rag", "kind": "numeric", "difficulty": "single_hop", "passed": passed,
                 "abstained": abstained, "status": "completed", "first_of_filing": False,
                 "latency_ms": 100, "model_ms": 90, "cost_usd": 0.001,
                 "usage": {"input_tokens": 10, "cached_tokens": 0, "cache_write_tokens": 0,

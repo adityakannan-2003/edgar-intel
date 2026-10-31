@@ -7,7 +7,8 @@ interval [+0.067, +0.159], where the same arm moved by at most one case
 between passes. 24 of RAG's 25 failures never had the figure in the
 retrieved passages. None of long context's four failures was a reading
 error: three are a grader defect (it reads the day out of "December 31") and
-one is a subtraction slip. Long context cost **$1.95 per 1,000 questions
+one is a subtraction slip. With the grader fixed and the stored answers
+re-graded, long context is 207 and 208 of 208 (**Re-graded**). Long context cost **$1.95 per 1,000 questions
 against $0.53** (3.7×), with the cache doing most of the work: without it,
 $8.59. Same-hour latency, p50 2.6 s against 1.9 s. The reading, and when each
 approach is the better choice, is at the end (**When each is the better
@@ -343,13 +344,50 @@ for RAG, the stored context.
 With the date defect corrected by hand, long context is 207/208 and
 208/208. The three CAT cases pass in the other pass, when the answer is
 phrased without the date. The grader is shared code and is left as it is
-here (follow-up). `figure_in_context` marks those three as absent, because
+here; it was fixed afterwards (**Re-graded**, below). `figure_in_context` marks those three as absent, because
 XBRL's 499.4M is printed as "499.4" (millions) and on the cover as
 499,377,269, neither of which the needle rule renders; reading the filing
 settles it.
 
 **Narrative (24 per pass):** answered in every pass and kept, not graded
 (see **What is fixed**). Where either arm fails on them is not measured.
+
+### Re-graded (31 Oct 2026, grader `527e0f0`)
+
+Both shared-grader defects found here are fixed in `527e0f0`. The parser
+had read "31," in "December 31, 2024," as a comma-separated figure, which
+tied with 477,932,024 and won by coming first; now a comma or point counts
+only with a digit after it. "does not state" and "do not state" are now
+refusals. `eval long-context regrade` re-marked the four pass files from
+their stored answers, with no model calls
+(`reports/long_context/regrade-527e0f0.json`). The tables above are as
+graded on the run day, and the predictions are scored against them.
+
+| re-graded | RAG pass 1 | RAG pass 2 | long context pass 1 | long context pass 2 |
+|---|---|---|---|---|
+| numeric accuracy | 0.880 (183/208) | 0.885 (184/208) | **0.995** (207/208) | **1.000** (208/208) |
+| abstained · wrong | 0.115 · 0.005 | 0.111 · 0.005 | 0 · 0.005 | 0 · 0 |
+| verdicts moved | 11 wrong → abstained | 13 wrong → abstained | 1 wrong → passed | 2 wrong → passed |
+
+- The long-context moves are the three CAT share counts (2023 in pass 1,
+  2024 and 2025 in pass 2). The one failure left is the COST subtraction slip.
+- Every RAG move is a "does not state" refusal, so RAG accuracy cannot move.
+  In pass 2 the grader now agrees with reading: 23 refusals and 1 wrong (UNH
+  net income). In pass 1 it counts 24 abstentions against 23 refusals by
+  reading. The extra one is UNH's year-over-year shares answer, from
+  weighted-average shares, which matched "cannot be determined" before this
+  change.
+- Long context − RAG, paired: +0.115 [+0.072, +0.164] in both passes (as
+  graded: +0.111 and +0.106). Same arm, pass 2 − pass 1: +0.005, one flip,
+  for each arm.
+- The fix was checked against all 6,128 stored numeric answers
+  (`eval_results` plus these files). The parser change alters 12 distinct
+  answers, each a day or a year followed by a comma. It flips 14 verdicts,
+  all fail → pass: these 3, and 11 MSFT, COST and NVDA share counts in older
+  `eval run` baselines. The wider pattern matches 25 more answers, all
+  failures and none a pass. The reference `exp-prompt-conventions-c0f6e105`
+  does not move (0.8606, 0.0865 / 0.0529, no verdict or bucket changed;
+  `reports/regrade-exp-prompt-conventions-c0f6e105-527e0f0.json`).
 
 ### Cost depends on how many questions share a filing
 

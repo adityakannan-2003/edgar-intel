@@ -1375,9 +1375,17 @@ is 128K.
   but not graded (judge κ 0.42, §3).
 - One model. In a 24-question pilot, gpt-6.1-sol scored the same as luna in
   both arms, at $28 against $9.81 per 1,000.
-- The CAT grader defect and the missing abstention wording are in shared
-  code and unchanged; the accuracies above are the grader's, with the
-  hand-read figures stated beside them.
+- **Re-graded 31 Oct, both grader defects fixed** (`527e0f0`; stored
+  answers, no model calls; `reports/long_context/regrade-527e0f0.json`).
+  The table above is as graded on the run day. Long context: 0.995 and
+  1.000 (207 and 208 of 208); the three CAT share counts pass, and the COST
+  slip is the one failure left. RAG accuracy is unchanged at 0.880 and
+  0.885. 11 and 13 "does not state" refusals move from wrong to abstained,
+  so abstained · wrong is now 0.115 · 0.005 and 0.111 · 0.005. Long
+  context − RAG: +0.115 [+0.072, +0.164] in both passes. Across all 6,128
+  stored numeric answers the fix flips 14 verdicts, every one fail → pass.
+  The reference `exp-prompt-conventions-c0f6e105` does not move: 0.8606,
+  0.0865 / 0.0529 (`reports/regrade-exp-prompt-conventions-c0f6e105-527e0f0.json`).
 
 **Expect to be asked:** *Why not always use long context, then?* Cost and
 scope. It costs 3.7× per question at this reuse, and 16× when each filing
@@ -1393,6 +1401,7 @@ edgar-intel eval long-context run --arm long_context --out reports/long_context/
 edgar-intel eval long-context run --arm rag --out reports/long_context/luna-rag-p1.jsonl           # spends money
 edgar-intel eval long-context report reports/long_context/luna-{rag,lc}-p{1,2}.jsonl \
   --recheck-figures --out reports/long_context/report.json
+edgar-intel eval long-context regrade reports/long_context/luna-{rag,lc}-p{1,2}.jsonl   # free; writes regrade-<sha>.json
 ```
 
 ---

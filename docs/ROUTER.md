@@ -1,4 +1,4 @@
-# Model router: plan and predictions
+# Model router: plan, predictions and results
 
 Written 30 Oct 2026, 19:40 UTC, before the pilot's first call. The
 predictions below are scored against the results files afterwards, right or
@@ -221,6 +221,186 @@ The cascades' and routers' costs hang on a few expensive narrative cases, so
 the range is $6–10, under the $15 stop rule. Each round runs all 7 arms side
 by side, about an hour per round.
 
-## Results
+## Results (31 Oct 2026, 14:56–15:48 UTC)
 
-Full run not yet started: it waits for Aditya's go.
+Aditya approved the full run on 31 Oct. All numbers come from
+`reports/router/full-*.jsonl` and `reports/router/full-score.json`
+(`edgar-intel router score reports/router/full-*.jsonl --reference
+single:gpt-4o-mini`). Code: `030c1eb`; index as in the pilot.
+
+- **Rounds:** two, each running all 7 arms side by side, 25–27 minutes per
+  round. The prompt date was 2026-10-31 throughout.
+- **Errors:** 3,248 cases, 1 error. A GPT-6 call on `nar-UNH-legal` (luna
+  cascade, run 1) hit the 2,048-token output cap. It was resumed and
+  answered.
+- **Spend:** $7.61, judge and the retry included. With the pilot, the
+  experiment cost $8.28.
+
+**Numeric accuracy is on the 208 numeric cases, which every run finished.**
+
+| arm | numeric correct, run 1 / 2 | accuracy (95% CI) | vs gpt-4o-mini, cases (95% CI) | wrong · not answered | sent to sol | $ per 1k questions | $ per 1k correct | p50 | p95 |
+|---|---|---|---|---|---|---|---|---|---|
+| gpt-4o-mini for everything | 198 / 198 | 0.952 (0.921–0.978) | reference | 7 / 6 · 3 / 4 | — | $0.32 / $0.32 | $0.32 | 2.3 / 2.2 s | 4.3 / 3.8 s |
+| **luna for everything** | 204 / 204 | 0.981 (0.962–0.995) | +6.0 (+2.0, +10.5) **claimed** | 4 / 4 · 0 / 0 | — | $0.37 / $0.39 | **$0.24** | 4.1 / 3.5 s | 22.0 / 20.3 s |
+| sol for everything | 204 / 204 | 0.981 (0.962–0.995) | +6.0 (+2.0, +10.5) **claimed** | 4 / 4 · 0 / 0 | — | $6.20 / $6.17 | $4.05 | 4.3 / 4.2 s | 21.7 / 23.7 s |
+| cascade, mini first | 202 / 203 | 0.974 (0.950–0.993) | +4.5 (+1.5, +8.0) **claimed** | 6 / 5 · 0 / 0 | 2.6% / 3.9% | $0.71 / $1.06 | $0.39 | 2.3 / 2.2 s | 4.2 / 5.0 s |
+| cascade, luna first | 204 / 204 | 0.981 (0.962–0.995) | +6.0 (+2.0, +10.5) **claimed** | 4 / 4 · 0 / 0 | 1.3% / 1.3% | $0.75 / $0.95 | $0.25 | 4.1 / 3.5 s | 21.9 / 16.4 s |
+| router, mini rates | 202 / 200 | 0.966 (0.940–0.988) | +3.0 (+0.0, +6.5), not claimed | 6 / 7 · 0 / 1 | 31.5% / 31.5% | $3.80 / $3.65 | $1.32 | 2.9 / 2.8 s | 21.3 / 20.8 s |
+| router, luna rates | 204 / 204 | 0.981 (0.962–0.995) | +6.0 (+2.0, +11.0) **claimed** | 3 / 4 · 1 / 0 | 31.0% / 31.0% | $3.92 / $3.72 | $1.25 | 5.1 / 4.4 s | 21.7 / 21.9 s |
+
+Column notes:
+- "$ per 1k correct" is model cost on the numeric questions divided by the
+  numeric questions answered right, pooled over both runs.
+- The intervals are a bootstrap over cases. The "vs" column is a paired
+  bootstrap against gpt-4o-mini for everything.
+- Judge cost (gpt-4o-mini, on narrative only) is $0.003–0.012 per run and
+  is not in the cost columns.
+- Narrative passes, by the uncalibrated judge and not usable: gpt-4o-mini
+  15/17, luna 23/22, sol 19/18, mini cascade 20/20, luna cascade 22/22,
+  mini router 19/20, luna router 21/21 (out of 24).
+
+**Noise was small.** The largest gap between an arm's two runs is 2 cases
+(the mini-rated router). No arm flipped more than 2 cases each way, and
+luna, sol and the luna cascade flipped none, although the GPT-6 models run
+at temperature 1. In the agent's 6 Oct version, before the citation, tag and
+date fixes, identical runs moved 14 each way; with those fixed, nothing
+large is left to churn. So under the rule, any gap above 2 cases with an
+interval clear of zero is claimed.
+
+**What separates the arms is six questions, and three mechanisms.**
+- **Every GPT-6 run misses the same four numeric questions:** the JNJ
+  R&D quirk from METRICS §6. JNJ files $483M, $1.84B and $109M under the
+  generic R&D tag, while the answer key uses the "Excluding acquired
+  in-process" totals; the fourth miss is the year-on-year change computed
+  from them. gpt-4o-mini misses them too. Given this answer key, 204 is the
+  ceiling.
+- **gpt-4o-mini misses six more in each run**, and luna and sol miss none of
+  them:
+  - **Tool choice.** For CAT's and UNH's FY2025 revenue, gpt-4o-mini read
+    a figure out of filing text (CAT: $72.9B against $67.6B). luna called
+    `get_fact`, which returned the reported figure.
+  - **No recovery after a tag miss.** On the AAPL and MSFT revenue
+    comparisons, `compare_fact` on `Revenues` comes back missing, since
+    both file the contract-revenue tag. luna retried with that tag;
+    gpt-4o-mini escalated.
+  - **The citation format.** On 1–2 net-income lookups per run,
+    gpt-4o-mini cited the accession number without the `xbrl:` prefix. The
+    citation check rejected it, loop detection refused the third
+    identical `get_fact`, and the run escalated holding the right figure.
+    These passed on 6 Oct; this is the residual citation problem §6
+    mentions.
+- **The cascade recovers only what the cheap model gives up on.** The mini
+  cascade sent 6 and 9 questions to sol, which answered the AAPL comparison
+  and the net-income escalations. CAT and UNH revenue were answered wrongly
+  with confidence, so they never reached sol. Hence +4.5 rather than +6.
+  luna has nothing numeric left to escalate. Its cascade sent only
+  narrative questions and one R&D comparison, for no change in accuracy.
+- **The difficulty router helps where the cheap model was not failing.**
+  Both raters matched the set's labels on 99.6–100% of questions and sent
+  the 72–73 comparisons and narrative questions to sol. gpt-4o-mini
+  already got 45 of 48 comparisons. The router fixed 2 of the 3 and left
+  the lookup misses, which it rates easy, on gpt-4o-mini. That is +3.0,
+  with an interval touching zero.
+
+**Cost per correct answer: luna for everything wins.**
+- **luna for everything costs $0.24 per 1,000 correct numeric answers.** The
+  luna cascade is $0.25, gpt-4o-mini for everything $0.32, the mini cascade
+  $0.39, the routers $1.25–1.32 and sol for everything $4.05.
+- **Per question, luna's numeric answers are cheaper than gpt-4o-mini's;
+  over all questions it costs more.** It pays a third less per input token
+  and reasons only about 130 hidden tokens per question. It costs more per
+  1,000 questions ($0.38 against $0.32) because it searches more on
+  narrative questions.
+- **Every arm that adds sol costs more and gains nothing over luna alone.**
+  sol on a narrative question costs $0.03–0.07, which is why one or two
+  escalations per run make the luna cascade 2–2.5× luna's bill.
+
+**Latency is what luna costs.**
+- Its p50 is 3.5–4.1 s against gpt-4o-mini's 2.2–2.3 s, because each of its
+  2.3 calls per question takes longer.
+- Every GPT-6 arm's p95 is 16–24 s: a narrative question takes 4–8 text
+  searches, each a reasoning call. gpt-4o-mini's p95 is 3.8–4.3 s.
+- The mini cascade keeps gpt-4o-mini's latency: p50 2.2–2.3 s, p95 4.2–5.0
+  s.
+
+## Predictions scored
+
+Pilot predictions 1–4 were all right (above). Full run, 9 predictions: 4 right (5, 7, 8, 13), 3 partly right (6, 10, 12), 2 wrong (9, 11).
+
+5. **Right.** gpt-4o-mini 198 and 198, inside 195–203; luna 204 and 204, at
+   the top of 188–204; sol 204 and 204, inside 197–206.
+6. **Half right.** Gains held: the mini cascade +4.5 and the luna cascade
+   +0.0, inside 0–5. The mini cascade's 2.6% and 3.9% sent to sol held; the
+   luna cascade's 1.3% is below 2–12%.
+7. **Right.** 31.0–31.5% were sent to sol; ratings agreed with the labels on
+   100% and 99.6% of questions; and both routers stayed within ±4 cases of
+   their cheap arm (+3.0 and +0.0). The reason given held for the mini
+   router: its misses are lookups rated easy, and its gain is on comparisons
+   (45 → 47 of 48).
+8. **Right.** The largest gap between runs was 2 cases, and no arm flipped
+   more than 2 each way.
+9. **Wrong.** Five of six arms are claimed more accurate than gpt-4o-mini
+   for everything: luna, sol, the luna cascade and the luna-rated router by
+   +6.0, the mini cascade by +4.5. Only the mini-rated router's +3.0 is not
+   claimed. The prediction treated 6 Oct's 200 as the ceiling for any
+   model, and the GPT-6 models recover from tag misses where gpt-4o-mini
+   gives up.
+10. **6 of 7 right.** The mini-rated router's $3.72 is above its
+    $1.10–3.50. The rest were inside: gpt-4o-mini $0.32, luna $0.38, sol
+    $6.18, the mini cascade $0.88 (by $0.02), the luna cascade $0.85, the
+    luna-rated router $3.82.
+11. **Wrong on its main claim.** luna for everything is the lowest per correct
+    answer ($0.24), not gpt-4o-mini ($0.32). The other two parts held: the
+    mini cascade is 1.24× gpt-4o-mini and sol is 12.8×.
+12. **Half right.** The p50s were inside their ranges (gpt-4o-mini 2.2–2.3
+    s, luna 3.5–4.1 s, sol 4.2–4.3 s), and each cascade's p50 was within
+    0.1 s of its cheap arm's. "p95 higher" did not hold: the luna cascade's
+    p95 was lower than luna's in both runs, and the mini cascade's lower in
+    one. The GPT-6 narrative tail moves p95 by more than the cascade does.
+13. **Right.** $7.61, inside $4–9.
+
+## Reading
+
+**luna for everything wins on cost per correct answer: $0.24 per 1,000
+correct numeric answers.**
+- **Against the deployed gpt-4o-mini ($0.32):** luna answers 6 more of the
+  208 numeric questions in each run (204 against 198, +2.0 to +10.5 at 95%,
+  run-to-run gap 2).
+- **Against sol (204, $4.05):** luna ties it at one-seventeenth of the
+  price.
+- **Why it is cheaper:** its input price is a third below gpt-4o-mini's, and
+  its reasoning (about 130 hidden tokens per question) is too short to cost
+  that back on lookups.
+- **Why it is more accurate:** the extra cases are the agent's own failure
+  modes. luna calls `get_fact` instead of reading revenue from text,
+  retries with the right tag when one comes back missing, and cites the id
+  as printed. On this set, the GPT-6 models already do what a strong model
+  in a cascade would.
+- **What routing adds on top:** nothing. A cascade only helps when the cheap
+  model gives up. gpt-4o-mini's remaining errors are confident ones, and
+  luna's only escalations are narrative questions, where sol costs
+  $0.03–0.07 each. The difficulty router pays sol's price on the 31% of
+  questions the cheap models already answer.
+- **What luna costs instead is latency:** p50 1.3–1.8 s slower, and p95
+  around 20 s on narrative questions, against about 4 s. If that latency is
+  unacceptable, the mini cascade (202–203, $0.39 per 1,000 correct, mini's
+  latency) is the one routed arm worth having.
+
+**Caveats, in order of weight:**
+- The numeric questions are lookups in the table the answer key was
+  generated from (METRICS §6). This measures how reliably each model drives
+  the tools, not how well it reads filings.
+- The 4 JNJ cases cap every arm at 204.
+- The narrative judge is uncalibrated, so narrative quality is not measured,
+  but narrative questions drive the GPT-6 arms' cost and tail latency.
+- Latency was measured with all 7 arms running side by side, while two
+  other sessions used the same API key. gpt-4o-mini's p50 of 2.2–2.3 s
+  matches 6 Oct's 2.3 s, so the API was not slow during the run, unlike the
+  pilot's day.
+- Every arm's latency includes the ~270 ms strict-schema rejection on each
+  agent step (pilot, above). A separate session is fixing it.
+- gpt-4o-mini scored 198 against 200 on 6 Oct (`b79a49f`). The new misses
+  are net-income escalations through the citation check. This is not
+  separated from the tool change in `0c7e893` or from noise.
+- The router's rubric, the arms and the claim rule were all fixed before
+  the first paid call. Nothing was tuned on these results.

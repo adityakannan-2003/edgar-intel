@@ -570,3 +570,74 @@ def report(paths: list[str], out_path: str, recheck: bool = False) -> dict[str, 
     with open(out_path, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=2)
     return payload
+
+
+# ------------------------------------------------------------------ regrade
+def _bucket(r: dict[str, Any]) -> str:
+    return "passed" if r["passed"] else ("abstained" if r["abstained"] else "wrong")
+
+
+def regrade_records(
+    records: list[dict[str, Any]], cases: dict[str, EvalCase]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """The records re-marked by the current grader, and every numeric one whose
+    bucket (passed, abstained, wrong) moved. Reads stored answers; no model calls."""
+    after: list[dict[str, Any]] = []
+    changed: list[dict[str, Any]] = []
+    for r in records:
+        if r["kind"] != "numeric" or r.get("error"):
+            after.append(r)
+            continue
+        now = {**r, **grade(cases[r["case_id"]], r["answer"])}
+        after.append(now)
+        if _bucket(now) != _bucket(r):
+            changed.append({
+                "case_id": r["case_id"], "answer": r["answer"][:400],
+                "before": _bucket(r), "after": _bucket(now),
+                "rationale_before": r.get("rationale"), "rationale_after": now["rationale"],
+            })
+    return after, changed
+
+
+_REGRADED_FIELDS = (
+    "numeric", "numeric_passed", "numeric_accuracy", "numeric_accuracy_ci95",
+    "abstention_rate", "wrong_answer_rate", "numeric_failures_by_evidence",
+)
+
+
+def regrade(paths: list[str], out_path: str) -> dict[str, Any]:
+    """Each results file re-marked by the current grader. "Before" is what the
+    file recorded. A file whose golden set changed since it ran is refused, since
+    that would compare two different exams."""
+    from ..evals.goldenset import load
+
+    if os.path.exists(out_path):
+        raise FileExistsError(f"{out_path} exists; experiment records are evidence")
+    passes, after_by_path = [], {}
+    for p in paths:
+        with open(p + ".meta.json", encoding="utf-8") as fh:
+            config = json.load(fh)["config"]
+        if _sha256_file(config["golden_path"]) != config["golden_sha256"]:
+            raise ValueError(f"{config['golden_path']} changed since {p} ran")
+        before = load_records(p)
+        after, changed = regrade_records(before, {c.case_id: c for c in load(config["golden_path"])})
+        after_by_path[p] = after
+        s0, s1 = summarise(before), summarise(after)
+        passes.append({
+            "path": p,
+            "before": {k: s0[k] for k in _REGRADED_FIELDS},
+            "after": {k: s1[k] for k in _REGRADED_FIELDS},
+            "changed": changed,
+        })
+    payload = {
+        "grader_git_sha": source_sha(),
+        "passes": passes,
+        "pairs_after": [
+            {"a": a, "b": b, **paired(after_by_path[a], after_by_path[b])}
+            for a, b in itertools.combinations(paths, 2)
+        ],
+    }
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    with open(out_path, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, indent=2)
+    return payload

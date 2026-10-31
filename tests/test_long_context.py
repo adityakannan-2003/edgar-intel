@@ -224,3 +224,22 @@ def test_summary_intervals_and_paired_difference():
     assert p["accuracy_diff"] == 0.25
     assert p["passed_only_in_b"] == ["2", "3"] and p["passed_only_in_a"] == ["4"]
     assert p["ci95"][0] <= 0.25 <= p["ci95"][1]
+
+
+def test_regrade_lists_every_bucket_that_moved():
+    def rec(cid, answer, passed, abstained=False):
+        return {"case_id": cid, "kind": "numeric", "answer": answer, "passed": passed,
+                "abstained": abstained, "rationale": "stored"}
+
+    cases = {c.case_id: c for c in (case("a"), case("b"), case("c"), case("n", kind="narrative"))}
+    records = [
+        rec("a", "$416.16 billion", True),
+        rec("b", "As of December 31, 2025, revenue was 416,161,000,000.", False),  # read "31" before
+        rec("c", "The supplied context does not state Apple's FY2025 revenue.", False),
+        {"case_id": "n", "kind": "narrative", "answer": "prose", "passed": None, "abstained": False},
+    ]
+    after, changed = lc.regrade_records(records, cases)
+    assert [r["passed"] for r in after] == [True, True, False, None]
+    assert [(c["case_id"], c["before"], c["after"]) for c in changed] == [
+        ("b", "wrong", "passed"), ("c", "wrong", "abstained"),
+    ]

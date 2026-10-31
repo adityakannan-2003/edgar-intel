@@ -40,6 +40,36 @@ class TestTheYearIsNotTheAnswer:
             6_978_000_000
         )
 
+    @pytest.mark.parametrize(
+        "year, answer, expected_value",
+        [
+            # gpt-6-luna, long-context arm (reports/long_context/luna-lc-p{1,2}.jsonl):
+            # each graded "got 31.00" -- the comma after the day read as a separator.
+            (2023, "As of December 31, 2023, Caterpillar had 499,377,269 common shares "
+             "outstanding.", 499_400_000),
+            (2024, "As of December 31, 2024, Caterpillar had 477,932,024 common shares "
+             "outstanding.", 477_900_000),
+            (2025, "As of December 31, 2025, Caterpillar Inc. had 465,287,332 common shares "
+             "outstanding.", 465_300_000),
+        ],
+    )
+    def test_the_day_of_a_date_is_not_the_figure(self, year, answer, expected_value):
+        from edgar_intel.evals.judge import grade_numeric
+        from edgar_intel.evals.schemas import EvalCase
+
+        case = EvalCase(
+            case_id=f"num-CAT-CommonStockSharesOutstanding-{year}",
+            kind="numeric",
+            question=f"What was CATERPILLAR INC's common shares outstanding for fiscal year {year}?",
+            expected=f"{expected_value:,} shares",
+            expected_value=expected_value,
+            unit="shares",
+        )
+        assert grade_numeric(case, answer, tolerance=0.005)[0]
+
+    def test_a_year_followed_by_a_comma_is_still_a_bare_year(self):
+        assert parse_number("Through 2024, nothing was reported.") is None
+
 
 class TestScaleAndSignal:
     def test_prefers_a_currency_figure_over_incidental_digits(self):
@@ -125,6 +155,19 @@ class TestAbstention:
         ],
     )
     def test_the_agents_refusals_are_recognised(self, answer):
+        assert is_abstention(answer)
+
+    @pytest.mark.parametrize(
+        "answer",
+        [
+            # gpt-6-luna's usual refusal, RAG arm (reports/long_context/luna-rag-p2.jsonl);
+            # 24 such answers were counted as wrong figures, none of them passing.
+            "The supplied context does not state Johnson & Johnson’s FY2023 gross profit.",
+            "The supplied context does not state Microsoft’s FY2024 gross profit. It only "
+            "says gross margin increased by $25.0 billion, or 17%.",
+        ],
+    )
+    def test_does_not_state_is_a_refusal(self, answer):
         assert is_abstention(answer)
 
     @pytest.mark.parametrize(

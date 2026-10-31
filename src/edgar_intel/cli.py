@@ -1750,6 +1750,32 @@ def lc_report(
     console.print(f"wrote {out}")
 
 
+@lc_app.command("regrade")
+def lc_regrade(
+    paths: Annotated[list[str], typer.Argument(help="Results JSONL files.")],
+    out: str = typer.Option("", help="Default reports/long_context/regrade-<grader sha>.json."),
+) -> None:
+    """Re-mark stored answers with the current grader and list every verdict that moved. Free."""
+    from .experiments.long_context import regrade, source_sha
+
+    out = out or f"reports/long_context/regrade-{source_sha()}.json"
+    payload = regrade(paths, out)
+    rows = [
+        {
+            "run": p["path"].rsplit("/", 1)[-1],
+            **{
+                when: f"{p[when]['numeric_passed']}/{p[when]['numeric']}, abstained "
+                f"{p[when]['abstention_rate']}, wrong {p[when]['wrong_answer_rate']}"
+                for when in ("before", "after")
+            },
+            "moved": len(p["changed"]),
+        }
+        for p in payload["passes"]
+    ]
+    _table("re-graded, no model calls", rows)
+    console.print(f"wrote {out}")
+
+
 @app.command("config")
 def show_config() -> None:
     s = get_settings()

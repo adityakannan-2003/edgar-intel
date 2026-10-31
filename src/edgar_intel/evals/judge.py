@@ -30,7 +30,12 @@ from .schemas import JUDGE_SCHEMA, CaseResult, EvalCase
 # floor; it is a convention, not a law, and is configurable for a reason.
 KAPPA_FLOOR = 0.60
 
-_NUM_IN_TEXT = re.compile(r"-?\$?\s?\d[\d,]*\.?\d*\s?(?:billion|million|thousand|bn|mm|k|%)?", re.I)
+# A comma or point belongs to the number only with a digit after it. Otherwise
+# "December 31, 2024" yields "31," -- a day plus punctuation, scored as a
+# thousands-separated figure that tied with "477,932,024" and won by coming first.
+_NUM_IN_TEXT = re.compile(
+    r"-?\$?\s?\d(?:,?\d)*(?:\.\d+)?\s?(?:billion|million|thousand|bn|mm|k|%)?", re.I
+)
 _SCALES = {
     "billion": 1_000_000_000,
     "bn": 1_000_000_000,
@@ -131,11 +136,13 @@ def _to_float(raw: str) -> float | None:
 # liabilities for fiscal year 2026 are not available". Those were counted as
 # wrong figures until 6 Oct 2026. Every phrase below was checked against all
 # 4,976 numeric answers stored then: it matched 34, all failures, and no pass.
+# "does not state" (gpt-6-luna's refusal) was added 31 Oct 2026 after the same
+# check over 6,128 answers (eval_results plus reports/long_context): 25 more, all failures.
 # "not explicitly stated in the provided context" is deliberately absent: UNH's
 # FY2023 operating-income answer opens with it, then gives the right figure.
 _ABSTENTION = re.compile(
-    r"\b(?:does not (?:provide|contain|include|specify|mention)"
-    r"|do not (?:provide|contain|include|specify|mention)"
+    r"\b(?:does not (?:provide|contain|include|specify|mention|state)"
+    r"|do not (?:provide|contain|include|specify|mention|state)"
     r"|is not (?:provided|available|specified|mentioned|included)"
     r"|are not (?:provided|available|specified|mentioned)"
     r"|no (?:information|data|figure|mention)"

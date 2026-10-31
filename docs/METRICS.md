@@ -1314,6 +1314,89 @@ companies tag no `StockholdersEquity`.
 
 ---
 
+## 10. RAG against long context
+
+**Status: measured, 30–31 Oct 2026**, two passes per arm on gpt-6-luna,
+$1.11 for the full run and $2.12 with the pilot (`docs/LONG_CONTEXT.md`;
+`reports/long_context/report.json`, `failure-causes.json`,
+`cost-by-reuse.json`). Predictions were committed before the first paid call
+(`5971657`) and are scored in the doc.
+
+The same model answers each golden-set question from the retrieved passages
+(the `eval run` retrieval and prompt) and from every section of the 10-K the
+question names, with the filing behind an explicit prompt-cache breakpoint
+and the questions run grouped by filing. gpt-4o-mini, the pipeline's own
+model, cannot run the long arm: CAT's 10-K is 135,827 tokens and its window
+is 128K.
+
+| gpt-6-luna, 208 numeric cases | RAG | long context |
+|---|---|---|
+| numeric accuracy, pass 1 · pass 2 | **0.880** · 0.885 | **0.990** · 0.990 |
+| 95% interval, pass 1 (Wilson) | [0.829, 0.917] | [0.966, 0.997] |
+| $ per 1,000 questions | **$0.53** | **$1.95** (cold pass, 9.7 questions per filing); $8.59 without the cache |
+| p50 / p95 (the two pass-1 runs, within the same hour) | 1.9 s / 4.1 s | 2.6 s / 4.7 s |
+| cache: requests that read it · input tokens read (cold pass) | none | 208 of 232 · 0.896 (the ceiling: one write per filing) |
+| mean input tokens | 4,585 | 85,130 |
+
+- **Long context − RAG: +0.111 [+0.067, +0.159]** in pass 1 and +0.106
+  [+0.063, +0.154] in pass 2, paired bootstrap. Same-arm differences were
+  +0.005 (RAG, 1 flip) and 0.000 (long context, 2 each way).
+- **Where RAG fails:** 24 of its 25 pass-1 failures never had the figure in
+  the eight passages: cash (8), gross profit (4), P&G's R&D note (4),
+  liabilities (3), assets (2), P&G revenue (2), shares (1). The other one is
+  UNH net income before noncontrolling interests. 23 of the 25 are true
+  refusals; the grader counts only 13 as abstentions, because luna writes
+  "does not state", which the abstention pattern lacks.
+- **Where long context fails:** nowhere in reading. Three of its four
+  failures across both passes are CAT share counts answered correctly
+  ("477,932,024") that the grader read as 31, from "December 31". The fourth
+  is a subtraction slip on COST revenue growth.
+- **Cost by reuse** (derived from the cold pass's tokens): $10.71 per 1,000
+  at one question per filing with a cache write, $5.82 at two, $1.95 at this
+  set's 9.7, $0.93 with unlimited reuse. RAG measured $0.53.
+- Against the reference `eval run` on gpt-4o-mini (0.8606, same retrieval):
+  23 of luna-RAG's 25 failures are shared. Long context passes all 29 of the
+  reference's failures.
+
+**Bullet shape — usable now**
+
+> Measured RAG against whole-document long context on the same model and
+> 208 XBRL-graded questions: the full 10-K in context scored 0.99 against
+> 0.88 for hybrid retrieval (+0.11, 95% CI [0.07, 0.16], two passes per arm),
+> because 24 of retrieval's 25 failures never surfaced the figure. Explicit
+> prompt-cache breakpoints, with questions batched by filing, cut long
+> context's cost 77%, to $1.95 per 1k questions against RAG's $0.53.
+
+**Read it with these limits:**
+- Each question names its company and year, so long context is handed the
+  right filing. Choosing the document is itself retrieval, and is free here.
+- The numeric set grades primary-statement line items, which are what
+  retrieval misses (number-heavy table chunks, §5). Narrative answers are kept
+  but not graded (judge κ 0.42, §3).
+- One model. In a 24-question pilot, gpt-6.1-sol scored the same as luna in
+  both arms, at $28 against $9.81 per 1,000.
+- The CAT grader defect and the missing abstention wording are in shared
+  code and unchanged; the accuracies above are the grader's, with the
+  hand-read figures stated beside them.
+
+**Expect to be asked:** *Why not always use long context, then?* Cost and
+scope. It costs 3.7× per question at this reuse, and 16× when each filing
+gets one question. It needs the question to name a document that fits the
+window, and in this repo the agent's XBRL tools reach the same figures for
+less (§6).
+
+**Produce it**
+
+```bash
+# from the main checkout (.env), with the branch's code on PYTHONPATH
+edgar-intel eval long-context run --arm long_context --out reports/long_context/luna-lc-p1.jsonl   # spends money
+edgar-intel eval long-context run --arm rag --out reports/long_context/luna-rag-p1.jsonl           # spends money
+edgar-intel eval long-context report reports/long_context/luna-{rag,lc}-p{1,2}.jsonl \
+  --recheck-figures --out reports/long_context/report.json
+```
+
+---
+
 ## Scoreboard — what can go on a resume today
 
 | claim | status |

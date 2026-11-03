@@ -33,7 +33,7 @@ from typing import Any
 
 from .. import db
 from ..config import get_settings
-from ..providers import get_llm
+from ..providers import LLMProvider, get_llm
 from ..providers.openai_compat import parse_json_strict
 from .guardrails import (
     LoopDetector,
@@ -161,6 +161,7 @@ def run_agent(
     confidence_floor: float | None = None,
     cost_ceiling_usd: float = 0.50,
     persist: bool = True,
+    llm: LLMProvider | None = None,
 ) -> AgentRun:
     s = get_settings()
     max_steps = max_steps or s.agent_max_steps
@@ -193,7 +194,8 @@ def run_agent(
             _persist(run)
         return run
 
-    llm = get_llm()
+    # A caller may pin the model (the router, evals/router.py); `/ask` does not.
+    llm = llm or get_llm()
     detector = LoopDetector()
     transcript: list[str] = [f"QUESTION: {question}"]
     available_citations: set[str] = set()

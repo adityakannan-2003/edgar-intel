@@ -169,6 +169,177 @@ requests/s with nobody waiting (48 GB holds far more than 16 requests);
 $0.033–0.055 per 1,000 at 16 users; accuracy within 0.007 of 0.908 with at
 most 40 cases flipped (different GPU arithmetic).
 
-## Results
+## Results (3 Nov 2026)
 
-Not run yet.
+Every number below comes from a committed file in `reports/serving/`:
+
+| file | what it holds |
+|---|---|
+| `qwen3-8b-lora-s17.jsonl` (+ `.meta.json`) | the 532 served answers, run at `88c63c0` |
+| `accuracy-vs-17oct.json` | `finetune score` of 17 Oct's s17 file against today's, paired bootstrap |
+| `sweep-rtx4090.json` | the load test |
+| `breakeven.json` | `scripts/serving_breakeven.py` on the sweep and project #2's `report.json` (sha256 recorded inside) |
+| `pod.json`, `pod-logs/` | the pod's reads, timeline and server log |
+
+**The run:**
+- **Pod:** `g9gwfi6zlxlobe`, one RTX 4090, Secure Cloud, $0.89/hr, created
+  18:51:59 UTC.
+  - The first create, pinned to EU-RO-1, was refused because the card had
+    gone; a retry without a data center was placed.
+  - vLLM 0.31.0 (torch 2.13.0+cu130, the same as 17 Oct) answered at
+    19:18:11.
+  - Terminated at 19:48:5x; `get-pod` returns 404 and `list-pods` is empty.
+- **This card has ECC off: 24,564 MiB, against 23,028 on 17 Oct.**
+  - vLLM got 3.29 GiB of KV cache, 23,920 tokens, against 1.95 GiB and
+    14,160.
+  - About 22 requests of this size fit at once, not 13. Prefix caching
+    shares the instruction between requests, so up to 29 ran at once.
+- **The network:** the Mac was 165 ms from the pod (median of 20 `/health`
+  calls through the tunnel). Every latency below includes it.
+
+### Accuracy: the served model is the 17 Oct model
+
+| | micro F1 | precision / recall | facts on the 105 no-fact passages | p50 / p95, one at a time |
+|---|---|---|---|---|
+| 17 Oct, s17 | 0.9083 | 0.897 / 0.920 | 2 | 1.85 s / 7.09 s |
+| 3 Nov, served s17 | **0.9100** | 0.899 / 0.921 | 2 | 1.72 s / 6.37 s |
+
+- **The difference** is +0.0017, with a 95% interval of [−0.0007, +0.005].
+  That is within 0.007 and contains zero, so the served model matches 0.91
+  within noise.
+- **519 of the 532 answers are byte-identical** to 17 Oct's. 13 differ in
+  text, and 1 case changes whether its facts exactly match the key.
+- **Error counts move by one to three:** missed 139 → 137, wrong value
+  48 → 45, unlabelled 101 → 100.
+
+### Load (`sweep-rtx4090.json`)
+
+200 requests per level, replaying the first 200 held-out requests. No
+request failed at any level.
+
+| users | requests/s | p50 | p95 | p99 | $ per 1,000 |
+|---|---|---|---|---|---|
+| 1 | 0.47 | 1.75 s | 6.37 s | 7.84 s | $0.530 |
+| 4 | 1.63 | 1.98 s | 6.89 s | 9.09 s | $0.151 |
+| 16 | 4.22 | 2.74 s | 9.05 s | 12.72 s | **$0.0585** |
+| 32 | 5.46 | 3.98 s | 12.28 s | 17.62 s | $0.0453 |
+
+- **1 to 16 users:** throughput grows 9× while the median grows 1.6×. With
+  one user the GPU is mostly idle.
+  - The server log shows every request running at 16 users (14–16 running,
+    none waiting), with the KV cache 50–53% full.
+- **16 to 32 users:** throughput grows 29% and p95 36%.
+  - The card is full at 32: 27–29 running, 1–3 waiting, KV cache 95–99%.
+  - The sweep's knee rule (p95 up 1.5× while throughput grows under 1.2×)
+    did not fire, so there is no hard knee between 1 and 32. Even so, about
+    5.5 requests/s is this card's ceiling for this workload. Beyond 32
+    users, extra requests would mostly wait.
+- **Against 17 Oct:** 5.46 requests/s at 32 users, against 4.07. The
+  difference is the larger KV cache.
+- **The p95 is long at every level,** 6.4 s even for one user. A few
+  passages produce 300–500-token answers, so p95 tracks answer length more
+  than load.
+
+### Cost and break-even (`breakeven.json`)
+
+An always-on RTX 4090 at $0.89/hr costs **$649.70 a month**. One card
+carries 11.1 million requests a month at the 16-user rate, or 14.3 million
+at 32.
+
+| API, same task | $ per 1,000 | self-hosting is cheaper above | per day | GPU at 16 users is cheaper per request by |
+|---|---|---|---|---|
+| gpt-6.1-sol few-shot | $1.54–2.07 | **314k–421k** a month | 10k–14k | 26–35× |
+| gpt-4o-mini few-shot (priced, not run) | $0.29–0.49 | **1.33M–2.24M** a month | 44k–74k | 5–8× |
+| gpt-6-luna few-shot | $0.215 | **3.02M** a month | 99k | 3.7× |
+
+- **One card covers every break-even point.** At luna's 3.02M a month, the
+  card would be busy 27% of the time at the 16-user rate.
+- **Below 314k requests a month,** every API here is cheaper than keeping
+  a GPU on. **From 314k to 3.02M,** the GPU beats sol, and beats
+  gpt-4o-mini from 1.3–2.2M. **Above 3.02M,** it beats all three on cost.
+- **Accuracy decides which comparison counts.** The fine-tune scores 0.91,
+  against sol's 0.98 and luna's 0.97.
+  - The comparison closest in quality is luna, which is still 6 points
+    better and cheaper below about 3 million requests a month.
+  - gpt-4o-mini's accuracy on this task has never been measured.
+- **The rent is the lever:**
+  - On a Community 4090 at its $0.34/hr list price (none was in stock
+    today), the month is $248 and the luna break-even falls to 1.15M. That
+    is arithmetic on a catalog price, not a measured run.
+  - A server that runs only during busy hours pays less than the
+    always-on figure. The at-load figure, $0.045–0.059 per 1,000, is the
+    floor.
+
+### Predictions, scored
+
+1. **Wrong, just over.** Setup took 26.2 minutes (18:51:59 → 19:18:11),
+   against 10–25.
+   - The pod's own setup took 7 minutes.
+   - Uploading the two 94 MB adapters from the Mac took 15, at about
+     0.2–0.4 MB/s.
+2. **Wrong.** The KV cache was 23,920 tokens, against 13,500–14,900. This
+   card runs with ECC off, which leaves vLLM 1.3 GiB more for the cache.
+   The same GPU model does not mean the same usable memory.
+3. **Half right.**
+   - 0.47 requests/s is inside 0.37–0.47, at the top.
+   - The p50 (1.75 s) and p95 (6.37 s) are just below 1.8–2.3 s and
+     6.5–8.5 s.
+   - Each request was about 0.2 s faster than on 17 Oct (2.13 s against
+     2.34 s mean, one at a time), for a reason not measured.
+4. **Half right.** 1.63 requests/s is inside 1.2–1.8. The p50 (1.98 s) and
+   p95 (6.89 s) are just below 2.0–2.9 s and 7–10 s.
+5. **Mostly right.** 4.22 requests/s is inside 3.2–4.6 and the p95 (9.05 s)
+   inside 9–13 s. The p50 (2.74 s) is below 3.0–4.5 s.
+6. **Wrong.** 32 users added 29% throughput, where within 15% was
+   predicted. Mean latency rose 1.47×, against 1.7–2.3×. Both follow from
+   prediction 2's miss: with room for about 22 requests, not 13, 32 users
+   still found room.
+7. **Half right.** $0.0585 at 16 users is inside $0.054–0.077. $0.5296 at
+   one user is a hair under $0.53–0.67.
+8. **Right.**
+   - F1 0.9100 is inside 0.901–0.915.
+   - The interval [−0.0007, +0.005] contains zero.
+   - 1 case flipped, against at most 15.
+   - 97.6% of the answers are byte-identical, against at least 90%.
+9. **Right.** The break-even volumes are the predicted arithmetic. One
+   card's 16-user capacity, 11.1M a month, is inside 8.4M–12.1M and above
+   all three.
+10. **Right.** $0.84 from the pod's timestamps, inside $0.75–1.50.
+
+Three right, one mostly right, three half right, three wrong. Every latency
+miss (3–5) is a server faster than predicted, by a small margin. The two
+clear misses (2, 6) share one cause: the card's memory, which a stock read
+does not show.
+
+### Spend
+
+| item | amount | source |
+|---|---|---|
+| RTX 4090 pod, 56.9 minutes at $0.89/hr | $0.84 | pod timestamps (created 18:51:59, terminated 19:48:5x UTC) |
+| API calls | $0 | none made |
+| **this run** | **about $0.85** of the $3 cap, including a few cents of disk | |
+
+RunPod's pod-billing read for `g9gwfi6zlxlobe` at about 19:50 UTC had no
+records yet. On 17 Oct, billing lagged about an hour.
+
+**After the run:**
+- **Left billing:** nothing. The pod is terminated and no volume was
+  created.
+- **RunPod to date:** $3.14 (17 Oct) + about $0.85 = about $3.99.
+
+## The reading
+
+- **Serving reproduces the measured model.** 0.910 against 0.908, with 519
+  of 532 answers byte-identical.
+- **Capacity:** one $0.89/hr RTX 4090 serves 4.2 requests/s to 16
+  concurrent users, at a 2.7 s median and a 9 s p95, and tops out near
+  5.5/s.
+- **Cost per 1,000 requests:** $0.53 one user at a time, $0.059 at 16
+  users, $0.045 at 32.
+- **Against the API:** an always-on GPU beats gpt-6.1-sol above about
+  0.3–0.4 million requests a month, gpt-4o-mini above 1.3–2.2 million, and
+  gpt-6-luna above 3 million. One card covers all of those volumes.
+- **The catch is accuracy.** At 0.91 F1, against 0.97–0.98, the fine-tune
+  pays only where a somewhat less accurate extractor is acceptable and
+  volume runs to millions of requests a month. Below that, gpt-6-luna is
+  both cheaper and more accurate.

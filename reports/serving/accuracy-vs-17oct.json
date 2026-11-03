@@ -1,0 +1,495 @@
+{
+  "held_out_path": "/Users/adityakannan/dev/edgar-intel/data/finetune/held_out.jsonl",
+  "held_out_sha256": "e8e92b026c3c4f7b5e113df01e64e63d69b70fcbca31c703f8a17d75970c81a3",
+  "arms": [
+    {
+      "arm": "Qwen3-8B + LoRA, seed 17",
+      "pred_path": "/Users/adityakannan/dev/edgar-intel/reports/finetune/full/qwen3-8b-lora-s17.jsonl",
+      "regraded": false,
+      "cases_no_longer_in_set": 0,
+      "cases": 532,
+      "errors": 0,
+      "micro": {
+        "precision": 0.8971,
+        "recall": 0.9198,
+        "f1": 0.9083,
+        "tp": 1595,
+        "n_pred": 1778,
+        "n_expected": 1734
+      },
+      "micro_positives_only": {
+        "precision": 0.8981,
+        "recall": 0.9198,
+        "f1": 0.9088,
+        "tp": 1595,
+        "n_pred": 1776,
+        "n_expected": 1734
+      },
+      "macro_f1": 0.8881,
+      "exact_set_match": 0.7838,
+      "negatives": 105,
+      "negatives_with_any_fact": 2,
+      "parse_failures": 0,
+      "invalid_facts": 0,
+      "ignored_facts": 27,
+      "unverifiable_facts": 94,
+      "diagnosis": {
+        "invalid": 0,
+        "wrong_value": 48,
+        "wrong_year": 18,
+        "wrong_concept": 0,
+        "unlabelled": 101,
+        "not_in_passage": 16,
+        "missed": 139,
+        "sign_flipped": 0
+      },
+      "per_concept": {
+        "total revenue": {
+          "precision": 0.8969,
+          "recall": 0.9388,
+          "f1": 0.9174,
+          "tp": 322,
+          "n_pred": 359,
+          "n_expected": 343
+        },
+        "net income": {
+          "precision": 0.8602,
+          "recall": 0.9412,
+          "f1": 0.8989,
+          "tp": 400,
+          "n_pred": 465,
+          "n_expected": 425
+        },
+        "operating income": {
+          "precision": 0.9474,
+          "recall": 0.9137,
+          "f1": 0.9302,
+          "tp": 180,
+          "n_pred": 190,
+          "n_expected": 197
+        },
+        "research and development expense": {
+          "precision": 0.9697,
+          "recall": 0.9143,
+          "f1": 0.9412,
+          "tp": 32,
+          "n_pred": 33,
+          "n_expected": 35
+        },
+        "total assets": {
+          "precision": 0.8936,
+          "recall": 0.9333,
+          "f1": 0.913,
+          "tp": 84,
+          "n_pred": 94,
+          "n_expected": 90
+        },
+        "total liabilities": {
+          "precision": 0.9032,
+          "recall": 1.0,
+          "f1": 0.9492,
+          "tp": 56,
+          "n_pred": 62,
+          "n_expected": 56
+        },
+        "total stockholders' equity": {
+          "precision": 0.8611,
+          "recall": 0.8493,
+          "f1": 0.8552,
+          "tp": 62,
+          "n_pred": 72,
+          "n_expected": 73
+        },
+        "cash and cash equivalents": {
+          "precision": 0.8286,
+          "recall": 0.8529,
+          "f1": 0.8406,
+          "tp": 145,
+          "n_pred": 175,
+          "n_expected": 170
+        },
+        "gross profit": {
+          "precision": 0.8833,
+          "recall": 1.0,
+          "f1": 0.9381,
+          "tp": 53,
+          "n_pred": 60,
+          "n_expected": 53
+        },
+        "diluted earnings per share": {
+          "precision": 0.9781,
+          "recall": 0.9612,
+          "f1": 0.9696,
+          "tp": 223,
+          "n_pred": 228,
+          "n_expected": 232
+        },
+        "common shares outstanding": {
+          "precision": 0.95,
+          "recall": 0.6333,
+          "f1": 0.76,
+          "tp": 38,
+          "n_pred": 40,
+          "n_expected": 60
+        }
+      },
+      "per_company": {
+        "ADBE": {
+          "precision": 0.96,
+          "recall": 0.96,
+          "f1": 0.96,
+          "tp": 216,
+          "n_pred": 225,
+          "n_expected": 225,
+          "cases": 60
+        },
+        "CMCSA": {
+          "precision": 0.8475,
+          "recall": 1.0,
+          "f1": 0.9174,
+          "tp": 150,
+          "n_pred": 177,
+          "n_expected": 150,
+          "cases": 52
+        },
+        "COST": {
+          "precision": 0.8553,
+          "recall": 0.8831,
+          "f1": 0.869,
+          "tp": 136,
+          "n_pred": 159,
+          "n_expected": 154,
+          "cases": 38
+        },
+        "JNJ": {
+          "precision": 0.9314,
+          "recall": 0.9694,
+          "f1": 0.95,
+          "tp": 95,
+          "n_pred": 102,
+          "n_expected": 98,
+          "cases": 39
+        },
+        "LMT": {
+          "precision": 0.8993,
+          "recall": 0.852,
+          "f1": 0.875,
+          "tp": 259,
+          "n_pred": 288,
+          "n_expected": 304,
+          "cases": 85
+        },
+        "NVDA": {
+          "precision": 0.933,
+          "recall": 0.9289,
+          "f1": 0.931,
+          "tp": 209,
+          "n_pred": 224,
+          "n_expected": 225,
+          "cases": 51
+        },
+        "PG": {
+          "precision": 0.8497,
+          "recall": 0.9363,
+          "f1": 0.8909,
+          "tp": 147,
+          "n_pred": 173,
+          "n_expected": 157,
+          "cases": 52
+        },
+        "SLB": {
+          "precision": 0.8684,
+          "recall": 0.9565,
+          "f1": 0.9103,
+          "tp": 66,
+          "n_pred": 76,
+          "n_expected": 69,
+          "cases": 31
+        },
+        "UNH": {
+          "precision": 0.8498,
+          "recall": 0.8498,
+          "f1": 0.8498,
+          "tp": 181,
+          "n_pred": 213,
+          "n_expected": 213,
+          "cases": 62
+        },
+        "V": {
+          "precision": 0.9645,
+          "recall": 0.9784,
+          "f1": 0.9714,
+          "tp": 136,
+          "n_pred": 141,
+          "n_expected": 139,
+          "cases": 62
+        }
+      },
+      "latency_ms": {
+        "p50": 1850,
+        "p95": 7090
+      },
+      "tokens_mean": {
+        "prompt_tokens": 964.6,
+        "cached_tokens": 0.0,
+        "completion_tokens": 102.7,
+        "reasoning_tokens": 0.0
+      },
+      "cost": {
+        "basis": "one request at a time on a $0.89/hr GPU, mean latency 2.34s",
+        "per_1k_requests_usd": 0.5775
+      }
+    },
+    {
+      "arm": "Qwen3-8B + LoRA, seed 17",
+      "pred_path": "reports/serving/qwen3-8b-lora-s17.jsonl",
+      "regraded": false,
+      "cases_no_longer_in_set": 0,
+      "cases": 532,
+      "errors": 0,
+      "micro": {
+        "precision": 0.8992,
+        "recall": 0.921,
+        "f1": 0.91,
+        "tp": 1597,
+        "n_pred": 1776,
+        "n_expected": 1734
+      },
+      "micro_positives_only": {
+        "precision": 0.9002,
+        "recall": 0.921,
+        "f1": 0.9105,
+        "tp": 1597,
+        "n_pred": 1774,
+        "n_expected": 1734
+      },
+      "macro_f1": 0.8897,
+      "exact_set_match": 0.7857,
+      "negatives": 105,
+      "negatives_with_any_fact": 2,
+      "parse_failures": 0,
+      "invalid_facts": 0,
+      "ignored_facts": 27,
+      "unverifiable_facts": 94,
+      "diagnosis": {
+        "invalid": 0,
+        "wrong_value": 45,
+        "wrong_year": 18,
+        "wrong_concept": 0,
+        "unlabelled": 100,
+        "not_in_passage": 16,
+        "missed": 137,
+        "sign_flipped": 0
+      },
+      "per_concept": {
+        "total revenue": {
+          "precision": 0.8969,
+          "recall": 0.9388,
+          "f1": 0.9174,
+          "tp": 322,
+          "n_pred": 359,
+          "n_expected": 343
+        },
+        "net income": {
+          "precision": 0.8661,
+          "recall": 0.9435,
+          "f1": 0.9032,
+          "tp": 401,
+          "n_pred": 463,
+          "n_expected": 425
+        },
+        "operating income": {
+          "precision": 0.9526,
+          "recall": 0.9188,
+          "f1": 0.9354,
+          "tp": 181,
+          "n_pred": 190,
+          "n_expected": 197
+        },
+        "research and development expense": {
+          "precision": 0.9697,
+          "recall": 0.9143,
+          "f1": 0.9412,
+          "tp": 32,
+          "n_pred": 33,
+          "n_expected": 35
+        },
+        "total assets": {
+          "precision": 0.8936,
+          "recall": 0.9333,
+          "f1": 0.913,
+          "tp": 84,
+          "n_pred": 94,
+          "n_expected": 90
+        },
+        "total liabilities": {
+          "precision": 0.9032,
+          "recall": 1.0,
+          "f1": 0.9492,
+          "tp": 56,
+          "n_pred": 62,
+          "n_expected": 56
+        },
+        "total stockholders' equity": {
+          "precision": 0.8611,
+          "recall": 0.8493,
+          "f1": 0.8552,
+          "tp": 62,
+          "n_pred": 72,
+          "n_expected": 73
+        },
+        "cash and cash equivalents": {
+          "precision": 0.8286,
+          "recall": 0.8529,
+          "f1": 0.8406,
+          "tp": 145,
+          "n_pred": 175,
+          "n_expected": 170
+        },
+        "gross profit": {
+          "precision": 0.8833,
+          "recall": 1.0,
+          "f1": 0.9381,
+          "tp": 53,
+          "n_pred": 60,
+          "n_expected": 53
+        },
+        "diluted earnings per share": {
+          "precision": 0.9781,
+          "recall": 0.9612,
+          "f1": 0.9696,
+          "tp": 223,
+          "n_pred": 228,
+          "n_expected": 232
+        },
+        "common shares outstanding": {
+          "precision": 0.95,
+          "recall": 0.6333,
+          "f1": 0.76,
+          "tp": 38,
+          "n_pred": 40,
+          "n_expected": 60
+        }
+      },
+      "per_company": {
+        "ADBE": {
+          "precision": 0.96,
+          "recall": 0.96,
+          "f1": 0.96,
+          "tp": 216,
+          "n_pred": 225,
+          "n_expected": 225,
+          "cases": 60
+        },
+        "CMCSA": {
+          "precision": 0.8475,
+          "recall": 1.0,
+          "f1": 0.9174,
+          "tp": 150,
+          "n_pred": 177,
+          "n_expected": 150,
+          "cases": 52
+        },
+        "COST": {
+          "precision": 0.8535,
+          "recall": 0.8701,
+          "f1": 0.8617,
+          "tp": 134,
+          "n_pred": 157,
+          "n_expected": 154,
+          "cases": 38
+        },
+        "JNJ": {
+          "precision": 0.9314,
+          "recall": 0.9694,
+          "f1": 0.95,
+          "tp": 95,
+          "n_pred": 102,
+          "n_expected": 98,
+          "cases": 39
+        },
+        "LMT": {
+          "precision": 0.9028,
+          "recall": 0.8553,
+          "f1": 0.8784,
+          "tp": 260,
+          "n_pred": 288,
+          "n_expected": 304,
+          "cases": 85
+        },
+        "NVDA": {
+          "precision": 0.9462,
+          "recall": 0.9378,
+          "f1": 0.942,
+          "tp": 211,
+          "n_pred": 223,
+          "n_expected": 225,
+          "cases": 51
+        },
+        "PG": {
+          "precision": 0.8497,
+          "recall": 0.9363,
+          "f1": 0.8909,
+          "tp": 147,
+          "n_pred": 173,
+          "n_expected": 157,
+          "cases": 52
+        },
+        "SLB": {
+          "precision": 0.8684,
+          "recall": 0.9565,
+          "f1": 0.9103,
+          "tp": 66,
+          "n_pred": 76,
+          "n_expected": 69,
+          "cases": 31
+        },
+        "UNH": {
+          "precision": 0.8505,
+          "recall": 0.8545,
+          "f1": 0.8525,
+          "tp": 182,
+          "n_pred": 214,
+          "n_expected": 213,
+          "cases": 62
+        },
+        "V": {
+          "precision": 0.9645,
+          "recall": 0.9784,
+          "f1": 0.9714,
+          "tp": 136,
+          "n_pred": 141,
+          "n_expected": 139,
+          "cases": 62
+        }
+      },
+      "latency_ms": {
+        "p50": 1718,
+        "p95": 6372
+      },
+      "tokens_mean": {
+        "prompt_tokens": 964.6,
+        "cached_tokens": 0.0,
+        "completion_tokens": 102.6,
+        "reasoning_tokens": 0.0
+      },
+      "cost": {
+        "basis": "one request at a time on a $0.89/hr GPU, mean latency 2.13s",
+        "per_1k_requests_usd": 0.5277
+      }
+    }
+  ],
+  "vs_first": [
+    {
+      "arm": "Qwen3-8B + LoRA, seed 17",
+      "against": "Qwen3-8B + LoRA, seed 17",
+      "cases": 532,
+      "f1_diff": 0.0017,
+      "ci95": [
+        -0.0007,
+        0.005
+      ],
+      "cases_flipped": 1
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+[90mHint: A new version of huggingface_hub (2.4.0) is available! You are using version 1.33.0.[0m
+[90mHint: The `hf-cli` skill is not installed. Run `hf skills add -g` to teach your AI agents how to use the `hf` CLI.[0m
+Fetching 15 files:   0%|          | 0/15 [00:00<?, ?it/s]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 15 files:  20%|██        | 3/15 [00:00<00:00, 27.63it/s]Fetching 15 files:  53%|█████▎    | 8/15 [00:00<00:00, 37.38it/s]Fetching 15 files:  67%|██████▋   | 10/15 [00:19<00:00, 37.38it/s]Fetching 15 files:  73%|███████▎  | 11/15 [01:54<00:57, 14.38s/it]Fetching 15 files:  80%|████████  | 12/15 [01:58<00:38, 12.70s/it]Fetching 15 files: 100%|██████████| 15/15 [02:06<00:00,  8.81s/it]Fetching 15 files: 100%|██████████| 15/15 [02:06<00:00,  8.44s/it]
+[32m✓ Downloaded[0m
+  path: /root/ft/hf/hub/models--Qwen--Qwen3-8B/snapshots/b968826d9c46dd6066d109eabc6255188de91218

@@ -745,10 +745,11 @@ edgar-intel agent stats                       # live traffic in agent_traces; ev
 fix, a same-config re-run, two further fixes each run alone, and then today's
 date in the prompt. Shipped: the citation fix, the tag vocabulary and the date
 line, at numeric accuracy 0.9615 (`b79a49f`). Read the first caveat before
-quoting it.**
+quoting it. On 31 Oct a provider fix (`5eef134`) removed a rejected request
+before every model call: about 0.3 s per question, the same answers (below).**
 `/ask` serves the agent, so these are the first accuracy figures for what the
-deployed service answers. Totals agree within one case between identical runs,
-but 14 cases flip each way (below).
+deployed service answers. Totals agree within one case between identical runs
+on 6 Oct, and within four on 31 Oct, but 14 cases flip each way (below).
 
 **How it is graded.** `eval agent` (`274419a`) calls `run_agent` on each case
 and grades the answer with `build_result`, the function `eval run` uses, so
@@ -774,6 +775,8 @@ trace (`eval_results.agent`, `sql/005`). Traces are not written to
 | `agent-tag-vocabulary-13ce6702` + `agent-tag-vocabulary-rest-2b781216` | `c9f74a5` | the tag-vocabulary fix alone: stopped at 194 of 232, completed with the other 38 at the same sha |
 | `agent-calendar-393d6b00` | `decc853` | the calendar rule alone, from `cd213ae`; not merged |
 | `agent-date-in-prompt-a74f3c03` | `ee226ed` | today's date in the system prompt, alone, on the tag-vocabulary agent (its code otherwise as `c9f74a5`). Merged as `b79a49f`, rebased onto `6e3aab1`'s wider abstention pattern, under which no verdict in this run changes |
+| `agent-schema-ref-20261031-c0918ecf` | `b0e20b3` | 31 Oct: the current agent (as `b79a49f`), the same-day reference for the schema fix, run side by side with it |
+| `agent-schema-fix-20261031-0686fc5e` | `5eef134` | the agent's open action schema sent as `json_object` on the first request, alone |
 
 Predictions for both full runs were written before either, informed by the
 pilot (`reports/agent-eval-predictions-20261006.json`, 19:45 UTC).
@@ -987,6 +990,55 @@ because a fact lookup is short and the agent never reads a 20,000-character
 context. p50 2.3 s and p95 3.9 s against 1.2 s and 2.9 s, because it makes 2.2
 model calls per question, one after another. With the citation fix alone it was
 $0.098, 3.6 s and 9.3 s.
+
+**Then a rejected request, removed (31 Oct, `5eef134`).** `OpenAICompatLLM`
+sent every schema as strict structured output. OpenAI's strict mode rejects
+the agent's action schema because it lets objects carry extra keys (`args`
+varies by tool), so every agent model call drew an HTTP 400 and was re-sent as
+`json_object`. The fix sends a schema that does not set
+`additionalProperties: false` as `json_object` on the first request. The
+request the model answers is byte-identical before and after (both captured
+against a stand-in that applies OpenAI's rule), so no answer can change because
+of it. The judge's and the RAG answer's schemas are closed, OpenAI accepted
+both in strict mode (one call each, 31 Oct), and they are unchanged. A test
+pins the first request for all three. Predictions and a rule were written
+first (`reports/agent-schema-fix-predictions-20261031.json`, 15:00 UTC): ship
+if numeric correct is at least the same-day reference's minus 4 and p50 is
+lower. The two runs ran side by side, so both saw the same API.
+
+| | same-day reference (`b0e20b3`) | **schema fix (`5eef134`)** |
+|---|---|---|
+| numeric accuracy | 0.9712 (202/208) | 0.9519 (198/208) |
+| escalated | 5 | 7 |
+| model calls (mean per question) | 515 (2.22) | 507 (2.19) |
+| p50 / p95 | 2331 / 4512 ms | **2065 / 3677 ms** |
+| median latency per step (question ÷ steps) | 1112 ms | 1000 ms |
+| cost per full run | $0.081 | $0.079 |
+| rule | | **passed** |
+
+- **Latency: about 0.3 s per question, half the estimate.** On the 213 cases
+  that took the same number of steps in both runs, the fix is 314 ms faster per
+  question (bootstrap 95% CI 211–448 ms) and 147 ms per step (97–211), and 167
+  of the 213 are faster (`reports/agent-schema-fix-paired-latency-20261031.json`).
+  The 0.6 s estimate assumed 270 ms per rejection, timed on a cold connection.
+  On a warm one, which a running process holds, the 400 takes about 130 ms
+  (six calls, 113–201 ms; 242 ms cold). The API checks and their scripts are in
+  `reports/agent-schema-fix-checks-20261031/`.
+- **Accuracy: −4, and noise.** 0 numeric cases gained, 4 lost. In three, the
+  model's first step was a text search instead of `get_fact` (CAT FY2024 and
+  FY2025 revenue, PG FY2024 revenue). In one it wrote "unchanged" without the
+  "0.0%" the grader wants (CAT R&D 2023–24). The requests are identical, so
+  these come from the model's sampling. That widens the noise figure: two runs
+  of the same requests differed by 4 cases in total, not 1, though only 4 cases
+  flipped, against 14 each way on 6 Oct.
+- The same-day reference scored 202, against 200 on 6 Oct. The date line puts
+  the day in the prompt, so these are different prompts (third caveat below);
+  6 Oct latencies are not comparable either.
+- **Predictions against outcome: 8 of 11 held.** The three misses are all the
+  size of the latency gain (p50 −266 ms against −300 to −800; p50 ratio 0.886
+  against 0.70–0.88; −112 ms median per step against −150 to −350), because
+  the prediction used the cold timing. Accuracy, flips, steps, p95 and cost
+  held; the numeric difference, −4, sat at the edge of its range.
 
 **Caveats, in order of weight.**
 - **The numeric set is generated from `xbrl_facts`, and `get_fact` reads that
@@ -1214,7 +1266,10 @@ the price that bought nothing (§1).
 The agent that `/ask` serves is slower and cheaper (§6). With all three fixes
 it measured p50 2.3 s and p95 3.9 s at 2.2 model calls per question, and $0.084
 per full run, because its prompts carry fact lookups rather than a
-20,000-character context.
+20,000-character context. On 31 Oct the API was slower: the same agent measured
+p50 2.3 s and p95 4.5 s. Dropping a request OpenAI rejected before every model
+call (§6, `5eef134`) took that to 2.1 s and 3.7 s, about 0.3 s per question,
+at the same cost.
 
 These are local figures on a warm process. The deployed instance's numbers are
 below and come from `bench sweep` against its URL; never quote one set as the other.
@@ -1523,7 +1578,7 @@ edgar-intel eval long-context regrade reports/long_context/luna-{rag,lc}-p{1,2}.
 | embedder window (D8): a 512 window lifts hybrid hit@5 0.762 → 0.805 but not accuracy (0.841 → 0.837); declined | ✅ measured, single variable (§1) |
 | four chunking strategies at an equal 512 ceiling: fixed / recursive / section-aware tie (0.784–0.789), semantic 0.745 | ✅ measured, end to end (§1) |
 | chunk size over strategy: 512 → 600 tokens recovers 7 of the 11 cases to the shipped index (0.784 → 0.817 vs 0.837) | ✅ measured (§1) |
-| agent (what `/ask` serves), numeric accuracy: **0.4135** as deployed → 0.7115 after a one-line citation fix → 0.8317 with the tag vocabulary → **0.9615** with today's date in the prompt; 200 of 206 numeric answers right; 3/3 NCI cases | ✅ measured (§6), same set and grader; each change single-variable under a rule written first, found on this set; a same-config re-run held totals to ±1 case, while 14 cases flip each way |
+| agent (what `/ask` serves), numeric accuracy: **0.4135** as deployed → 0.7115 after a one-line citation fix → 0.8317 with the tag vocabulary → **0.9615** with today's date in the prompt; 200 of 206 numeric answers right; 3/3 NCI cases | ✅ measured (§6), same set and grader; each change single-variable under a rule written first, found on this set; a same-config re-run held totals to ±1 case, while 14 cases flip each way; identical requests on 31 Oct differed by 4 |
 | agent escalation rate: **48.3%** as deployed → 22.4% → 12.5% → **2.6%**; its 6 wrong answers all came at confidence 0.9–1.0, so escalation catches none of its errors | ✅ measured (§6) |
 | a calendar prompt rule for the agent: −6 to −7 cases, more claims a year is unreported; rejected under a pre-written adoption rule | ✅ measured (§6) |
 | "the agent is more accurate than RAG" | ⚠️ **true on this exam (0.96 against 0.86) and misleading**: its numeric questions are lookups in the table the answer key came from; say it no longer gets in its own way, not that it reads better |

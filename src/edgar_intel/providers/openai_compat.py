@@ -120,7 +120,14 @@ class OpenAICompatLLM:
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
-        if json_schema is not None:
+        # OpenAI's strict mode rejects, with a 400 in ~250 ms, any schema whose
+        # objects allow extra keys. The agent's action schema is open by design
+        # (its `args` vary by tool), so it goes as json_object, which is what the
+        # fallback below re-sent it as on every step until 31 Oct 2026.
+        # shortcut: only the top level is checked; a closed schema with an open
+        # nested object still takes the 400-and-fallback path.
+        strict = json_schema is not None and json_schema.get("additionalProperties") is False
+        if strict:
             # Structured outputs. Falls back to json_object mode on servers that
             # do not implement the schema variant.
             payload["response_format"] = {
@@ -131,6 +138,8 @@ class OpenAICompatLLM:
                     "strict": True,
                 },
             }
+        elif json_schema is not None:
+            payload["response_format"] = {"type": "json_object"}
 
         # Per-call overrides. Some models reject a default this method sends --
         # newer reasoning models refuse `max_tokens` (they take
@@ -146,7 +155,7 @@ class OpenAICompatLLM:
         try:
             data = self._post("/chat/completions", payload)
         except httpx.HTTPStatusError as exc:
-            if json_schema is not None and exc.response.status_code == 400:
+            if strict and exc.response.status_code == 400:
                 # Unchanged fallback: servers that do not implement the schema
                 # variant of structured outputs accept plain json_object mode.
                 payload["response_format"] = {"type": "json_object"}

@@ -78,11 +78,15 @@ def run_bench(
     concurrency: int = 8,
     queries: list[str] | None = None,
     timeout: float = 60.0,
+    bodies: list[dict[str, Any]] | None = None,
+    gpu_usd_per_hour: float | None = None,
 ) -> BenchResult:
     queries = queries or DEFAULT_QUERIES
     url = f"{base_url.rstrip('/')}{endpoint}"
 
     def payload(i: int) -> dict[str, Any]:
+        if bodies:
+            return bodies[i % len(bodies)]
         query = queries[i % len(queries)]
         if endpoint == "/ask":
             return {"question": query}
@@ -109,6 +113,10 @@ def run_bench(
                     latencies.append(latency)
                     total_cost += cost
     wall = time.perf_counter() - started
+    # A server we rent reports no per-request cost: it costs its rent for the
+    # time the level ran, whatever it was doing.
+    if gpu_usd_per_hour is not None:
+        total_cost = gpu_usd_per_hour * wall / 3600
 
     latencies.sort()
     return BenchResult(
@@ -151,6 +159,9 @@ def sweep(
     concurrencies: tuple[int, ...] = (1, 4, 8, 16, 32),
     requests_per_level: int = 100,
     out_path: str = "reports/bench.json",
+    bodies: list[dict[str, Any]] | None = None,
+    gpu_usd_per_hour: float | None = None,
+    context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Benchmark across concurrency levels and find where latency degrades.
 
@@ -159,7 +170,11 @@ def sweep(
     is the honest answer to "how many users can this handle".
     """
     results = [
-        run_bench(base_url, endpoint, requests_per_level, c) for c in concurrencies
+        run_bench(
+            base_url, endpoint, requests_per_level, c,
+            bodies=bodies, gpu_usd_per_hour=gpu_usd_per_hour,
+        )
+        for c in concurrencies
     ]
 
     knee = None
@@ -181,6 +196,8 @@ def sweep(
         "endpoint": endpoint,
         "requests_per_level": requests_per_level,
         "measured_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "gpu_usd_per_hour": gpu_usd_per_hour,
+        **(context or {}),
         "levels": [r.as_dict() for r in results],
         "knee_concurrency": knee,
         "interpretation": (

@@ -305,6 +305,29 @@ def predict(
     return {"arm": arm.name, "cases": len(rows), "skipped": len(done), "written": written, "errors": errors}
 
 
+def request_bodies(
+    arm: Arm, held_out_path: str, train_path: str | None = None
+) -> list[dict[str, Any]]:
+    """The chat-completions body `predict` sends for each held-out case, for a
+    load test that replays real requests at a self-hosted server."""
+    if not arm.self_hosted:
+        raise ValueError(f"{arm.name} is an API arm; load-test only a server we run")
+    system = system_prompt(pick_shots(train_path) if arm.few_shot else [])
+    return [
+        {
+            "model": arm.model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": row["messages"][1]["content"]},
+            ],
+            "temperature": 0.0,
+            "max_tokens": arm.max_tokens,
+            **arm.extra_body,
+        }
+        for row in load_records(held_out_path)
+    ]
+
+
 def measure_throughput(
     arm: Arm,
     held_out_path: str,

@@ -1641,10 +1641,32 @@ def bench_sweep(
     endpoint: str = typer.Option("/search"),
     requests_per_level: int = typer.Option(100),
     out: str = typer.Option("reports/bench.json"),
+    concurrency: str = typer.Option("1,4,8,16,32", help="Comma-separated levels."),
+    arm: str | None = typer.Option(
+        None, help="A self-hosted `finetune arms` key: replay its held-out requests "
+        "(use --endpoint /v1/chat/completions)."
+    ),
+    held_out: str = typer.Option("data/finetune/held_out.jsonl"),
+    train: str = typer.Option("data/finetune/train.jsonl", help="For a few-shot arm's examples."),
+    gpu_usd_per_hour: float | None = typer.Option(
+        None, help="Price each level at this rent for its wall time."
+    ),
 ) -> None:
     from .serving.bench import sweep
 
-    payload = sweep(base_url, endpoint, requests_per_level=requests_per_level, out_path=out)
+    bodies, context = None, {}
+    if arm:
+        from .finetune.benchmark import ARMS, request_bodies
+        from .finetune.dataset import sha256_file
+
+        bodies = request_bodies(ARMS[arm], held_out, train)
+        context = {"arm": arm, "held_out_sha256": sha256_file(held_out)}
+    payload = sweep(
+        base_url, endpoint,
+        concurrencies=tuple(int(c) for c in concurrency.split(",")),
+        requests_per_level=requests_per_level, out_path=out,
+        bodies=bodies, gpu_usd_per_hour=gpu_usd_per_hour, context=context,
+    )
     _table("concurrency sweep", payload["levels"])
     console.print(f"\n[bold]{payload['interpretation']}[/bold]")
     console.print(f"wrote {out}")

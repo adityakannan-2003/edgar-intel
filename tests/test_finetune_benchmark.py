@@ -249,3 +249,25 @@ class TestRetry:
         assert len(llm.calls) == 1 and summary["written"] == 1
         m = score(out, held)["metrics"]
         assert m["cases"] == 5 and m["errors"] == 0
+
+
+class TestLoadTestBodies:
+    def test_bodies_are_the_requests_predict_sends(self, files, monkeypatch):
+        from edgar_intel.finetune.benchmark import ARMS, request_bodies
+        from edgar_intel.providers.openai_compat import OpenAICompatLLM
+
+        held, _, tmp = files
+        arm = ARMS["qwen3-8b-lora-s17"]
+        llm = OpenAICompatLLM(base_url="http://pod/v1", api_key="EMPTY", model=arm.model)
+        sent = []
+        reply = {"choices": [{"message": {"content": "[]"}}]}
+        monkeypatch.setattr(llm, "_post", lambda path, payload: sent.append(payload) or reply)
+        predict(arm, held, str(tmp / "p.jsonl"), llm=llm)
+        assert request_bodies(arm, held) == sent
+
+    def test_api_arms_are_refused(self, files):
+        from edgar_intel.finetune.benchmark import ARMS, request_bodies
+
+        held, train, _ = files
+        with pytest.raises(ValueError, match="API arm"):
+            request_bodies(ARMS["sol-fewshot"], held, train)

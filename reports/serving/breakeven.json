@@ -1,0 +1,89 @@
+{
+  "inputs": {
+    "report_json": "/Users/adityakannan/dev/edgar-intel/reports/finetune/full/report.json",
+    "report_sha256": "f1518bb7538f179f6ed6be704f8d58bc87ad6417f8f527f96cfa31c123b429e4",
+    "sweep_json": "reports/serving/sweep-rtx4090.json",
+    "gpu_usd_per_hour": 0.89,
+    "hours_per_month": 730,
+    "gpt_4o_mini_usd_per_mtok": [
+      0.15,
+      0.075,
+      0.6
+    ],
+    "gpt_4o_mini_tokens": {
+      "prompt": 2927.8,
+      "cached": 2661.8,
+      "answer": 84.3
+    }
+  },
+  "gpu_usd_per_month": 649.7,
+  "levels": {
+    "1": {
+      "requests_per_s": 0.47,
+      "usd_per_1k": 0.5296,
+      "capacity_per_month": 1235160
+    },
+    "4": {
+      "requests_per_s": 1.63,
+      "usd_per_1k": 0.1513,
+      "capacity_per_month": 4283640
+    },
+    "16": {
+      "requests_per_s": 4.22,
+      "usd_per_1k": 0.0585,
+      "capacity_per_month": 11090160
+    },
+    "32": {
+      "requests_per_s": 5.46,
+      "usd_per_1k": 0.0453,
+      "capacity_per_month": 14348880
+    }
+  },
+  "breakeven": {
+    "gpt-6.1-sol few-shot (measured)": {
+      "usd_per_1k": [
+        1.5415,
+        2.0692
+      ],
+      "requests_per_month": [
+        313986,
+        421473
+      ],
+      "share_of_best_capacity": [
+        0.022,
+        0.029
+      ],
+      "gpu_cheaper_at_load": true
+    },
+    "gpt-6-luna few-shot (measured)": {
+      "usd_per_1k": [
+        0.215,
+        0.2151
+      ],
+      "requests_per_month": [
+        3020456,
+        3021860
+      ],
+      "share_of_best_capacity": [
+        0.211,
+        0.211
+      ],
+      "gpu_cheaper_at_load": true
+    },
+    "gpt-4o-mini few-shot (priced, not run)": {
+      "usd_per_1k": [
+        0.2901,
+        0.4897
+      ],
+      "requests_per_month": [
+        1326731,
+        2239573
+      ],
+      "share_of_best_capacity": [
+        0.092,
+        0.156
+      ],
+      "gpu_cheaper_at_load": true
+    }
+  }
+}

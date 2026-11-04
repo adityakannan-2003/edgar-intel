@@ -9,6 +9,7 @@
 #
 # Then on the pod:
 #   bash scripts/finetune_pod.sh setup                       # two environments, once
+#   bash scripts/finetune_pod.sh setup serve                 # serving only: vLLM, no training env
 #   bash scripts/finetune_pod.sh train pilot --max-examples 300 --epochs 1
 #   bash scripts/finetune_pod.sh serve pilot                 # Qwen3-8B + adapter "extract" on :8000
 #   bash scripts/finetune_pod.sh serve s17 s29               # two adapters, "extract-s17" and "extract-s29"
@@ -42,13 +43,17 @@ setup)
   command -v uv >/dev/null || {
     python3 -m venv "$C/uv-env" && "$C/uv-env/bin/pip" install -q uv && ln -sf "$C/uv-env/bin/uv" /usr/local/bin/uv
   }
-  uv venv -q --python 3.12 "$C/train-env"
-  VIRTUAL_ENV=$C/train-env uv pip install -q \
-    torch==2.14.1 transformers==5.20.1 peft==0.21.2 trl==1.16.0 datasets==5.1.0 \
-    accelerate bitsandbytes -e "$REPO"
+  # `setup serve` skips training: serving needs only the adapters and vLLM.
+  if [ "${1:-}" != serve ]; then
+    uv venv -q --python 3.12 "$C/train-env"
+    VIRTUAL_ENV=$C/train-env uv pip install -q \
+      torch==2.14.1 transformers==5.20.1 peft==0.21.2 trl==1.16.0 datasets==5.1.0 \
+      accelerate bitsandbytes -e "$REPO"
+    "$C/train-env/bin/python" -c "import torch; assert torch.cuda.is_available(); print('train env: cuda', torch.version.cuda, torch.cuda.get_device_name(0))"
+  fi
   uv venv -q --python 3.12 "$C/serve-env"
-  VIRTUAL_ENV=$C/serve-env uv pip install -q vllm
-  "$C/train-env/bin/python" -c "import torch; assert torch.cuda.is_available(); print('train env: cuda', torch.version.cuda, torch.cuda.get_device_name(0))"
+  # Pinned to the version the 17 Oct full run served with (pod-logs/serve-versions.txt).
+  VIRTUAL_ENV=$C/serve-env uv pip install -q vllm==0.31.0
   "$C/serve-env/bin/python" -c "import vllm; print('serve env: vllm', vllm.__version__)"
   ;;
 train)

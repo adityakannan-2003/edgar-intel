@@ -16,15 +16,15 @@ That single property is what everything else here rests on.
 
 ## What's in it
 
-| Component | What it does | Why it earns its place |
+| Component | What it does | What it measured |
 |---|---|---|
-| **Evaluation harness** | Golden set generated from XBRL, LLM-as-judge for narrative, Cohen's κ calibration, regression gate in CI | Evals appear in ~68% of AI-company job postings. Almost no portfolio has one. |
-| **Hybrid retrieval** | Dense + lexical fused with RRF, cross-encoder reranking, four chunking strategies measured against each other | Turns "we use recursive chunking" from a guess into a measured decision |
-| **Bounded agent** | Six typed tools, step ceiling, retry budget, loop detection, confidence floor, citation + numeric grounding checks | "Mitigating cascade failures" is a literal JD requirement. This is what it means. |
+| **Evaluation harness** | 232-case golden set generated from XBRL, LLM-as-judge for narrative, Cohen's κ calibration, regression gate in CI | Numeric accuracy 0.861. The judge came back at κ = 0.42, below its own 0.60 floor, so its narrative scores are withheld. [Details below](#a-judge-that-has-to-prove-itself) |
+| **Hybrid retrieval** | Dense + lexical fused with RRF, an optional cross-encoder reranker, four chunking strategies measured against each other | hit@5 0.762, recall@5 0.408. At an equal 512-token cap, three of the four strategies tied; chunk size mattered more. The reranker added 542 ms at p50 for no gain, so it ships off |
+| **Bounded agent** | Six typed tools, step ceiling, retry budget, loop detection, confidence floor, citation + numeric grounding checks | Numeric accuracy 0.41 as first deployed, 0.96 after three single-variable fixes; escalation rate 48% → 2.6% |
 | **MCP server** | Same tool registry exposed over MCP, hosted at [`/mcp`](#use-it-from-claude-mcp) | One set of definitions serves the agent, the HTTP API, and any MCP client |
-| **Fine-tuning benchmark** | LoRA on structured extraction, benchmarked against few-shot prompting on the same company-disjoint held-out set | Measured: the frontier prompt wins on accuracy (0.98 against 0.91 F1), and the fine-tune wins only on cost at load. [Results below](#fine-tune-vs-prompting-measured) |
-| **Serving + benchmark** | FastAPI, liveness/readiness split, p50/p95/p99, throughput, $/1k requests, concurrency sweep | Cost and latency are named constraints in most senior AI JDs |
-| **Observability** | OpenTelemetry spans, per-operation token ledger | 78% of AI companies ask for it |
+| **Fine-tuning benchmark** | LoRA on structured extraction, benchmarked against few-shot prompting on the same company-disjoint held-out set | The frontier prompt wins on accuracy (0.98 against 0.91 F1); the fine-tune wins only on cost at load. [Results below](#fine-tune-vs-prompting-measured) |
+| **Serving + benchmark** | FastAPI, liveness/readiness split, p50/p95/p99, throughput, $/1k requests, concurrency sweep | Deployed `/search`: about 25 req/s on one shared-CPU machine, 0 failures in 1,000 requests |
+| **Observability** | OpenTelemetry spans, per-operation token ledger | Every eval run records its exact cost: $0.78 per 1k requests locally |
 
 ---
 
@@ -72,7 +72,7 @@ edgar-intel index build --strategy all
 edgar-intel eval build        # generate the golden set from XBRL
 edgar-intel eval run --label baseline
 
-edgar-intel agent ask "How did R&D expense change at ALFA between FY2022 and FY2023?"
+edgar-intel agent ask "How did R&D expense change at NVDA between FY2024 and FY2025?"
 ```
 
 Run everything with **no API key and no spend** by leaving
@@ -104,13 +104,21 @@ The narrative half can't be checked against XBRL, so it uses an LLM judge — an
 then measures whether that judge agrees with a human:
 
 ```bash
-edgar-intel eval label <run_key>   # hand-label ~40 answers
-# kappa=0.74: substantial agreement, narrative scores usable
+edgar-intel eval label <run_key>   # hand-label answers
+edgar-intel eval judge-kappa --contracts v2,v3_1
 ```
 
 Below κ = 0.60 the report says so explicitly and the gate fails. An
 uncalibrated judge is a number generator, and reporting its pass rate as
 "quality" is the most common unforced error in LLM evaluation.
+
+**Measured, it failed.** On 24 hand-labelled answers the shipped judge scored
+**κ = 0.42** (95% CI 0.12–0.74): 7 false positives, 0 false negatives. It
+passed 79% of narrative answers; the human labels pass 50%. So the report marks
+narrative scores unusable, and the deployed `/stats/eval` withholds them.
+Giving the judge the source passages made it worse (κ 0.58 → 0.42), and three
+rubric revisions did not fix it. See
+[`docs/METRICS.md` §3](docs/METRICS.md#3-judge-calibration).
 
 ### Failures split by cause
 
@@ -118,12 +126,16 @@ uncalibrated judge is a number generator, and reporting its pass rate as
 edgar-intel eval failures <run_key>
 ```
 
+On the reference run:
+
 ```json
 {
-  "retrieval_misses": 23,
-  "generation_misses": 7,
+  "total_failures": 32,
+  "retrieval_misses": 27,
+  "generation_misses": 4,
+  "unlabelled_failures": 1,
   "diagnosis": "Most failures are retrieval: the evidence never reached the
-                model. Work on chunking, hybrid weighting, or k — prompt
+                model. Work on chunking, hybrid weighting, or k -- prompt
                 changes cannot fix this."
 }
 ```
@@ -254,7 +266,7 @@ ParadeDB's `pg_search` for true BM25 is a change to one function.
 ## Testing
 
 ```bash
-make test     # 128 tests, no database, no network, no model downloads
+make test     # 950 tests, no database, no network, no model downloads
 ```
 
 Every bound in the agent is tested by making the model misbehave in the
@@ -264,58 +276,22 @@ has seen fire is a limit nobody knows works.
 
 The CI eval gate (`.github/workflows/ci.yml`) loads a frozen fixture corpus,
 builds the index, runs the suite, and fails the build if overall score, numeric
-accuracy, or recall@5 regressed by more than 3 points — or if the judge's kappa
-fell below the floor.
+accuracy, or recall@5 regressed by more than 3 points. The gate also blocks any
+run whose judge κ is below the floor; CI's run uses a fake model and has no
+human labels, so there it checks only those three numbers.
 
 ---
 
-## Make this yours
+## Known gaps
 
-**This repo is a starting point, not evidence.** Code you did not write and
-cannot explain is worse than no project at all: it gets you into an interview
-you then fail. The work that converts it into something you can defend:
-
-1. **Run it against real filings.** Pick your own eight companies. The parser
-   will break on at least one of them — filings are inconsistent, and fixing
-   that is the most valuable hour you will spend here.
-2. **Build the narrative eval set properly.** The seeded references in
-   `NARRATIVE_SEEDS` are generic and say so; `NARRATIVE_REFERENCES` replaces all
-   24 of them with prose written from the filing text that
-   `edgar-intel eval narrative-sources` dumps. Do that for your own companies,
-   then hand-label the answers and look at the κ you actually get. Be ready for
-   it to come back unusable — here it came back at 0.42 with 7 false positives
-   and 0 false negatives, and three rubric revisions did not fix it.
-3. **Run the strategy comparison and record the real numbers.**
-   `edgar-intel eval compare` gives you a table. Whatever it says is your
-   result — including if section-aware loses, which happens and is interesting.
-   This repo has **not** run it yet, which is why no chunking table appears in
-   `docs/METRICS.md`.
-4. **Break something on purpose.** Set `retrieve_k=5`, watch recall collapse,
-   watch the failure breakdown correctly attribute it to retrieval. Now you
-   have seen the instrument work.
-5. **Change one thing and defend it.** Different fusion weights, a different
-   embedding model, a reranker you swap out. Measure it. That measurement is
-   the bullet on your resume.
-
-### Questions each module will attract in an interview
-
-| Module | What you will be asked |
-|---|---|
-| `retrieval/search.py` | Why hybrid over pure vector? Why RRF instead of weighted score fusion? What does `rrf_k` do and why didn't you tune it? |
-| `retrieval/metrics.py` | Difference between recall@k and precision@k here? Why report nDCG when you already have recall? |
-| `evals/judge.py` | How do you know your judge is any good? What is Cohen's κ measuring that raw agreement isn't? |
-| `evals/report.py` | Why compare against a labelled baseline instead of the previous run? |
-| `chunking/strategies.py` | Why does section-aware help on filings specifically? When would semantic chunking be worth its cost? |
-| `agent/loop.py` | What happens when the model loops? How do you catch a hallucinated number without a second model? |
-| `agent/tools.py` | Why six tools and not twenty? Why is escalation a tool? |
-| `finetune/dataset.py` | How do you label 7,161 facts without an LLM? How do you know the labels are right, and what did your first labeller get wrong? Why split by company and not by passage? |
-| `finetune/scoring.py` | Why score on the concept and not the XBRL tag? Isn't setting aside "unverifiable" predictions a way to flatter the model? Why micro F1 and not the per-passage mean? |
-| `finetune/benchmark.py` | Why fine-tune for extraction and not for analysis? Your fine-tune lost by 0.07 F1: when would you ship it anyway? How do you know 0.07 is not noise? What did it cost, and was it worth it? |
-| `finetune/train_lora.py` | Why LoRA and not full fine-tuning? Why loss on the answer only? Why did the untuned model get the digits right and the value wrong? |
-| `ingest/parse.py` | What breaks when you flatten a 10-K naively? |
-
-If you can't answer one of those from your own experience, that module is not
-ready to be on your resume yet.
+- **The narrative judge is not usable yet** (κ = 0.42). Its errors are all
+  false positives, so the likely fix is a missing rule, not a bigger model.
+  The 9-repeat calibration run is committed but not yet run.
+- **Most remaining failures are retrieval.** Of the reference run's 29 numeric
+  failures, 24 never had the expected figure in the model's context.
+- **The corpus is small:** 8 companies, 24 10-K filings, FY2023–FY2026.
+- **Untried:** a retriever that fuses both embedders, and a paid
+  single-variable reranker run on the current label set.
 
 ---
 
@@ -323,7 +299,7 @@ ready to be on your resume yet.
 
 Retrieval, chunking, indexing and all retrieval metrics run **free** — local
 embeddings on CPU, lexical search in Postgres. Only generation and judging cost
-money. A full 200-case evaluation run against a small frontier model is
+money. A full 232-case evaluation run against a small frontier model is
 typically well under a dollar; the harness reports exact `total_cost_usd` and
 `cost_per_1k_usd` on every run, so you never have to guess.
 

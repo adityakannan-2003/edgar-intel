@@ -29,6 +29,7 @@ from ..db import close_pool
 from ..evals.report import latest_run
 from ..obs.tracing import init_tracing, span
 from ..retrieval.search import search
+from . import monitoring
 
 # Its session manager is set per app start in `lifespan`: a manager's `.run()`
 # works once, and the test suite starts the app many times.
@@ -65,6 +66,10 @@ app = FastAPI(
 # with local embeddings, and none calls the paid model. A route, not a mount, so
 # a POST to /mcp is not redirected to /mcp/.
 app.add_route("/mcp", _mcp_app, include_in_schema=False)
+
+# /stats/monitoring and /dashboard, and the latency window behind them.
+app.include_router(monitoring.router)
+app.middleware("http")(monitoring.record_latency)
 
 
 @app.middleware("http")

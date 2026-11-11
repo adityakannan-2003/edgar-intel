@@ -1547,6 +1547,41 @@ edgar-intel eval long-context regrade reports/long_context/luna-{rag,lc}-p{1,2}.
 
 ---
 
+## 11. Live monitoring
+
+**Status: built 11 Nov 2026; numbers read from the live database. The latency
+window fills only once the change is deployed.** `docs/MONITORING.md` has each
+panel, its source and its limits.
+
+`/dashboard` draws `/stats/monitoring`, a read-only endpoint over the live
+system. Latency p50/p95 per endpoint (`/ask`, `/search`, `/mcp`) comes from a
+1,000-request window in the serving process, which a deploy empties. Cost per
+`/ask` request comes from `agent_traces`. Eval score over time comes from
+`eval_runs`, judge-free fields only. Freshness comes from `filings` and the
+scheduled refresh's `refresh_runs`, which is pending until that job merges.
+
+Read from the live Neon database on 11 Nov
+(`docs/monitoring/stats-monitoring-neon-20261111.json`):
+
+| | |
+|---|---|
+| `/ask` runs recorded | 9, 28 Sep to 22 Oct |
+| cost per `/ask` request | mean **$0.000453** ($0.45 per 1,000), p50 $0.000393, p95 $0.001101 |
+| agent latency per `/ask` | p50 5,582 ms, p95 17,072 ms |
+| eval history | 25 full-set runs, 12 Sep to 7 Oct; latest RAG 0.8606, latest agent 0.9615 |
+| data | 24 filings, newest loaded 11 Sep, newest SEC filing date 4 Aug 2026 |
+
+**Bullet shape: usable once deployed**
+
+> Built a live monitoring page for a deployed RAG and agent API: p50/p95 latency
+> per endpoint, model cost per request from recorded agent runs ($0.00045 mean),
+> eval accuracy across 25 runs, and data freshness from the scheduled refresh.
+
+**Caveat:** nine runs is not traffic. Quote the cost per request as measured on
+nine requests, not as a load figure. §8 has the load figures.
+
+---
+
 ## Scoreboard — what can go on a resume today
 
 | claim | status |

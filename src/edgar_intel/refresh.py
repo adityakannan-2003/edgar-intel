@@ -120,6 +120,11 @@ def stage_copy(live: psycopg.Connection, stage: psycopg.Connection) -> dict[str,
     db.apply_schema(str(SQL_DIR))
     copied = {t: _copy(live, stage, t, _columns(live, stage, t)) for t in CORPUS}
     _bump_sequences(stage)
+    # A bulk-loaded table has no statistics until autovacuum gets to it, and the
+    # planner's guesses shift as rows arrive: on 11 Nov that reordered tied lexical
+    # scores for 93 of 232 questions between "before" and "after" with no new filing
+    # involved. Analyzed, both measurements run on settled plans, as live does.
+    stage.execute("ANALYZE")
     return copied
 
 
@@ -592,6 +597,7 @@ def _stage_check_publish(live, client, new, rec, checks, notes, payload, dry_run
         before = _retrieve(old)
 
         ids, parse = ingest_new(client, new, progress)
+        stage.execute("ANALYZE")
         checks += parse
         for row in new:
             if row["accession"] in ids:
@@ -614,7 +620,9 @@ def _stage_check_publish(live, client, new, rec, checks, notes, payload, dry_run
             return "blocked", None
 
         progress(f"retrieving for {len(old)} existing questions (after)")
-        checks.append(retrieval_check(old, before, _retrieve(old)))
+        after = _retrieve(old)
+        payload["retrieval"] = {"before": before, "after": after}  # every question's passage ids, for diagnosis
+        checks.append(retrieval_check(old, before, after))
         checks.append(answer_check(added, live, rec["git_sha"], progress))
         if any(not c.passed for c in checks):
             notes.append("**Blocked by the eval gate. Nothing was published; the live database is unchanged.**")

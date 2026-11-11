@@ -501,6 +501,11 @@ def publish(live: psycopg.Connection, stage: psycopg.Connection, hwm: dict[str, 
 
 
 # ------------------------------------------------------------------ report
+def _cell(text: str) -> str:
+    """A model's answer can quote a table row; its pipes would split the report's table."""
+    return text.replace("|", "\\|").replace("\n", " ")
+
+
 def render(run: dict[str, Any], checks: list[Check], notes: list[str]) -> str:
     head = {"ok": "OK", "blocked": "BLOCKED", "failed": "FAILED"}[run["status"]]
     if run["status"] == "ok" and run.get("dry_run") and run["new_filings"]:
@@ -517,11 +522,11 @@ def render(run: dict[str, Any], checks: list[Check], notes: list[str]) -> str:
     failed = [c for c in checks if not c.passed]
     if failed:
         lines += ["", f"## What failed: {len(failed)}", "", "| filing | check | detail |", "|---|---|---|"]
-        lines += [f"| {c.subject} | {c.name} | {c.detail} |" for c in failed]
+        lines += [f"| {c.subject} | {c.name} | {_cell(c.detail)} |" for c in failed]
     if checks:
         lines += ["", f"## Every check: {len(checks) - len(failed)} of {len(checks)} passed", "",
                   "| filing | check | result | detail |", "|---|---|---|---|"]
-        lines += [f"| {c.subject} | {c.name} | {'ok' if c.passed else 'FAIL'} | {c.detail} |" for c in checks]
+        lines += [f"| {c.subject} | {c.name} | {'ok' if c.passed else 'FAIL'} | {_cell(c.detail)} |" for c in checks]
     return "\n".join(lines) + "\n"
 
 
@@ -633,7 +638,8 @@ def _stage_check_publish(live, client, new, rec, checks, notes, payload, dry_run
                          "published. Nothing was published or recorded.")
             return "ok", None
 
-        rec["status"], rec["filings_added"] = "ok", len(new)
-        counts, run_id = publish(live, stage, hwm, {**rec, "report": None}, base, added)
+        counts, run_id = publish(live, stage, hwm, {**rec, "status": "ok", "filings_added": len(new), "report": None},
+                                 base, added)
+        rec["filings_added"] = len(new)  # only once committed: a failed publish must not record filings
         notes.append("Published in one transaction: " + ", ".join(f"{n:,} {t}" for t, n in counts.items()) + ".")
         return "ok", run_id

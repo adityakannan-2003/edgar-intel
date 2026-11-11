@@ -150,7 +150,9 @@ nothing.
 
 ## Proofs, 11 Nov 2026
 
-All three ran at `dfd62aa` from a clean Python 3.11 venv installed the way the
+All three ran at `dfd62aa` (the next commit changes only the failure path's
+`filings_added` and escapes `|` in report cells; neither appears in these
+outputs) from a clean Python 3.11 venv installed the way the
 workflow installs (CPU torch, then `.[models]`). They ran against a local
 stand-in for Neon, `edgar_refresh_live`, a template copy of `edgar_deploy`:
 24 filings, 264 sections, 5,468 chunks, 1,363 facts and 36 eval runs, the

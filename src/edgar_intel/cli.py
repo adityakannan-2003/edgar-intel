@@ -1917,8 +1917,12 @@ def refresh_run(
     from .refresh import run
 
     ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()] or None
-    status, report, path = run(live_dsn, ticker_list, dry_run, trigger, report_dir,
-                               progress=lambda m: console.log(m))
+    try:
+        status, report, path = run(live_dsn, ticker_list, dry_run, trigger, report_dir,
+                                   progress=lambda m: console.log(m))
+    except Exception as exc:  # before a run can record itself: live unreachable, or staging misconfigured
+        console.print(f"[red]refresh failed before it could run:[/red] {type(exc).__name__}: {exc}", markup=True)
+        raise typer.Exit(2) from exc
     console.print(report, markup=False, highlight=False)
     console.print(f"[dim]report: {path}[/dim]")
     raise typer.Exit({"ok": 0, "blocked": 1}.get(status, 2))

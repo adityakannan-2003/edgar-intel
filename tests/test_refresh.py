@@ -115,12 +115,13 @@ class TestReport:
         new = [{"ticker": "AAPL", "accession": "0000320193-26-000026", "fiscal_year": 2026,
                 "filing_date": "2026-11-03"}]
         checks = [Check("AAPL 0000320193-26-000026 FY2026", "XBRL figures appear in the filing text", False,
-                        "NOT FOUND total revenue"), Check("eval gate", "x", True, "fine")]
+                        "NOT FOUND total revenue"), Check("eval gate", "x", True, "got 'net sales | 416,161'")]
         text = render(_run("blocked", new_filings=new), checks, ["Nothing was published."])
         assert text.startswith("# edgar-intel refresh BLOCKED")
         assert "## What failed: 1" in text
         assert "| AAPL 0000320193-26-000026 FY2026 | XBRL figures appear in the filing text | NOT FOUND" in text
         assert "1 of 2 passed" in text
+        assert "got 'net sales \\| 416,161' |" in text  # a quoted table row stays inside its cell
 
     def test_nothing_new_says_so(self):
         assert render(_run("ok"), [], []).startswith("# edgar-intel refresh OK: nothing new")
@@ -129,6 +130,19 @@ class TestReport:
         new = [{"ticker": "COST", "accession": "x", "fiscal_year": 2026, "filing_date": "2026-10-07"}]
         head = render(_run("ok", new_filings=new, dry_run=True), [], []).splitlines()[0]
         assert head == "# edgar-intel refresh OK: 1 filing(s) passed, not published (dry run)"
+
+
+def test_a_run_that_cannot_start_exits_as_failed(monkeypatch):
+    from typer.testing import CliRunner
+
+    from edgar_intel.cli import app
+
+    def unreachable(*a, **k):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(refresh, "run", unreachable)
+    result = CliRunner().invoke(app, ["refresh", "run"], env={"REFRESH_LIVE_DSN": "postgresql://x/y"})
+    assert result.exit_code == 2 and "connection refused" in result.output
 
 
 def test_staging_may_not_be_the_live_database(monkeypatch):

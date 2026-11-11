@@ -1893,6 +1893,55 @@ def router_score(
         console.print(f"wrote {out}")
 
 
+# ------------------------------------------------------------------ refresh
+refresh_app = typer.Typer(help="Scheduled data refresh: new 10-Ks, checked and gated (docs/REFRESH.md).")
+app.add_typer(refresh_app, name="refresh")
+_LIVE_DSN = typer.Option(..., envvar="REFRESH_LIVE_DSN", show_default=False,
+                         help="The database the service reads. Read from the environment; never printed.")
+
+
+@refresh_app.command("run")
+def refresh_run(
+    live_dsn: str = _LIVE_DSN,
+    tickers: str = typer.Option("", help="Comma-separated; default every company live serves."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Stage, check and gate; publish and record nothing."),
+    trigger: str = typer.Option("manual", help="Recorded with the run: schedule | manual."),
+    report_dir: str = typer.Option("reports/refresh"),
+) -> None:
+    """Find new 10-Ks; stage, check and gate them; publish only if every check passes.
+
+    EDGAR_DB_DSN must be an empty database the job may fill (staging); the live
+    database is written once, at the end, in one transaction. Exit 0: nothing
+    new, or published. 1: blocked by a check. 2: failed.
+    """
+    from .refresh import run
+
+    ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()] or None
+    status, report, path = run(live_dsn, ticker_list, dry_run, trigger, report_dir,
+                               progress=lambda m: console.log(m))
+    console.print(report, markup=False, highlight=False)
+    console.print(f"[dim]report: {path}[/dim]")
+    raise typer.Exit({"ok": 0, "blocked": 1}.get(status, 2))
+
+
+@refresh_app.command("golden")
+def refresh_golden(
+    live_dsn: str = _LIVE_DSN,
+    out: str = typer.Option("evalset/golden-refreshed.json", help="Not golden.json: compare before replacing it."),
+) -> None:
+    """Export the golden set the refresh keeps in live: the original cases plus every published filing's."""
+    import psycopg
+    from psycopg.rows import dict_row
+
+    from .evals.goldenset import save
+    from .refresh import load_golden
+
+    with psycopg.connect(live_dsn, row_factory=dict_row) as live:
+        cases = load_golden(live) or []
+    save(cases, out)
+    console.print(f"{len(cases)} cases written to {out}")
+
+
 @app.command("config")
 def show_config() -> None:
     s = get_settings()

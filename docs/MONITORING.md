@@ -12,6 +12,13 @@ Grafana Cloud). This adds the dashboard.
   local app read the live Neon database with every transaction forced
   read-only. The latency panel in it is empty because the latency window
   belongs to the process serving the page, and that was a local one.
+- **Live snapshot:** `docs/monitoring/*-live-20261111.*` is the deployed page
+  and its JSON at 20:08 UTC on 11 Nov, after the deploy of `4708e8f`. Its
+  latency rows come from requests sent to check the deploy: 8 `/search`
+  queries (p50 183 ms, p95 271 ms) and 11 `/mcp` requests (p50 26 ms,
+  p95 323 ms), the 11 including `initialize`, `tools/list` and 3 calls with
+  bad arguments. There was no `/ask` call, because it spends the model key and
+  writes a trace row.
 
 ## Why a page served by the app, not a Grafana dashboard
 

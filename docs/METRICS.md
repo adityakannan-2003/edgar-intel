@@ -1545,6 +1545,58 @@ edgar-intel eval long-context report reports/long_context/luna-{rag,lc}-p{1,2}.j
 edgar-intel eval long-context regrade reports/long_context/luna-{rag,lc}-p{1,2}.jsonl   # free; writes regrade-<sha>.json
 ```
 
+## 11. Data refresh
+
+**Status: built and proven locally, 11 Nov 2026; not yet run against Neon**
+(`docs/REFRESH.md`; `reports/refresh/`). Predictions were committed before
+the first run (`9f46f14`) and are scored in the doc: 9 of 11 held outright,
+one missed (a truncated filing passed the parse checks), and one held only
+after the fix below.
+
+A weekly GitHub Actions job finds 10-Ks newer than the live database holds,
+builds them in a staging copy of live, checks them, and gates them. It writes
+to live in one transaction only if everything passed. On 11 Nov two such
+filings existed on EDGAR (AAPL and COST, FY2026), so the proofs used real
+filings against a local stand-in for Neon:
+
+| proof | result |
+|---|---|
+| nothing new | "nothing new", exit 0; every live table byte-identical (md5 per table); 8 SEC requests |
+| corrupted data (AAPL revenue ×10 in companyfacts; COST's 10-K truncated to 40%) | **blocked**, exit 1, $0; the report names both filings and the failing check; live corpus byte-identical |
+| real new 10-Ks | 35 of 35 checks passed; new questions **18/20** against a floor of 0.706; 0 of 232 existing questions changed passages; published 2 filings, 304 chunks, 20 facts and 20 golden questions in one transaction; $0.0134 |
+| crash mid-publish, and a concurrent writer | rolled back with live byte-identical; refused with live unchanged |
+
+The figure check is the one that caught both corruptions. It requires each
+core XBRL fact to appear verbatim in its own filing's text, so two separate
+SEC sources have to agree. It raised 0 false alarms on the 24 filings
+already in the corpus (210 of 219 figures checkable), after a first version
+raised 10.
+
+**Found on the way:** which of several tied passages a question retrieves
+depends on the table's physical state. The same 232 questions on identical
+data score hit@5 **0.7619 or 0.7662** depending on whether autovacuum has
+vacuumed `chunks`, and 93 change passages between the two states. Reproduced
+exactly with autovacuum off (`reports/refresh/plan_stability.txt`). The
+refresh now vacuums staging before each pass. A deterministic tiebreaker in
+`retrieval/search.py` is the real fix, and it is not made here.
+
+**Expect to be asked:** *How do you know bad data can't reach production?*
+Production is written once per run, in one transaction, after every check
+has passed, and only with rows above a snapshot's high-water mark. The proof
+crashes a publish after every row is copied and shows live unchanged. *Why
+not re-run the whole eval set each week?* Search filters each question to its
+company and year, so a new filing cannot change an old question's context.
+The gate measures that for free (0 of 232 changed) and spends money only on
+the new questions.
+
+**Produce it**
+
+```bash
+# local: an empty staging database, and a copy of the deployed corpus standing in for Neon
+psql "$LOCAL/postgres" -c "CREATE DATABASE edgar_refresh_live TEMPLATE edgar_deploy;" -c "CREATE DATABASE edgar_refresh_stage;"
+EDGAR_DB_DSN=$LOCAL/edgar_refresh_stage REFRESH_LIVE_DSN=$LOCAL/edgar_refresh_live edgar-intel refresh run   # spends ~$0.013 per new filing pair
+```
+
 ---
 
 ## Scoreboard — what can go on a resume today
@@ -1586,6 +1638,8 @@ edgar-intel eval long-context regrade reports/long_context/luna-{rag,lc}-p{1,2}.
 | regression gate in CI | ✅ running since 5 Oct against a committed baseline; fails on a deliberate regression; nothing caught yet (§4) |
 | LoRA fine-tune comparison: Qwen3-8B + LoRA 0.91 against gpt-6.1-sol few-shot 0.98 micro F1 on 532 company-disjoint cases; $0.06 against $1.54–2.07 per 1k at load; 0.77 GPU-hours | ✅ measured (§9) |
 | fine-tune labels: 50 of 50 audited held-out labels right, after a first audit's 49 of 50 led to a fix | ✅ measured, confirmed by Aditya (§9) |
+| weekly data refresh: new 10-Ks staged, checked and gated, then published to live in one transaction or not at all; a corrupted figure and a truncated filing blocked with a report naming each; 2 real FY2026 10-Ks published end to end (new questions 18/20, 0 of 232 old questions moved) | ✅ proven locally against a stand-in for Neon (§11); first live run after merge |
+| retrieval's tie order depends on the table's physical state: hit@5 0.7619 or 0.7662 on identical data, 93 of 232 questions moved | ✅ measured, reproduced with autovacuum off (§11); fix not made |
 | live URL: **https://edgar-intel.fly.dev** — `/ask` returns 401 without the key and answers with it; `/stats/eval` serves the reference run | ✅ deployed 18 Oct, verified in `docs/DEPLOY.md` §4's order (§8) |
 
 ## Metrics that carry the most weight, ranked

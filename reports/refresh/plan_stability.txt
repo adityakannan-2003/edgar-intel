@@ -1,0 +1,3 @@
+MODE=vacuum-then-analyze: 93 of 232 changed (59 same passages reordered, 34 with a different passage); hit@5 0.7662 -> 0.7619
+MODE=vacuum-both: 0 of 232 changed (0 same passages reordered, 0 with a different passage); hit@5 0.7662 -> 0.7662
+MODE=none: 0 of 232 changed (0 same passages reordered, 0 with a different passage); hit@5 0.7619 -> 0.7619

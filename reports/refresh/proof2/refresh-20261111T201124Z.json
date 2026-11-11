@@ -1,0 +1,566 @@
+{
+  "new_cases": [
+    {
+      "case_id": "num-AAPL-OperatingIncomeLoss-2026",
+      "kind": "numeric",
+      "question": "How much operating income did Apple Inc. report in FY2026?",
+      "expected": "$158.06 billion",
+      "expected_value": 158063000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [
+        "62912",
+        "62947"
+      ],
+      "ticker": "AAPL",
+      "fiscal_year": 2026,
+      "tag": "OperatingIncomeLoss",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-AAPL-EarningsPerShareDiluted-2026",
+      "kind": "numeric",
+      "question": "What was Apple Inc.'s diluted earnings per share for fiscal year 2026?",
+      "expected": "$8.98",
+      "expected_value": 8.98,
+      "unit": "USD/shares",
+      "relevant_chunk_ids": [
+        "62912",
+        "62923"
+      ],
+      "ticker": "AAPL",
+      "fiscal_year": 2026,
+      "tag": "EarningsPerShareDiluted",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-AAPL-RevenueFromContractWithCustomerExcludingAssessedTax-2026",
+      "kind": "numeric",
+      "question": "What was Apple Inc.'s total revenue for fiscal year 2026?",
+      "expected": "$4,788.34 billion",
+      "expected_value": 4788340000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [],
+      "ticker": "AAPL",
+      "fiscal_year": 2026,
+      "tag": "RevenueFromContractWithCustomerExcludingAssessedTax",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-AAPL-GrossProfit-2026",
+      "kind": "numeric",
+      "question": "How much gross profit did Apple Inc. report in FY2026?",
+      "expected": "$233.60 billion",
+      "expected_value": 233602000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [
+        "62902",
+        "62912"
+      ],
+      "ticker": "AAPL",
+      "fiscal_year": 2026,
+      "tag": "GrossProfit",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-AAPL-Assets-2026",
+      "kind": "numeric",
+      "question": "How much total assets did Apple Inc. report in FY2026?",
+      "expected": "$404.55 billion",
+      "expected_value": 404548000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [
+        "62914",
+        "62915"
+      ],
+      "ticker": "AAPL",
+      "fiscal_year": 2026,
+      "tag": "Assets",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-AAPL-Liabilities-2026",
+      "kind": "numeric",
+      "question": "According to Apple Inc.'s FY2026 10-K, what was total liabilities?",
+      "expected": "$292.45 billion",
+      "expected_value": 292455000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [
+        "62914"
+      ],
+      "ticker": "AAPL",
+      "fiscal_year": 2026,
+      "tag": "Liabilities",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-AAPL-StockholdersEquity-2026",
+      "kind": "numeric",
+      "question": "What was Apple Inc.'s total stockholders' equity for fiscal year 2026?",
+      "expected": "$112.09 billion",
+      "expected_value": 112093000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [
+        "62914",
+        "62915",
+        "62916"
+      ],
+      "ticker": "AAPL",
+      "fiscal_year": 2026,
+      "tag": "StockholdersEquity",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "yoy-AAPL-GrossProfit-2025-2026",
+      "kind": "numeric",
+      "question": "What was the year-over-year change in Apple Inc.'s gross profit between FY2025 and FY2026?",
+      "expected": "increased 19.7%",
+      "expected_value": 19.6725,
+      "unit": "percent",
+      "relevant_chunk_ids": [
+        "62902",
+        "62912"
+      ],
+      "ticker": "AAPL",
+      "fiscal_year": 2026,
+      "tag": "GrossProfit",
+      "difficulty": "comparative",
+      "notes": "FY2025=195,201,000,000, FY2026=233,602,000,000"
+    },
+    {
+      "case_id": "yoy-AAPL-OperatingIncomeLoss-2025-2026",
+      "kind": "numeric",
+      "question": "How did Apple Inc.'s operating income change from FY2025 to FY2026?",
+      "expected": "increased 18.8%",
+      "expected_value": 18.7997,
+      "unit": "percent",
+      "relevant_chunk_ids": [
+        "62912",
+        "62947"
+      ],
+      "ticker": "AAPL",
+      "fiscal_year": 2026,
+      "tag": "OperatingIncomeLoss",
+      "difficulty": "comparative",
+      "notes": "FY2025=133,050,000,000, FY2026=158,063,000,000"
+    },
+    {
+      "case_id": "yoy-AAPL-ResearchAndDevelopmentExpense-2025-2026",
+      "kind": "numeric",
+      "question": "How did Apple Inc.'s research and development expense change from FY2025 to FY2026?",
+      "expected": "increased 32.5%",
+      "expected_value": 32.4602,
+      "unit": "percent",
+      "relevant_chunk_ids": [
+        "62903",
+        "62912",
+        "62947"
+      ],
+      "ticker": "AAPL",
+      "fiscal_year": 2026,
+      "tag": "ResearchAndDevelopmentExpense",
+      "difficulty": "comparative",
+      "notes": "FY2025=34,550,000,000, FY2026=45,765,000,000"
+    },
+    {
+      "case_id": "num-COST-Liabilities-2026",
+      "kind": "numeric",
+      "question": "How much total liabilities did COSTCO WHOLESALE CORP /NEW report in FY2026?",
+      "expected": "$53.24 billion",
+      "expected_value": 53242000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [],
+      "ticker": "COST",
+      "fiscal_year": 2026,
+      "tag": "Liabilities",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-COST-CashAndCashEquivalentsAtCarryingValue-2026",
+      "kind": "numeric",
+      "question": "According to COSTCO WHOLESALE CORP /NEW's FY2026 10-K, what was cash and cash equivalents?",
+      "expected": "$20.21 billion",
+      "expected_value": 20207000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [
+        "63057"
+      ],
+      "ticker": "COST",
+      "fiscal_year": 2026,
+      "tag": "CashAndCashEquivalentsAtCarryingValue",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-COST-Assets-2026",
+      "kind": "numeric",
+      "question": "What was COSTCO WHOLESALE CORP /NEW's total assets for fiscal year 2026?",
+      "expected": "$89.05 billion",
+      "expected_value": 89045000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [
+        "63057"
+      ],
+      "ticker": "COST",
+      "fiscal_year": 2026,
+      "tag": "Assets",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-COST-NetIncomeLoss-2026",
+      "kind": "numeric",
+      "question": "According to COSTCO WHOLESALE CORP /NEW's FY2026 10-K, what was net income?",
+      "expected": "$9.23 billion",
+      "expected_value": 9226000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [
+        "63034",
+        "63056",
+        "63057"
+      ],
+      "ticker": "COST",
+      "fiscal_year": 2026,
+      "tag": "NetIncomeLoss",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-COST-EarningsPerShareDiluted-2026",
+      "kind": "numeric",
+      "question": "According to COSTCO WHOLESALE CORP /NEW's FY2026 10-K, what was diluted earnings per share?",
+      "expected": "$20.76",
+      "expected_value": 20.76,
+      "unit": "USD/shares",
+      "relevant_chunk_ids": [
+        "63034",
+        "63056"
+      ],
+      "ticker": "COST",
+      "fiscal_year": 2026,
+      "tag": "EarningsPerShareDiluted",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-COST-RevenueFromContractWithCustomerExcludingAssessedTax-2026",
+      "kind": "numeric",
+      "question": "How much total revenue did COSTCO WHOLESALE CORP /NEW report in FY2026?",
+      "expected": "$303.15 billion",
+      "expected_value": 303154000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [
+        "63056"
+      ],
+      "ticker": "COST",
+      "fiscal_year": 2026,
+      "tag": "RevenueFromContractWithCustomerExcludingAssessedTax",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-COST-OperatingIncomeLoss-2026",
+      "kind": "numeric",
+      "question": "What was COSTCO WHOLESALE CORP /NEW's operating income for fiscal year 2026?",
+      "expected": "$11.69 billion",
+      "expected_value": 11685000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [
+        "63056"
+      ],
+      "ticker": "COST",
+      "fiscal_year": 2026,
+      "tag": "OperatingIncomeLoss",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "yoy-COST-CashAndCashEquivalentsAtCarryingValue-2025-2026",
+      "kind": "numeric",
+      "question": "How did COSTCO WHOLESALE CORP /NEW's cash and cash equivalents change from FY2025 to FY2026?",
+      "expected": "increased 42.7%",
+      "expected_value": 42.6947,
+      "unit": "percent",
+      "relevant_chunk_ids": [
+        "63057"
+      ],
+      "ticker": "COST",
+      "fiscal_year": 2026,
+      "tag": "CashAndCashEquivalentsAtCarryingValue",
+      "difficulty": "comparative",
+      "notes": "FY2025=14,161,000,000, FY2026=20,207,000,000"
+    },
+    {
+      "case_id": "yoy-COST-RevenueFromContractWithCustomerExcludingAssessedTax-2025-2026",
+      "kind": "numeric",
+      "question": "How did COSTCO WHOLESALE CORP /NEW's total revenue change from FY2025 to FY2026?",
+      "expected": "increased 10.1%",
+      "expected_value": 10.1437,
+      "unit": "percent",
+      "relevant_chunk_ids": [
+        "63056"
+      ],
+      "ticker": "COST",
+      "fiscal_year": 2026,
+      "tag": "RevenueFromContractWithCustomerExcludingAssessedTax",
+      "difficulty": "comparative",
+      "notes": "FY2025=275,235,000,000, FY2026=303,154,000,000"
+    },
+    {
+      "case_id": "yoy-COST-EarningsPerShareDiluted-2025-2026",
+      "kind": "numeric",
+      "question": "How did COSTCO WHOLESALE CORP /NEW's diluted earnings per share change from FY2025 to FY2026?",
+      "expected": "increased 14.0%",
+      "expected_value": 14.0033,
+      "unit": "percent",
+      "relevant_chunk_ids": [
+        "63034",
+        "63056"
+      ],
+      "ticker": "COST",
+      "fiscal_year": 2026,
+      "tag": "EarningsPerShareDiluted",
+      "difficulty": "comparative",
+      "notes": "FY2025=18.21, FY2026=20.76"
+    }
+  ],
+  "run": {
+    "started_at": "2026-11-11 20:11:24.227224+00:00",
+    "status": "blocked",
+    "filings_added": 0,
+    "trigger": "manual (proof 2: corrupted)",
+    "git_sha": "dfd62aa",
+    "new_filings": [
+      {
+        "accession": "0000320193-26-000026",
+        "form": "10-K",
+        "filing_date": "2026-11-03",
+        "period_end": "2026-09-26",
+        "primary_doc": "aapl-20260926.htm",
+        "cik": "0000320193",
+        "ticker": "AAPL",
+        "name": "Apple Inc.",
+        "fiscal_year": 2026
+      },
+      {
+        "accession": "0000909832-26-000093",
+        "form": "10-K",
+        "filing_date": "2026-10-07",
+        "period_end": "2026-08-30",
+        "primary_doc": "cost-20260830.htm",
+        "cik": "0000909832",
+        "ticker": "COST",
+        "name": "COSTCO WHOLESALE CORP /NEW",
+        "fiscal_year": 2026
+      }
+    ],
+    "dry_run": false
+  },
+  "checks": [
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "text extracted",
+      "passed": true,
+      "detail": "249,436 chars"
+    },
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "required items located",
+      "passed": true,
+      "detail": "found 1, 1A, 1B, 2, 3, 5, 7, 7A, 8, 9A"
+    },
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "offsets on body, not table of contents",
+      "passed": true,
+      "detail": "10 headings spanning 83% of the document"
+    },
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "located items survive splitting",
+      "passed": true,
+      "detail": "all located items became sections"
+    },
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "substantive items have content",
+      "passed": true,
+      "detail": "Items 1, 1A and 7 all have full bodies"
+    },
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "MD&A retained figures",
+      "passed": true,
+      "detail": "177 large numbers, 217 table separators"
+    },
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "risk factors not fused with financials",
+      "passed": true,
+      "detail": "86,552 chars, 19 large numbers"
+    },
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "items in document order",
+      "passed": true,
+      "detail": "ascending"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "text extracted",
+      "passed": true,
+      "detail": "137,405 chars"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "required items located",
+      "passed": true,
+      "detail": "found 1, 1A, 1B, 2, 3, 5, 7, 7A, 8"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "offsets on body, not table of contents",
+      "passed": true,
+      "detail": "9 headings spanning 78% of the document"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "located items survive splitting",
+      "passed": true,
+      "detail": "all located items became sections"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "substantive items have content",
+      "passed": true,
+      "detail": "Items 1, 1A and 7 all have full bodies"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "MD&A retained figures",
+      "passed": true,
+      "detail": "157 large numbers, 181 table separators"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "risk factors not fused with financials",
+      "passed": true,
+      "detail": "44,315 chars, 5 large numbers"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "items in document order",
+      "passed": true,
+      "detail": "ascending"
+    },
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "same core XBRL facts as last year",
+      "passed": true,
+      "detail": "11 core facts for FY2026, 11 for FY2025"
+    },
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "XBRL figures appear in the filing text",
+      "passed": false,
+      "detail": "10 of 11 found (0 too round to look for); NOT FOUND total revenue $4,788.34 billion (XBRL RevenueFromContractWithCustomerExcludingAssessedTax, looked for 4,788,340,000,000 / 4,788,340,000 / 4,788,340)"
+    },
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "chunks embedded",
+      "passed": true,
+      "detail": "161 chunks, 161 embedded, 0 empty"
+    },
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "chunk count in line with last year",
+      "passed": true,
+      "detail": "161 vs 144 for FY2025 (1.12x; allowed 0.5x to 2x)"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "same core XBRL facts as last year",
+      "passed": true,
+      "detail": "9 core facts for FY2026, 9 for FY2025"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "XBRL figures appear in the filing text",
+      "passed": false,
+      "detail": "7 of 9 found (0 too round to look for); NOT FOUND total liabilities $53.24 billion (XBRL Liabilities, looked for 53,242,000,000 / 53,242,000 / 53,242); NOT FOUND total stockholders' equity $35.80 billion (XBRL StockholdersEquity, looked for 35,803,000,000 / 35,803,000 / 35,803)"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "chunks embedded",
+      "passed": true,
+      "detail": "88 chunks, 88 embedded, 0 empty"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "chunk count in line with last year",
+      "passed": true,
+      "detail": "88 vs 140 for FY2025 (0.63x; allowed 0.5x to 2x)"
+    },
+    {
+      "subject": "AAPL XBRL facts, all years",
+      "name": "one value per tag and year",
+      "passed": true,
+      "detail": "none conflict"
+    },
+    {
+      "subject": "AAPL XBRL facts, all years",
+      "name": "fact periods agree with the filing index",
+      "passed": true,
+      "detail": "all within a week"
+    },
+    {
+      "subject": "AAPL XBRL facts, all years",
+      "name": "year labels advance with period ends",
+      "passed": true,
+      "detail": "all consistent"
+    },
+    {
+      "subject": "AAPL XBRL facts, all years",
+      "name": "no fiscal year skipped",
+      "passed": true,
+      "detail": "none skipped"
+    },
+    {
+      "subject": "COST XBRL facts, all years",
+      "name": "one value per tag and year",
+      "passed": true,
+      "detail": "none conflict"
+    },
+    {
+      "subject": "COST XBRL facts, all years",
+      "name": "fact periods agree with the filing index",
+      "passed": true,
+      "detail": "all within a week"
+    },
+    {
+      "subject": "COST XBRL facts, all years",
+      "name": "year labels advance with period ends",
+      "passed": true,
+      "detail": "all consistent"
+    },
+    {
+      "subject": "COST XBRL facts, all years",
+      "name": "no fiscal year skipped",
+      "passed": true,
+      "detail": "none skipped"
+    },
+    {
+      "subject": "golden set",
+      "name": "new questions have evidence in their filing",
+      "passed": false,
+      "detail": "18 of 20 linked; unlinked: num-AAPL-RevenueFromContractWithCustomerExcludingAssessedTax-2026, num-COST-Liabilities-2026"
+    }
+  ]
+}

@@ -120,11 +120,12 @@ def stage_copy(live: psycopg.Connection, stage: psycopg.Connection) -> dict[str,
     db.apply_schema(str(SQL_DIR))
     copied = {t: _copy(live, stage, t, _columns(live, stage, t)) for t in CORPUS}
     _bump_sequences(stage)
-    # A bulk-loaded table has no statistics until autovacuum gets to it, and the
-    # planner's guesses shift as rows arrive: on 11 Nov that reordered tied lexical
-    # scores for 93 of 232 questions between "before" and "after" with no new filing
-    # involved. Analyzed, both measurements run on settled plans, as live does.
-    stage.execute("ANALYZE")
+    # Search orders tied scores however the plan happens to produce them, and the
+    # plan follows the visibility map. Left to autovacuum, staging was vacuumed
+    # between the two retrievals on 11 Nov, and 93 of 232 old questions swapped tied
+    # passages with no new filing involved (docs/REFRESH.md). Vacuumed here and after
+    # the ingest, both retrievals run on the same physical state.
+    stage.execute("VACUUM ANALYZE")
     return copied
 
 
@@ -597,7 +598,7 @@ def _stage_check_publish(live, client, new, rec, checks, notes, payload, dry_run
         before = _retrieve(old)
 
         ids, parse = ingest_new(client, new, progress)
-        stage.execute("ANALYZE")
+        stage.execute("VACUUM ANALYZE")
         checks += parse
         for row in new:
             if row["accession"] in ids:

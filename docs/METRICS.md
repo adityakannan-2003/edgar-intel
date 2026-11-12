@@ -1710,15 +1710,15 @@ nine requests, not as a load figure. §8 has the load figures.
 
 ---
 
-## 11. Return on investment
+## 12. Return on investment
 
-**Status: written 11 Nov 2026 from the measured figures above and dated
-prices; no model calls.** The full memo, with every source, is `docs/ROI.md`.
+**Status: written 11 Nov 2026, updated 12 Nov with §11's live cost, from the
+measured figures above and dated prices; no model calls.** The full memo, with every source, is `docs/ROI.md`.
 The lookup and check times are **assumptions, not timings**.
 
 | cost per answer | running cost | break-even (assumed: 5-min manual lookup, 1-min check of a cited answer) | either assumption off 2× |
 |---|---|---|---|
-| $0.00032 (agent on gpt-4o-mini, `reports/router/full-score.json`) | $6.70 a month (Fly) + $0 (Neon free) + $0.32 per 1,000 questions | about 2 questions a month; 76% less analyst time at $49.79/hr (BLS 2025 median) | 1–20 questions a month; 17–90% less time |
+| $0.00032 (agent on gpt-4o-mini, `reports/router/full-score.json`); $0.00045 mean on 9 live requests (§11) | $6.70 a month (Fly) + $0 (Neon free) + $0.32 per 1,000 questions | about 2 questions a month; 76% less analyst time at $49.79/hr (BLS 2025 median) | 1–20 questions a month; 17–90% less time |
 
 ---
 

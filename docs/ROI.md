@@ -1,6 +1,7 @@
 # ROI memo: what edgar-intel costs, what it replaces, when it pays
 
-Written 11 Nov 2026, with no model calls. Every figure is measured (its
+Written 11 Nov 2026 and updated 12 Nov with the live monitoring and
+refresh figures, with no model calls. Every figure is measured (its
 results file is named beside it) or a dated price, with two exceptions. The
 lookup and check times are **assumptions**, and section 4 tests them at 2×
 either way. Question volumes are labelled scenarios.
@@ -34,9 +35,15 @@ Measured on the same 208 XBRL-graded numeric questions:
 | whole 10-K in context, gpt-6-luna | $1.95 (9.7 questions per filing); $10.71 at one | 206 · 206 as run | 2.6 s / 4.7 s | same, and `cost-by-reuse.json` |
 
 - Agent costs come from eval runs and include a few cents of judge calls,
-  which live `/ask` does not make. The one live `/ask` call measured cost
-  **$0.000425** and took 4.7 s (`docs/DEPLOY.md`, Cost). That is one call,
-  not a distribution.
+  which live `/ask` does not make.
+- **Live `/ask`, from the monitoring page:** a mean of $0.000453 per request
+  ($0.45 per 1,000; p50 $0.000393, p95 $0.001101), with latency p50 5.6 s
+  and p95 17.1 s. That covers 9 recorded requests from 28 Sep to 22 Oct
+  (`docs/METRICS.md` §11 Live monitoring;
+  `docs/monitoring/stats-monitoring-neon-20261111.json`). Nine requests are
+  not traffic. At the live rate, the monthly totals in section 2 rise by
+  $0.13 per 1,000 questions, and no break-even in section 4 moves by more
+  than 0.1 question a month.
 - After a grader fix, long context re-graded to 207 and 208
   (`reports/long_context/regrade-527e0f0.json`).
 
@@ -47,6 +54,7 @@ Measured on the same 208 XBRL-graded numeric questions:
 | Fly machine, 1 GB shared-cpu-1, always on | $6.70 | `docs/DEPLOY.md`, Cost (Fly's pricing page, 17 Oct 2026) |
 | Neon Postgres, free plan | $0 (81 MB of the 1 GB limit) | `docs/DEPLOY.md`; `docs/METRICS.md` §8 |
 | model calls | $0.32 per 1,000 questions | section 1 |
+| weekly SEC data refresh | $0 in a week with no new 10-K; about $0.013 in model calls per run that finds one | `docs/REFRESH.md` |
 | **total at 1,000 questions a month** | **$7.02** | arithmetic |
 | total at 10,000 / 100,000 a month | $9.90 / $38.70 | arithmetic |
 

@@ -73,4 +73,4 @@ Golden set: live had none stored, so the original 232 cases were rebuilt from th
 | COST XBRL facts, all years | no fiscal year skipped | ok | none skipped |
 | golden set | new questions have evidence in their filing | FAIL | 18 of 20 linked; unlinked: num-AAPL-RevenueFromContractWithCustomerExcludingAssessedTax-2026, num-COST-Liabilities-2026 |
 
-status: blocked report: /Users/adityakannan/dev/edgar-intel/.claude/worktrees/exp-rag-vs-long-context-370712/reports/refresh/proof2/refresh-20261111T201124Z.md
+status: blocked report: reports/refresh/proof2/refresh-20261111T201124Z.md

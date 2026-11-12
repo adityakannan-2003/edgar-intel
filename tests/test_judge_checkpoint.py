@@ -375,4 +375,5 @@ class TestMigrationNumbering:
         assert names == ["001_schema.sql", "002_fact_period_uniqueness.sql",
                          "003_eval_result_replay_context.sql",
                          "004_fact_prior_year_value.sql",
-                         "005_eval_result_agent.sql"]
+                         "005_eval_result_agent.sql",
+                         "006_refresh_runs.sql"]

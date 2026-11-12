@@ -1,0 +1,91 @@
+name: refresh
+
+# The weekly data refresh (docs/REFRESH.md). Finds 10-Ks newer than what the
+# live database holds, stages and checks them in a throwaway Postgres, runs the
+# eval gate, and publishes to live in one transaction only if everything passed.
+# The service reads live directly, so a publish is the deploy: no Fly release.
+# A blocked or failed run fails this workflow, and the job summary is the report.
+on:
+  schedule:
+    - cron: "17 11 * * 1"  # Mondays 11:17 UTC; 10-Ks arrive a few a year per company
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Stage, check and gate; publish and record nothing"
+        type: boolean
+        default: true
+      tickers:
+        description: "Comma-separated tickers (default: every company live serves)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      # Staging: empty on every run, which the job requires.
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: edgar
+          POSTGRES_PASSWORD: edgar
+          POSTGRES_DB: edgar
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U edgar -d edgar"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      EDGAR_DB_DSN: postgresql://edgar:edgar@localhost:5432/edgar
+      REFRESH_LIVE_DSN: ${{ secrets.REFRESH_LIVE_DSN }}
+      # SEC fair access: a User-Agent naming a contact, and the client's own 8 req/s cap.
+      EDGAR_USER_AGENT: ${{ secrets.EDGAR_USER_AGENT }}
+      # The configuration the reference run and the live service use (GET /config).
+      EDGAR_LLM_PROVIDER: openai
+      EDGAR_LLM_API_KEY: ${{ secrets.EDGAR_LLM_API_KEY }}
+      EDGAR_EMBED_PROVIDER: local
+    steps:
+      - name: Secrets are set
+        run: |
+          missing=""
+          for name in REFRESH_LIVE_DSN EDGAR_USER_AGENT EDGAR_LLM_API_KEY; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing (docs/REFRESH.md, 'Setting it up')"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      # CPU torch first, as the Dockerfile does: the default wheel brings CUDA.
+      - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - run: pip install -e ".[models]"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-all-MiniLM-L6-v2
+      - name: Refresh
+        env:
+          # Inputs reach the shell as variables, never pasted into the script.
+          TRIGGER: ${{ github.event_name == 'schedule' && 'schedule' || 'manual' }}
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+          TICKERS: ${{ inputs.tickers }}
+        run: edgar-intel refresh run --trigger "$TRIGGER" $DRY_RUN ${TICKERS:+--tickers "$TICKERS"}
+      - name: Report
+        if: always()
+        run: cat reports/refresh/latest.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "no report written" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: refresh-report
+          path: reports/refresh/

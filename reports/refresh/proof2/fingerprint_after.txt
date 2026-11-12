@@ -1,0 +1,10 @@
+companies 8 a8fdc68d165fb1d97cd8c7c2677ef1ef
+filings 24 1535bbb08d6b9289376aacde0f51dec7
+sections 264 a0c6d20c737848c01f1fd212086693ef
+chunks 5468 b1dde5c896cc8dbe25bb7a33a1841ddc
+xbrl_facts 1363 1c63921804854e0f7889a2a9c92c3af9
+eval_runs 36 9ee0953b7e1da5f586078017b7782e2c
+
+
+golden_cases 0 
+refresh_runs 1 3891806ffc58ebf99fe124110bb18b52

@@ -1,0 +1,5242 @@
+{
+  "new_cases": [
+    {
+      "case_id": "num-AAPL-OperatingIncomeLoss-2026",
+      "kind": "numeric",
+      "question": "How much operating income did Apple Inc. report in FY2026?",
+      "expected": "$158.06 billion",
+      "expected_value": 158063000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [
+        "62912",
+        "62947"
+      ],
+      "ticker": "AAPL",
+      "fiscal_year": 2026,
+      "tag": "OperatingIncomeLoss",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-AAPL-EarningsPerShareDiluted-2026",
+      "kind": "numeric",
+      "question": "What was Apple Inc.'s diluted earnings per share for fiscal year 2026?",
+      "expected": "$8.98",
+      "expected_value": 8.98,
+      "unit": "USD/shares",
+      "relevant_chunk_ids": [
+        "62912",
+        "62923"
+      ],
+      "ticker": "AAPL",
+      "fiscal_year": 2026,
+      "tag": "EarningsPerShareDiluted",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-AAPL-RevenueFromContractWithCustomerExcludingAssessedTax-2026",
+      "kind": "numeric",
+      "question": "What was Apple Inc.'s total revenue for fiscal year 2026?",
+      "expected": "$478.83 billion",
+      "expected_value": 478834000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [
+        "62900",
+        "62901",
+        "62912",
+        "62922",
+        "62947"
+      ],
+      "ticker": "AAPL",
+      "fiscal_year": 2026,
+      "tag": "RevenueFromContractWithCustomerExcludingAssessedTax",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-AAPL-GrossProfit-2026",
+      "kind": "numeric",
+      "question": "How much gross profit did Apple Inc. report in FY2026?",
+      "expected": "$233.60 billion",
+      "expected_value": 233602000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [
+        "62902",
+        "62912"
+      ],
+      "ticker": "AAPL",
+      "fiscal_year": 2026,
+      "tag": "GrossProfit",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-AAPL-Assets-2026",
+      "kind": "numeric",
+      "question": "How much total assets did Apple Inc. report in FY2026?",
+      "expected": "$404.55 billion",
+      "expected_value": 404548000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [
+        "62914",
+        "62915"
+      ],
+      "ticker": "AAPL",
+      "fiscal_year": 2026,
+      "tag": "Assets",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-AAPL-Liabilities-2026",
+      "kind": "numeric",
+      "question": "According to Apple Inc.'s FY2026 10-K, what was total liabilities?",
+      "expected": "$292.45 billion",
+      "expected_value": 292455000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [
+        "62914"
+      ],
+      "ticker": "AAPL",
+      "fiscal_year": 2026,
+      "tag": "Liabilities",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-AAPL-StockholdersEquity-2026",
+      "kind": "numeric",
+      "question": "What was Apple Inc.'s total stockholders' equity for fiscal year 2026?",
+      "expected": "$112.09 billion",
+      "expected_value": 112093000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [
+        "62914",
+        "62915",
+        "62916"
+      ],
+      "ticker": "AAPL",
+      "fiscal_year": 2026,
+      "tag": "StockholdersEquity",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "yoy-AAPL-GrossProfit-2025-2026",
+      "kind": "numeric",
+      "question": "What was the year-over-year change in Apple Inc.'s gross profit between FY2025 and FY2026?",
+      "expected": "increased 19.7%",
+      "expected_value": 19.6725,
+      "unit": "percent",
+      "relevant_chunk_ids": [
+        "62902",
+        "62912"
+      ],
+      "ticker": "AAPL",
+      "fiscal_year": 2026,
+      "tag": "GrossProfit",
+      "difficulty": "comparative",
+      "notes": "FY2025=195,201,000,000, FY2026=233,602,000,000"
+    },
+    {
+      "case_id": "yoy-AAPL-OperatingIncomeLoss-2025-2026",
+      "kind": "numeric",
+      "question": "How did Apple Inc.'s operating income change from FY2025 to FY2026?",
+      "expected": "increased 18.8%",
+      "expected_value": 18.7997,
+      "unit": "percent",
+      "relevant_chunk_ids": [
+        "62912",
+        "62947"
+      ],
+      "ticker": "AAPL",
+      "fiscal_year": 2026,
+      "tag": "OperatingIncomeLoss",
+      "difficulty": "comparative",
+      "notes": "FY2025=133,050,000,000, FY2026=158,063,000,000"
+    },
+    {
+      "case_id": "yoy-AAPL-ResearchAndDevelopmentExpense-2025-2026",
+      "kind": "numeric",
+      "question": "How did Apple Inc.'s research and development expense change from FY2025 to FY2026?",
+      "expected": "increased 32.5%",
+      "expected_value": 32.4602,
+      "unit": "percent",
+      "relevant_chunk_ids": [
+        "62903",
+        "62912",
+        "62947"
+      ],
+      "ticker": "AAPL",
+      "fiscal_year": 2026,
+      "tag": "ResearchAndDevelopmentExpense",
+      "difficulty": "comparative",
+      "notes": "FY2025=34,550,000,000, FY2026=45,765,000,000"
+    },
+    {
+      "case_id": "num-COST-Liabilities-2026",
+      "kind": "numeric",
+      "question": "How much total liabilities did COSTCO WHOLESALE CORP /NEW report in FY2026?",
+      "expected": "$53.24 billion",
+      "expected_value": 53242000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [
+        "63057"
+      ],
+      "ticker": "COST",
+      "fiscal_year": 2026,
+      "tag": "Liabilities",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-COST-CashAndCashEquivalentsAtCarryingValue-2026",
+      "kind": "numeric",
+      "question": "According to COSTCO WHOLESALE CORP /NEW's FY2026 10-K, what was cash and cash equivalents?",
+      "expected": "$20.21 billion",
+      "expected_value": 20207000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [
+        "63057",
+        "63060"
+      ],
+      "ticker": "COST",
+      "fiscal_year": 2026,
+      "tag": "CashAndCashEquivalentsAtCarryingValue",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-COST-Assets-2026",
+      "kind": "numeric",
+      "question": "What was COSTCO WHOLESALE CORP /NEW's total assets for fiscal year 2026?",
+      "expected": "$89.05 billion",
+      "expected_value": 89045000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [
+        "63057",
+        "63058",
+        "63104"
+      ],
+      "ticker": "COST",
+      "fiscal_year": 2026,
+      "tag": "Assets",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-COST-NetIncomeLoss-2026",
+      "kind": "numeric",
+      "question": "According to COSTCO WHOLESALE CORP /NEW's FY2026 10-K, what was net income?",
+      "expected": "$9.23 billion",
+      "expected_value": 9226000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [
+        "63034",
+        "63056",
+        "63057",
+        "63058",
+        "63059"
+      ],
+      "ticker": "COST",
+      "fiscal_year": 2026,
+      "tag": "NetIncomeLoss",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-COST-EarningsPerShareDiluted-2026",
+      "kind": "numeric",
+      "question": "According to COSTCO WHOLESALE CORP /NEW's FY2026 10-K, what was diluted earnings per share?",
+      "expected": "$20.76",
+      "expected_value": 20.76,
+      "unit": "USD/shares",
+      "relevant_chunk_ids": [
+        "63034",
+        "63056"
+      ],
+      "ticker": "COST",
+      "fiscal_year": 2026,
+      "tag": "EarningsPerShareDiluted",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-COST-RevenueFromContractWithCustomerExcludingAssessedTax-2026",
+      "kind": "numeric",
+      "question": "How much total revenue did COSTCO WHOLESALE CORP /NEW report in FY2026?",
+      "expected": "$303.15 billion",
+      "expected_value": 303154000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [
+        "63056",
+        "63103"
+      ],
+      "ticker": "COST",
+      "fiscal_year": 2026,
+      "tag": "RevenueFromContractWithCustomerExcludingAssessedTax",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "num-COST-OperatingIncomeLoss-2026",
+      "kind": "numeric",
+      "question": "What was COSTCO WHOLESALE CORP /NEW's operating income for fiscal year 2026?",
+      "expected": "$11.69 billion",
+      "expected_value": 11685000000.0,
+      "unit": "USD",
+      "relevant_chunk_ids": [
+        "63056",
+        "63103",
+        "63104"
+      ],
+      "ticker": "COST",
+      "fiscal_year": 2026,
+      "tag": "OperatingIncomeLoss",
+      "difficulty": "single_hop",
+      "notes": ""
+    },
+    {
+      "case_id": "yoy-COST-CashAndCashEquivalentsAtCarryingValue-2025-2026",
+      "kind": "numeric",
+      "question": "How did COSTCO WHOLESALE CORP /NEW's cash and cash equivalents change from FY2025 to FY2026?",
+      "expected": "increased 42.7%",
+      "expected_value": 42.6947,
+      "unit": "percent",
+      "relevant_chunk_ids": [
+        "63057",
+        "63060"
+      ],
+      "ticker": "COST",
+      "fiscal_year": 2026,
+      "tag": "CashAndCashEquivalentsAtCarryingValue",
+      "difficulty": "comparative",
+      "notes": "FY2025=14,161,000,000, FY2026=20,207,000,000"
+    },
+    {
+      "case_id": "yoy-COST-RevenueFromContractWithCustomerExcludingAssessedTax-2025-2026",
+      "kind": "numeric",
+      "question": "How did COSTCO WHOLESALE CORP /NEW's total revenue change from FY2025 to FY2026?",
+      "expected": "increased 10.1%",
+      "expected_value": 10.1437,
+      "unit": "percent",
+      "relevant_chunk_ids": [
+        "63056",
+        "63103"
+      ],
+      "ticker": "COST",
+      "fiscal_year": 2026,
+      "tag": "RevenueFromContractWithCustomerExcludingAssessedTax",
+      "difficulty": "comparative",
+      "notes": "FY2025=275,235,000,000, FY2026=303,154,000,000"
+    },
+    {
+      "case_id": "yoy-COST-EarningsPerShareDiluted-2025-2026",
+      "kind": "numeric",
+      "question": "How did COSTCO WHOLESALE CORP /NEW's diluted earnings per share change from FY2025 to FY2026?",
+      "expected": "increased 14.0%",
+      "expected_value": 14.0033,
+      "unit": "percent",
+      "relevant_chunk_ids": [
+        "63034",
+        "63056"
+      ],
+      "ticker": "COST",
+      "fiscal_year": 2026,
+      "tag": "EarningsPerShareDiluted",
+      "difficulty": "comparative",
+      "notes": "FY2025=18.21, FY2026=20.76"
+    }
+  ],
+  "retrieval": {
+    "before": {
+      "num-CAT-CashAndCashEquivalentsAtCarryingValue-2025": [
+        "60812",
+        "60813",
+        "60817",
+        "60814",
+        "60820",
+        "60821",
+        "60819",
+        "60548"
+      ],
+      "num-CAT-ResearchAndDevelopmentExpense-2023": [
+        "61491",
+        "61492",
+        "61369",
+        "61490",
+        "61489",
+        "61494",
+        "61228",
+        "61241"
+      ],
+      "num-CAT-Revenues-2024": [
+        "61030",
+        "61153",
+        "61151",
+        "61154",
+        "61152",
+        "61156",
+        "61031",
+        "60899"
+      ],
+      "num-CAT-OperatingIncomeLoss-2023": [
+        "61492",
+        "61370",
+        "61490",
+        "61489",
+        "61369",
+        "61491",
+        "61241",
+        "61228"
+      ],
+      "num-CAT-CommonStockSharesOutstanding-2024": [
+        "61112",
+        "60990",
+        "61153",
+        "61111",
+        "61156",
+        "61154",
+        "60955",
+        "61035"
+      ],
+      "num-CAT-Liabilities-2025": [
+        "60694",
+        "60813",
+        "60812",
+        "60820",
+        "60811",
+        "60814",
+        "60821",
+        "60815"
+      ],
+      "num-CAT-Revenues-2025": [
+        "60820",
+        "60692",
+        "60812",
+        "60813",
+        "60811",
+        "60814",
+        "60817",
+        "60821"
+      ],
+      "num-CAT-Revenues-2023": [
+        "61491",
+        "61489",
+        "61492",
+        "61490",
+        "61494",
+        "61241",
+        "61477",
+        "61304"
+      ],
+      "num-CAT-CommonStockSharesOutstanding-2023": [
+        "61375",
+        "61489",
+        "61331",
+        "61392",
+        "61492",
+        "61491",
+        "61494",
+        "61451"
+      ],
+      "num-CAT-ResearchAndDevelopmentExpense-2024": [
+        "61154",
+        "61153",
+        "61152",
+        "60990",
+        "61156",
+        "60983",
+        "61030",
+        "60886"
+      ],
+      "num-CAT-Liabilities-2024": [
+        "61154",
+        "61153",
+        "61152",
+        "61032",
+        "60990",
+        "60899",
+        "61156",
+        "60983"
+      ],
+      "num-CAT-OperatingIncomeLoss-2024": [
+        "61154",
+        "61030",
+        "61031",
+        "61152",
+        "61153",
+        "61151",
+        "60899",
+        "61156"
+      ],
+      "num-CAT-CommonStockSharesOutstanding-2025": [
+        "60652",
+        "60771",
+        "60817",
+        "60770",
+        "60696",
+        "60813",
+        "60617",
+        "60616"
+      ],
+      "num-CAT-Assets-2023": [
+        "61491",
+        "61371",
+        "61489",
+        "61492",
+        "61490",
+        "61494",
+        "61241",
+        "61498"
+      ],
+      "num-CAT-EarningsPerShareDiluted-2023": [
+        "61491",
+        "61369",
+        "61489",
+        "61492",
+        "61494",
+        "61490",
+        "61451",
+        "61375"
+      ],
+      "num-CAT-EarningsPerShareDiluted-2025": [
+        "60619",
+        "60812",
+        "60813",
+        "60770",
+        "60820",
+        "60652",
+        "60692",
+        "60814"
+      ],
+      "num-CAT-CashAndCashEquivalentsAtCarryingValue-2023": [
+        "61352",
+        "61489",
+        "61492",
+        "61490",
+        "61494",
+        "61491",
+        "61360",
+        "61376"
+      ],
+      "num-CAT-OperatingIncomeLoss-2025": [
+        "60812",
+        "60548",
+        "60813",
+        "60814",
+        "60629",
+        "60817",
+        "60820",
+        "60821"
+      ],
+      "num-CAT-Assets-2025": [
+        "60694",
+        "60812",
+        "60820",
+        "60813",
+        "60814",
+        "60811",
+        "60817",
+        "60696"
+      ],
+      "num-CAT-Assets-2024": [
+        "61153",
+        "61032",
+        "61151",
+        "61154",
+        "61152",
+        "61156",
+        "60899",
+        "61159"
+      ],
+      "yoy-CAT-Revenues-2023-2024": [
+        "61153",
+        "60963",
+        "61152",
+        "61154",
+        "60886",
+        "60899",
+        "61156",
+        "60990"
+      ],
+      "yoy-CAT-ResearchAndDevelopmentExpense-2023-2024": [
+        "61153",
+        "61152",
+        "60886",
+        "61154",
+        "61030",
+        "60899",
+        "61014",
+        "61013"
+      ],
+      "yoy-CAT-EarningsPerShareDiluted-2023-2024": [
+        "61112",
+        "61153",
+        "61154",
+        "61152",
+        "60990",
+        "61030",
+        "61111",
+        "61159"
+      ],
+      "yoy-CAT-CashAndCashEquivalentsAtCarryingValue-2023-2024": [
+        "61152",
+        "61154",
+        "61153",
+        "60990",
+        "61013",
+        "60983",
+        "61158",
+        "61157"
+      ],
+      "yoy-CAT-OperatingIncomeLoss-2023-2024": [
+        "61152",
+        "61154",
+        "61153",
+        "60899",
+        "60886",
+        "61030",
+        "61159",
+        "61031"
+      ],
+      "yoy-CAT-Liabilities-2023-2024": [
+        "61153",
+        "61154",
+        "61152",
+        "60899",
+        "61032",
+        "61151",
+        "60983",
+        "60886"
+      ],
+      "num-PG-NetIncomeLoss-2025": [
+        "62519",
+        "62561",
+        "62507",
+        "62547",
+        "62468",
+        "62595",
+        "62524",
+        "62593"
+      ],
+      "num-PG-Assets-2024": [
+        "62734",
+        "62747",
+        "62804",
+        "62806",
+        "62737",
+        "62756",
+        "62769",
+        "62621"
+      ],
+      "num-PG-Liabilities-2026": [
+        "62299",
+        "62304",
+        "62380",
+        "62378",
+        "62322",
+        "62308",
+        "62290",
+        "62190"
+      ],
+      "num-PG-Liabilities-2024": [
+        "62734",
+        "62719",
+        "62758",
+        "62806",
+        "62756",
+        "62750",
+        "62801",
+        "62804"
+      ],
+      "num-PG-Revenues-2025": [
+        "62516",
+        "62408",
+        "62596",
+        "62521",
+        "62593",
+        "62547",
+        "62525",
+        "62595"
+      ],
+      "num-PG-EarningsPerShareDiluted-2026": [
+        "62335",
+        "62290",
+        "62302",
+        "62289",
+        "62380",
+        "62249",
+        "62304",
+        "62337"
+      ],
+      "num-PG-OperatingIncomeLoss-2025": [
+        "62516",
+        "62596",
+        "62468",
+        "62507",
+        "62547",
+        "62408",
+        "62525",
+        "62519"
+      ],
+      "num-PG-ResearchAndDevelopmentExpense-2024": [
+        "62729",
+        "62804",
+        "62806",
+        "62621",
+        "62724",
+        "62732",
+        "62734",
+        "62738"
+      ],
+      "num-PG-EarningsPerShareDiluted-2025": [
+        "62552",
+        "62507",
+        "62551",
+        "62519",
+        "62596",
+        "62521",
+        "62467",
+        "62593"
+      ],
+      "num-PG-ResearchAndDevelopmentExpense-2025": [
+        "62593",
+        "62596",
+        "62408",
+        "62595",
+        "62516",
+        "62594",
+        "62519",
+        "62468"
+      ],
+      "num-PG-Assets-2025": [
+        "62521",
+        "62596",
+        "62545",
+        "62524",
+        "62593",
+        "62558",
+        "62547",
+        "62595"
+      ],
+      "num-PG-EarningsPerShareDiluted-2024": [
+        "62762",
+        "62763",
+        "62804",
+        "62806",
+        "62735",
+        "62732",
+        "62720",
+        "62734"
+      ],
+      "num-PG-ResearchAndDevelopmentExpense-2026": [
+        "62378",
+        "62380",
+        "62381",
+        "62190",
+        "62382",
+        "62299",
+        "62290",
+        "62320"
+      ],
+      "num-PG-Assets-2026": [
+        "62304",
+        "62299",
+        "62380",
+        "62378",
+        "62190",
+        "62290",
+        "62382",
+        "62294"
+      ],
+      "num-PG-OperatingIncomeLoss-2024": [
+        "62729",
+        "62806",
+        "62687",
+        "62732",
+        "62758",
+        "62747",
+        "62724",
+        "62804"
+      ],
+      "num-PG-Liabilities-2025": [
+        "62521",
+        "62539",
+        "62593",
+        "62571",
+        "62596",
+        "62519",
+        "62547",
+        "62595"
+      ],
+      "num-PG-NetIncomeLoss-2024": [
+        "62679",
+        "62732",
+        "62729",
+        "62687",
+        "62758",
+        "62621",
+        "62806",
+        "62804"
+      ],
+      "num-PG-NetIncomeLoss-2026": [
+        "62380",
+        "62290",
+        "62378",
+        "62320",
+        "62331",
+        "62382",
+        "62381",
+        "62303"
+      ],
+      "num-PG-Revenues-2026": [
+        "62299",
+        "62190",
+        "62380",
+        "62378",
+        "62304",
+        "62290",
+        "62308",
+        "62381"
+      ],
+      "num-PG-Revenues-2024": [
+        "62804",
+        "62734",
+        "62621",
+        "62806",
+        "62749",
+        "62737",
+        "62747",
+        "62750"
+      ],
+      "yoy-PG-ResearchAndDevelopmentExpense-2024-2025": [
+        "62596",
+        "62547",
+        "62471",
+        "62516",
+        "62593",
+        "62519",
+        "62468",
+        "62525"
+      ],
+      "yoy-PG-Liabilities-2024-2025": [
+        "62521",
+        "62539",
+        "62524",
+        "62525",
+        "62547",
+        "62596",
+        "62519",
+        "62571"
+      ],
+      "yoy-PG-EarningsPerShareDiluted-2024-2025": [
+        "62507",
+        "62552",
+        "62596",
+        "62551",
+        "62519",
+        "62468",
+        "62593",
+        "62467"
+      ],
+      "yoy-PG-OperatingIncomeLoss-2024-2025": [
+        "62468",
+        "62507",
+        "62547",
+        "62596",
+        "62524",
+        "62525",
+        "62471",
+        "62528"
+      ],
+      "yoy-PG-Assets-2024-2025": [
+        "62521",
+        "62524",
+        "62596",
+        "62593",
+        "62558",
+        "62468",
+        "62545",
+        "62595"
+      ],
+      "yoy-PG-NetIncomeLoss-2024-2025": [
+        "62468",
+        "62561",
+        "62507",
+        "62524",
+        "62547",
+        "62519",
+        "62471",
+        "62596"
+      ],
+      "num-JNJ-EarningsPerShareDiluted-2025": [
+        "59777",
+        "59781",
+        "59718",
+        "59717",
+        "59834",
+        "59716",
+        "59862",
+        "59775"
+      ],
+      "num-JNJ-ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost-2023": [
+        "60481",
+        "60352",
+        "60305",
+        "60484",
+        "60304",
+        "60351",
+        "60291",
+        "60309"
+      ],
+      "num-JNJ-ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost-2024": [
+        "60040",
+        "59991",
+        "60174",
+        "60039",
+        "60177",
+        "60096",
+        "60176",
+        "59990"
+      ],
+      "num-JNJ-Liabilities-2024": [
+        "60174",
+        "60022",
+        "60059",
+        "60177",
+        "60176",
+        "60150",
+        "60028",
+        "60146"
+      ],
+      "num-JNJ-GrossProfit-2024": [
+        "60146",
+        "60177",
+        "60028",
+        "60001",
+        "60174",
+        "60002",
+        "60147",
+        "59922"
+      ],
+      "num-JNJ-NetIncomeLoss-2024": [
+        "60024",
+        "59992",
+        "60025",
+        "60174",
+        "60146",
+        "60177",
+        "60176",
+        "60075"
+      ],
+      "num-JNJ-RevenueFromContractWithCustomerExcludingAssessedTax-2025": [
+        "59863",
+        "59860",
+        "59834",
+        "59837",
+        "59848",
+        "59862",
+        "59715",
+        "59788"
+      ],
+      "num-JNJ-EarningsPerShareDiluted-2024": [
+        "60085",
+        "60146",
+        "60024",
+        "60025",
+        "60177",
+        "60001",
+        "60023",
+        "60028"
+      ],
+      "num-JNJ-GrossProfit-2023": [
+        "60481",
+        "60484",
+        "60454",
+        "60460",
+        "60340",
+        "60314",
+        "60291",
+        "60471"
+      ],
+      "num-JNJ-EarningsPerShareDiluted-2023": [
+        "60395",
+        "60400",
+        "60336",
+        "60337",
+        "60291",
+        "60459",
+        "60460",
+        "60314"
+      ],
+      "num-JNJ-ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost-2025": [
+        "59732",
+        "59832",
+        "59686",
+        "59687",
+        "59688",
+        "59860",
+        "59836",
+        "59837"
+      ],
+      "num-JNJ-Assets-2025": [
+        "59741",
+        "59688",
+        "59834",
+        "59860",
+        "59751",
+        "59862",
+        "59837",
+        "59774"
+      ],
+      "num-JNJ-CashAndCashEquivalentsAtCarryingValue-2024": [
+        "60045",
+        "60000",
+        "60174",
+        "59992",
+        "60027",
+        "60176",
+        "60150",
+        "60177"
+      ],
+      "num-JNJ-Liabilities-2023": [
+        "60368",
+        "60481",
+        "60291",
+        "60307",
+        "60365",
+        "60484",
+        "60414",
+        "60460"
+      ],
+      "num-JNJ-NetIncomeLoss-2025": [
+        "59836",
+        "59688",
+        "59718",
+        "59775",
+        "59717",
+        "59777",
+        "59835",
+        "59834"
+      ],
+      "num-JNJ-Assets-2024": [
+        "60146",
+        "60177",
+        "60022",
+        "60174",
+        "60176",
+        "60001",
+        "60103",
+        "60048"
+      ],
+      "num-JNJ-NetIncomeLoss-2023": [
+        "60306",
+        "60395",
+        "60337",
+        "60460",
+        "60481",
+        "60314",
+        "60454",
+        "60365"
+      ],
+      "num-JNJ-CashAndCashEquivalentsAtCarryingValue-2023": [
+        "60311",
+        "60307",
+        "60356",
+        "60481",
+        "60339",
+        "60460",
+        "60484",
+        "60337"
+      ],
+      "num-JNJ-CashAndCashEquivalentsAtCarryingValue-2025": [
+        "59863",
+        "59860",
+        "59695",
+        "59718",
+        "59862",
+        "59837",
+        "59720",
+        "59715"
+      ],
+      "num-JNJ-RevenueFromContractWithCustomerExcludingAssessedTax-2024": [
+        "60177",
+        "60174",
+        "60146",
+        "60001",
+        "60028",
+        "60096",
+        "60147",
+        "60002"
+      ],
+      "yoy-JNJ-Liabilities-2023-2024": [
+        "59992",
+        "60059",
+        "60174",
+        "60177",
+        "60022",
+        "60176",
+        "60065",
+        "60075"
+      ],
+      "yoy-JNJ-NetIncomeLoss-2023-2024": [
+        "60024",
+        "59992",
+        "60025",
+        "60147",
+        "60146",
+        "60002",
+        "60083",
+        "60085"
+      ],
+      "yoy-JNJ-GrossProfit-2023-2024": [
+        "59992",
+        "60146",
+        "60024",
+        "60002",
+        "60177",
+        "60147",
+        "60150",
+        "60001"
+      ],
+      "yoy-JNJ-CashAndCashEquivalentsAtCarryingValue-2023-2024": [
+        "60045",
+        "60177",
+        "60174",
+        "60000",
+        "59999",
+        "60025",
+        "60027",
+        "60065"
+      ],
+      "yoy-JNJ-Assets-2023-2024": [
+        "59992",
+        "60146",
+        "60177",
+        "60174",
+        "60059",
+        "60176",
+        "60022",
+        "60162"
+      ],
+      "yoy-JNJ-ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost-2023-2024": [
+        "59991",
+        "59992",
+        "60040",
+        "60174",
+        "59996",
+        "60107",
+        "60144",
+        "60143"
+      ],
+      "num-AAPL-NetIncomeLoss-2024": [
+        "57573",
+        "57603",
+        "57572",
+        "57608",
+        "57574",
+        "57576",
+        "57560",
+        "57561"
+      ],
+      "num-AAPL-CommonStockSharesOutstanding-2024": [
+        "57598",
+        "57575",
+        "57495",
+        "57572",
+        "57574",
+        "57560",
+        "57557",
+        "57559"
+      ],
+      "num-AAPL-OperatingIncomeLoss-2024": [
+        "57560",
+        "57603",
+        "57559",
+        "57572",
+        "57573",
+        "57576",
+        "57608",
+        "57577"
+      ],
+      "num-AAPL-ResearchAndDevelopmentExpense-2025": [
+        "57431",
+        "57469",
+        "57433",
+        "57451",
+        "57474",
+        "57434",
+        "57363",
+        "57413"
+      ],
+      "num-AAPL-StockholdersEquity-2023": [
+        "57748",
+        "57712",
+        "57711",
+        "57745",
+        "57695",
+        "57709",
+        "57710",
+        "57637"
+      ],
+      "num-AAPL-ResearchAndDevelopmentExpense-2023": [
+        "57748",
+        "57745",
+        "57709",
+        "57744",
+        "57702",
+        "57711",
+        "57712",
+        "57640"
+      ],
+      "num-AAPL-EarningsPerShareDiluted-2025": [
+        "57432",
+        "57434",
+        "57431",
+        "57442",
+        "57458",
+        "57433",
+        "57469",
+        "57441"
+      ],
+      "num-AAPL-OperatingIncomeLoss-2025": [
+        "57432",
+        "57431",
+        "57469",
+        "57433",
+        "57435",
+        "57451",
+        "57434",
+        "57474"
+      ],
+      "num-AAPL-Liabilities-2025": [
+        "57433",
+        "57451",
+        "57416",
+        "57434",
+        "57431",
+        "57436",
+        "57432",
+        "57456"
+      ],
+      "num-AAPL-GrossProfit-2024": [
+        "57560",
+        "57562",
+        "57559",
+        "57572",
+        "57608",
+        "57573",
+        "57561",
+        "57577"
+      ],
+      "num-AAPL-Liabilities-2024": [
+        "57574",
+        "57560",
+        "57559",
+        "57575",
+        "57572",
+        "57608",
+        "57577",
+        "57588"
+      ],
+      "num-AAPL-EarningsPerShareDiluted-2023": [
+        "57709",
+        "57712",
+        "57710",
+        "57719",
+        "57713",
+        "57720",
+        "57711",
+        "57748"
+      ],
+      "num-AAPL-OperatingIncomeLoss-2023": [
+        "57710",
+        "57748",
+        "57709",
+        "57702",
+        "57745",
+        "57713",
+        "57711",
+        "57743"
+      ],
+      "num-AAPL-NetIncomeLoss-2023": [
+        "57710",
+        "57709",
+        "57700",
+        "57713",
+        "57744",
+        "57711",
+        "57748",
+        "57714"
+      ],
+      "num-AAPL-CommonStockSharesOutstanding-2025": [
+        "57434",
+        "57458",
+        "57433",
+        "57431",
+        "57415",
+        "57414",
+        "57351",
+        "57469"
+      ],
+      "num-AAPL-CashAndCashEquivalentsAtCarryingValue-2024": [
+        "57577",
+        "57576",
+        "57574",
+        "57608",
+        "57572",
+        "57590",
+        "57575",
+        "57623"
+      ],
+      "num-AAPL-Assets-2023": [
+        "57711",
+        "57744",
+        "57709",
+        "57712",
+        "57748",
+        "57713",
+        "57710",
+        "57727"
+      ],
+      "num-AAPL-ResearchAndDevelopmentExpense-2024": [
+        "57559",
+        "57560",
+        "57572",
+        "57608",
+        "57616",
+        "57596",
+        "57603",
+        "57577"
+      ],
+      "num-AAPL-StockholdersEquity-2025": [
+        "57434",
+        "57433",
+        "57415",
+        "57432",
+        "57352",
+        "57431",
+        "57435",
+        "57481"
+      ],
+      "num-AAPL-EarningsPerShareDiluted-2024": [
+        "57582",
+        "57575",
+        "57573",
+        "57572",
+        "57560",
+        "57559",
+        "57598",
+        "57574"
+      ],
+      "yoy-AAPL-CashAndCashEquivalentsAtCarryingValue-2023-2024": [
+        "57577",
+        "57559",
+        "57560",
+        "57576",
+        "57573",
+        "57574",
+        "57561",
+        "57608"
+      ],
+      "yoy-AAPL-NetIncomeLoss-2023-2024": [
+        "57573",
+        "57560",
+        "57561",
+        "57603",
+        "57572",
+        "57576",
+        "57577",
+        "57559"
+      ],
+      "yoy-AAPL-RevenueFromContractWithCustomerExcludingAssessedTax-2023-2024": [
+        "57572",
+        "57573",
+        "57574",
+        "57581",
+        "57575",
+        "57560",
+        "57499",
+        "57588"
+      ],
+      "yoy-AAPL-OperatingIncomeLoss-2023-2024": [
+        "57603",
+        "57573",
+        "57560",
+        "57572",
+        "57559",
+        "57576",
+        "57577",
+        "57499"
+      ],
+      "yoy-AAPL-Assets-2023-2024": [
+        "57574",
+        "57573",
+        "57572",
+        "57575",
+        "57588",
+        "57608",
+        "57576",
+        "57560"
+      ],
+      "yoy-AAPL-GrossProfit-2023-2024": [
+        "57562",
+        "57560",
+        "57559",
+        "57573",
+        "57572",
+        "57561",
+        "57577",
+        "57608"
+      ],
+      "num-UNH-Liabilities-2024": [
+        "61862",
+        "61863",
+        "61933",
+        "61942",
+        "61938",
+        "61940",
+        "61935",
+        "61943"
+      ],
+      "num-UNH-Assets-2024": [
+        "61938",
+        "61933",
+        "61862",
+        "61936",
+        "61937",
+        "61935",
+        "61934",
+        "61863"
+      ],
+      "num-UNH-NetIncomeLoss-2024": [
+        "61938",
+        "61933",
+        "61937",
+        "61936",
+        "61934",
+        "61935",
+        "61943",
+        "61864"
+      ],
+      "num-UNH-EarningsPerShareDiluted-2023": [
+        "62055",
+        "62156",
+        "62082",
+        "62153",
+        "62084",
+        "62155",
+        "62151",
+        "61969"
+      ],
+      "num-UNH-Assets-2025": [
+        "61716",
+        "61717",
+        "61636",
+        "61637",
+        "61718",
+        "61715",
+        "61721",
+        "61719"
+      ],
+      "num-UNH-CommonStockSharesOutstanding-2025": [
+        "61716",
+        "61662",
+        "61639",
+        "61637",
+        "61599",
+        "61688",
+        "61719",
+        "61717"
+      ],
+      "num-UNH-Liabilities-2025": [
+        "61636",
+        "61716",
+        "61717",
+        "61718",
+        "61637",
+        "61721",
+        "61722",
+        "61715"
+      ],
+      "num-UNH-CashAndCashEquivalentsAtCarryingValue-2023": [
+        "62087",
+        "62163",
+        "62156",
+        "62158",
+        "62153",
+        "62151",
+        "62164",
+        "62155"
+      ],
+      "num-UNH-EarningsPerShareDiluted-2024": [
+        "61863",
+        "61933",
+        "61937",
+        "61882",
+        "61935",
+        "61936",
+        "61934",
+        "61865"
+      ],
+      "num-UNH-NetIncomeLoss-2025": [
+        "61716",
+        "61718",
+        "61722",
+        "61639",
+        "61637",
+        "61638",
+        "61719",
+        "61717"
+      ],
+      "num-UNH-CashAndCashEquivalentsAtCarryingValue-2024": [
+        "61935",
+        "61934",
+        "61938",
+        "61944",
+        "61936",
+        "61945",
+        "61933",
+        "61844"
+      ],
+      "num-UNH-OperatingIncomeLoss-2023": [
+        "62156",
+        "62162",
+        "62082",
+        "62158",
+        "62055",
+        "62153",
+        "62164",
+        "62154"
+      ],
+      "num-UNH-Assets-2023": [
+        "62156",
+        "62081",
+        "62151",
+        "62082",
+        "62153",
+        "62155",
+        "62154",
+        "62150"
+      ],
+      "num-UNH-EarningsPerShareDiluted-2025": [
+        "61637",
+        "61662",
+        "61716",
+        "61639",
+        "61638",
+        "61717",
+        "61718",
+        "61719"
+      ],
+      "num-UNH-CashAndCashEquivalentsAtCarryingValue-2025": [
+        "61716",
+        "61723",
+        "61717",
+        "61724",
+        "61718",
+        "61618",
+        "61719",
+        "61637"
+      ],
+      "num-UNH-NetIncomeLoss-2023": [
+        "62156",
+        "62162",
+        "62082",
+        "62083",
+        "62153",
+        "62158",
+        "62155",
+        "62084"
+      ],
+      "num-UNH-Revenues-2025": [
+        "61717",
+        "61637",
+        "61716",
+        "61718",
+        "61719",
+        "61722",
+        "61702",
+        "61613"
+      ],
+      "num-UNH-Revenues-2023": [
+        "62156",
+        "62082",
+        "62059",
+        "62137",
+        "62154",
+        "62155",
+        "62151",
+        "62153"
+      ],
+      "num-UNH-Liabilities-2023": [
+        "62156",
+        "62082",
+        "62081",
+        "62153",
+        "62162",
+        "62161",
+        "62151",
+        "62154"
+      ],
+      "num-UNH-Revenues-2024": [
+        "61938",
+        "61933",
+        "61937",
+        "61934",
+        "61936",
+        "61863",
+        "61935",
+        "61839"
+      ],
+      "yoy-UNH-CommonStockSharesOutstanding-2023-2024": [
+        "61935",
+        "61936",
+        "61933",
+        "61938",
+        "61934",
+        "61865",
+        "61863",
+        "61937"
+      ],
+      "yoy-UNH-Liabilities-2023-2024": [
+        "61938",
+        "61935",
+        "61863",
+        "61936",
+        "61862",
+        "61933",
+        "61942",
+        "61940"
+      ],
+      "yoy-UNH-Assets-2023-2024": [
+        "61938",
+        "61936",
+        "61862",
+        "61933",
+        "61935",
+        "61937",
+        "61934",
+        "61863"
+      ],
+      "yoy-UNH-EarningsPerShareDiluted-2023-2024": [
+        "61935",
+        "61936",
+        "61863",
+        "61934",
+        "61938",
+        "61864",
+        "61933",
+        "61937"
+      ],
+      "yoy-UNH-CashAndCashEquivalentsAtCarryingValue-2023-2024": [
+        "61938",
+        "61935",
+        "61936",
+        "61944",
+        "61934",
+        "61844",
+        "61933",
+        "61940"
+      ],
+      "yoy-UNH-NetIncomeLoss-2023-2024": [
+        "61938",
+        "61935",
+        "61865",
+        "61943",
+        "61864",
+        "61944",
+        "61936",
+        "61937"
+      ],
+      "num-MSFT-EarningsPerShareDiluted-2024": [
+        "58384",
+        "58336",
+        "58383",
+        "58437",
+        "58335",
+        "58416",
+        "58225",
+        "58397"
+      ],
+      "num-MSFT-CashAndCashEquivalentsAtCarryingValue-2024": [
+        "58444",
+        "58449",
+        "58348",
+        "58447",
+        "58445",
+        "58349",
+        "58331",
+        "58333"
+      ],
+      "num-MSFT-Liabilities-2025": [
+        "58106",
+        "58185",
+        "58108",
+        "58157",
+        "58094",
+        "58129",
+        "58175",
+        "58161"
+      ],
+      "num-MSFT-StockholdersEquity-2026": [
+        "57868",
+        "57985",
+        "57979",
+        "57980",
+        "57783",
+        "57906",
+        "57904",
+        "57891"
+      ],
+      "num-MSFT-CashAndCashEquivalentsAtCarryingValue-2026": [
+        "57960",
+        "57985",
+        "57980",
+        "57973",
+        "57979",
+        "57965",
+        "57780",
+        "57984"
+      ],
+      "num-MSFT-GrossProfit-2025": [
+        "58103",
+        "58101",
+        "58193",
+        "58180",
+        "58205",
+        "58185",
+        "58102",
+        "58094"
+      ],
+      "num-MSFT-CommonStockSharesOutstanding-2025": [
+        "58091",
+        "58147",
+        "58205",
+        "58174",
+        "58177",
+        "58173",
+        "58092",
+        "58200"
+      ],
+      "num-MSFT-CommonStockSharesOutstanding-2024": [
+        "58325",
+        "58416",
+        "58384",
+        "58225",
+        "58437",
+        "58421",
+        "58383",
+        "58228"
+      ],
+      "num-MSFT-Assets-2026": [
+        "57941",
+        "57882",
+        "57965",
+        "57937",
+        "57985",
+        "57956",
+        "57868",
+        "57878"
+      ],
+      "num-MSFT-CommonStockSharesOutstanding-2026": [
+        "57868",
+        "57926",
+        "57955",
+        "57956",
+        "57959",
+        "57958",
+        "57954",
+        "57985"
+      ],
+      "num-MSFT-Assets-2025": [
+        "58205",
+        "58185",
+        "58103",
+        "58157",
+        "58200",
+        "58161",
+        "58158",
+        "58126"
+      ],
+      "num-MSFT-RevenueFromContractWithCustomerExcludingAssessedTax-2025": [
+        "58103",
+        "58101",
+        "58094",
+        "58102",
+        "58104",
+        "58100",
+        "58183",
+        "58180"
+      ],
+      "num-MSFT-OperatingIncomeLoss-2024": [
+        "58437",
+        "58361",
+        "58335",
+        "58343",
+        "58337",
+        "58326",
+        "58336",
+        "58383"
+      ],
+      "num-MSFT-GrossProfit-2024": [
+        "58336",
+        "58331",
+        "58339",
+        "58338",
+        "58444",
+        "58423",
+        "58449",
+        "58326"
+      ],
+      "num-MSFT-StockholdersEquity-2024": [
+        "58325",
+        "58228",
+        "58443",
+        "58449",
+        "58444",
+        "58362",
+        "58364",
+        "58386"
+      ],
+      "num-MSFT-ResearchAndDevelopmentExpense-2026": [
+        "57882",
+        "57881",
+        "57915",
+        "57877",
+        "57878",
+        "57879",
+        "57985",
+        "57870"
+      ],
+      "num-MSFT-ResearchAndDevelopmentExpense-2024": [
+        "58340",
+        "58437",
+        "58341",
+        "58374",
+        "58375",
+        "58444",
+        "58449",
+        "58436"
+      ],
+      "num-MSFT-Liabilities-2026": [
+        "57980",
+        "57985",
+        "57965",
+        "57979",
+        "57904",
+        "57936",
+        "57878",
+        "57984"
+      ],
+      "num-MSFT-OperatingIncomeLoss-2026": [
+        "57878",
+        "57963",
+        "57877",
+        "57960",
+        "57869",
+        "57956",
+        "57876",
+        "57903"
+      ],
+      "num-MSFT-EarningsPerShareDiluted-2026": [
+        "57926",
+        "57985",
+        "57878",
+        "57876",
+        "57925",
+        "57980",
+        "57868",
+        "57886"
+      ],
+      "yoy-MSFT-GrossProfit-2024-2025": [
+        "58103",
+        "58094",
+        "58098",
+        "58101",
+        "58205",
+        "58180",
+        "58200",
+        "58102"
+      ],
+      "yoy-MSFT-RevenueFromContractWithCustomerExcludingAssessedTax-2024-2025": [
+        "58103",
+        "58094",
+        "58101",
+        "58098",
+        "58102",
+        "58104",
+        "58100",
+        "58106"
+      ],
+      "yoy-MSFT-Liabilities-2024-2025": [
+        "58200",
+        "58103",
+        "58094",
+        "58129",
+        "58098",
+        "58205",
+        "58100",
+        "58180"
+      ],
+      "yoy-MSFT-OperatingIncomeLoss-2024-2025": [
+        "58102",
+        "58108",
+        "58103",
+        "58094",
+        "58183",
+        "58107",
+        "58125",
+        "58129"
+      ],
+      "yoy-MSFT-CashAndCashEquivalentsAtCarryingValue-2024-2025": [
+        "58200",
+        "58129",
+        "58098",
+        "58112",
+        "58097",
+        "58103",
+        "58205",
+        "58094"
+      ],
+      "yoy-MSFT-EarningsPerShareDiluted-2024-2025": [
+        "58147",
+        "58148",
+        "58177",
+        "58091",
+        "58094",
+        "58200",
+        "58205",
+        "58158"
+      ],
+      "num-COST-EarningsPerShareDiluted-2025": [
+        "59263",
+        "59223",
+        "59266",
+        "59147",
+        "59276",
+        "59229",
+        "59226",
+        "59204"
+      ],
+      "num-COST-Liabilities-2024": [
+        "59364",
+        "59365",
+        "59403",
+        "59392",
+        "59355",
+        "59362",
+        "59415",
+        "59390"
+      ],
+      "num-COST-OperatingIncomeLoss-2025": [
+        "59217",
+        "59223",
+        "59269",
+        "59266",
+        "59229",
+        "59150",
+        "59228",
+        "59275"
+      ],
+      "num-COST-CashAndCashEquivalentsAtCarryingValue-2024": [
+        "59367",
+        "59346",
+        "59348",
+        "59368",
+        "59355",
+        "59364",
+        "59417",
+        "59347"
+      ],
+      "num-COST-EarningsPerShareDiluted-2024": [
+        "59355",
+        "59341",
+        "59401",
+        "59289",
+        "59362",
+        "59340",
+        "59394",
+        "59369"
+      ],
+      "num-COST-Assets-2025": [
+        "59225",
+        "59217",
+        "59266",
+        "59275",
+        "59270",
+        "59229",
+        "59226",
+        "59159"
+      ],
+      "num-COST-EarningsPerShareDiluted-2023": [
+        "59478",
+        "59430",
+        "59499",
+        "59525",
+        "59552",
+        "59506",
+        "59540",
+        "59492"
+      ],
+      "num-COST-StockholdersEquity-2025": [
+        "59226",
+        "59217",
+        "59225",
+        "59266",
+        "59147",
+        "59275",
+        "59229",
+        "59195"
+      ],
+      "num-COST-NetIncomeLoss-2023": [
+        "59499",
+        "59478",
+        "59430",
+        "59504",
+        "59506",
+        "59540",
+        "59492",
+        "59502"
+      ],
+      "num-COST-CashAndCashEquivalentsAtCarryingValue-2025": [
+        "59229",
+        "59228",
+        "59217",
+        "59266",
+        "59275",
+        "59210",
+        "59230",
+        "59150"
+      ],
+      "num-COST-StockholdersEquity-2023": [
+        "59502",
+        "59501",
+        "59492",
+        "59552",
+        "59550",
+        "59428",
+        "59551",
+        "59540"
+      ],
+      "num-COST-OperatingIncomeLoss-2023": [
+        "59499",
+        "59492",
+        "59430",
+        "59504",
+        "59478",
+        "59540",
+        "59552",
+        "59539"
+      ],
+      "num-COST-Liabilities-2023": [
+        "59501",
+        "59478",
+        "59506",
+        "59430",
+        "59540",
+        "59529",
+        "59552",
+        "59492"
+      ],
+      "num-COST-Assets-2023": [
+        "59501",
+        "59552",
+        "59502",
+        "59546",
+        "59551",
+        "59478",
+        "59540",
+        "59492"
+      ],
+      "num-COST-OperatingIncomeLoss-2024": [
+        "59289",
+        "59355",
+        "59362",
+        "59369",
+        "59340",
+        "59367",
+        "59416",
+        "59403"
+      ],
+      "num-COST-Liabilities-2025": [
+        "59225",
+        "59217",
+        "59266",
+        "59229",
+        "59254",
+        "59275",
+        "59226",
+        "59269"
+      ],
+      "num-COST-NetIncomeLoss-2024": [
+        "59362",
+        "59355",
+        "59367",
+        "59289",
+        "59369",
+        "59340",
+        "59365",
+        "59416"
+      ],
+      "num-COST-RevenueFromContractWithCustomerExcludingAssessedTax-2025": [
+        "59217",
+        "59150",
+        "59230",
+        "59266",
+        "59203",
+        "59229",
+        "59225",
+        "59223"
+      ],
+      "num-COST-StockholdersEquity-2024": [
+        "59365",
+        "59287",
+        "59364",
+        "59416",
+        "59355",
+        "59332",
+        "59415",
+        "59414"
+      ],
+      "num-COST-CommonStockSharesOutstanding-2025": [
+        "59217",
+        "59266",
+        "59225",
+        "59226",
+        "59147",
+        "59195",
+        "59263",
+        "59229"
+      ],
+      "yoy-COST-Liabilities-2023-2024": [
+        "59364",
+        "59355",
+        "59369",
+        "59289",
+        "59392",
+        "59340",
+        "59403",
+        "59365"
+      ],
+      "yoy-COST-Assets-2023-2024": [
+        "59364",
+        "59375",
+        "59367",
+        "59362",
+        "59403",
+        "59365",
+        "59410",
+        "59355"
+      ],
+      "yoy-COST-EarningsPerShareDiluted-2023-2024": [
+        "59362",
+        "59401",
+        "59341",
+        "59340",
+        "59364",
+        "59365",
+        "59403",
+        "59416"
+      ],
+      "yoy-COST-RevenueFromContractWithCustomerExcludingAssessedTax-2023-2024": [
+        "59340",
+        "59289",
+        "59343",
+        "59355",
+        "59342",
+        "59362",
+        "59369",
+        "59410"
+      ],
+      "yoy-COST-StockholdersEquity-2023-2024": [
+        "59365",
+        "59355",
+        "59364",
+        "59416",
+        "59287",
+        "59369",
+        "59289",
+        "59403"
+      ],
+      "yoy-COST-OperatingIncomeLoss-2023-2024": [
+        "59362",
+        "59289",
+        "59367",
+        "59355",
+        "59403",
+        "59340",
+        "59363",
+        "59364"
+      ],
+      "num-NVDA-CashAndCashEquivalentsAtCarryingValue-2024": [
+        "59129",
+        "59098",
+        "59041",
+        "59055",
+        "59068",
+        "59114",
+        "59079",
+        "59105"
+      ],
+      "num-NVDA-OperatingIncomeLoss-2024": [
+        "59129",
+        "59049",
+        "59121",
+        "59098",
+        "59041",
+        "59074",
+        "59048",
+        "59068"
+      ],
+      "num-NVDA-Liabilities-2024": [
+        "59076",
+        "59049",
+        "59111",
+        "59068",
+        "59133",
+        "59129",
+        "59116",
+        "59122"
+      ],
+      "num-NVDA-NetIncomeLoss-2024": [
+        "59049",
+        "59121",
+        "59079",
+        "59129",
+        "59041",
+        "59075",
+        "59074",
+        "59098"
+      ],
+      "num-NVDA-ResearchAndDevelopmentExpense-2024": [
+        "59049",
+        "59042",
+        "59074",
+        "59052",
+        "59098",
+        "59133",
+        "58926",
+        "58964"
+      ],
+      "num-NVDA-CommonStockSharesOutstanding-2025": [
+        "58849",
+        "58692",
+        "58848",
+        "58906",
+        "58803",
+        "58907",
+        "58804",
+        "58870"
+      ],
+      "num-NVDA-StockholdersEquity-2025": [
+        "58848",
+        "58849",
+        "58840",
+        "58907",
+        "58838",
+        "58876",
+        "58694",
+        "58805"
+      ],
+      "num-NVDA-Assets-2025": [
+        "58848",
+        "58903",
+        "58906",
+        "58865",
+        "58840",
+        "58875",
+        "58893",
+        "58874"
+      ],
+      "num-NVDA-CashAndCashEquivalentsAtCarryingValue-2025": [
+        "58875",
+        "58840",
+        "58883",
+        "58851",
+        "58829",
+        "58904",
+        "58852",
+        "58826"
+      ],
+      "num-NVDA-EarningsPerShareDiluted-2024": [
+        "59077",
+        "59133",
+        "59074",
+        "59103",
+        "59129",
+        "59075",
+        "59076",
+        "58924"
+      ],
+      "num-NVDA-CommonStockSharesOutstanding-2026": [
+        "58618",
+        "58641",
+        "58617",
+        "58576",
+        "58616",
+        "58464",
+        "58580",
+        "58606"
+      ],
+      "num-NVDA-CashAndCashEquivalentsAtCarryingValue-2026": [
+        "58620",
+        "58617",
+        "58621",
+        "58580",
+        "58674",
+        "58596",
+        "58465",
+        "58610"
+      ],
+      "num-NVDA-StockholdersEquity-2024": [
+        "59076",
+        "59077",
+        "59066",
+        "59068",
+        "59134",
+        "59049",
+        "59129",
+        "59102"
+      ],
+      "num-NVDA-NetIncomeLoss-2025": [
+        "58847",
+        "58892",
+        "58848",
+        "58851",
+        "58846",
+        "58849",
+        "58821",
+        "58820"
+      ],
+      "num-NVDA-NetIncomeLoss-2026": [
+        "58616",
+        "58590",
+        "58620",
+        "58660",
+        "58669",
+        "58661",
+        "58618",
+        "58617"
+      ],
+      "num-NVDA-ResearchAndDevelopmentExpense-2025": [
+        "58824",
+        "58883",
+        "58904",
+        "58815",
+        "58820",
+        "58722",
+        "58869",
+        "58898"
+      ],
+      "num-NVDA-Revenues-2026": [
+        "58671",
+        "58590",
+        "58591",
+        "58650",
+        "58616",
+        "58670",
+        "58669",
+        "58617"
+      ],
+      "num-NVDA-Liabilities-2026": [
+        "58650",
+        "58671",
+        "58662",
+        "58617",
+        "58584",
+        "58590",
+        "58643",
+        "58669"
+      ],
+      "num-NVDA-Revenues-2024": [
+        "59129",
+        "59049",
+        "59133",
+        "59076",
+        "59130",
+        "59042",
+        "59041",
+        "59111"
+      ],
+      "num-NVDA-Assets-2024": [
+        "59129",
+        "59110",
+        "59076",
+        "59098",
+        "59041",
+        "59131",
+        "59130",
+        "59049"
+      ],
+      "yoy-NVDA-ResearchAndDevelopmentExpense-2024-2025": [
+        "58824",
+        "58846",
+        "58734",
+        "58869",
+        "58892",
+        "58855",
+        "58723",
+        "58898"
+      ],
+      "yoy-NVDA-EarningsPerShareDiluted-2024-2025": [
+        "58870",
+        "58846",
+        "58847",
+        "58849",
+        "58869",
+        "58906",
+        "58848",
+        "58804"
+      ],
+      "yoy-NVDA-StockholdersEquity-2024-2025": [
+        "58848",
+        "58849",
+        "58907",
+        "58880",
+        "58876",
+        "58851",
+        "58838",
+        "58693"
+      ],
+      "yoy-NVDA-Revenues-2024-2025": [
+        "58903",
+        "58883",
+        "58822",
+        "58820",
+        "58821",
+        "58848",
+        "58824",
+        "58823"
+      ],
+      "yoy-NVDA-CommonStockSharesOutstanding-2024-2025": [
+        "58849",
+        "58692",
+        "58848",
+        "58906",
+        "58803",
+        "58870",
+        "58872",
+        "58847"
+      ],
+      "yoy-NVDA-OperatingIncomeLoss-2024-2025": [
+        "58846",
+        "58820",
+        "58892",
+        "58821",
+        "58851",
+        "58847",
+        "58883",
+        "58904"
+      ],
+      "nar-AAPL-legal": [
+        "57427",
+        "57391",
+        "57413",
+        "57412",
+        "57397",
+        "57481",
+        "57389",
+        "57398"
+      ],
+      "nar-AAPL-supply-concentration": [
+        "57377",
+        "57376",
+        "57370",
+        "57462",
+        "57365",
+        "57434",
+        "57404",
+        "57367"
+      ],
+      "nar-AAPL-revenue-drivers": [
+        "57432",
+        "57431",
+        "57433",
+        "57355",
+        "57434",
+        "57395",
+        "57356",
+        "57419"
+      ],
+      "nar-CAT-fx-exposure": [
+        "60819",
+        "60559",
+        "60668",
+        "60818",
+        "60812",
+        "60821",
+        "60817",
+        "60638"
+      ],
+      "nar-CAT-revenue-drivers": [
+        "60548",
+        "60813",
+        "60812",
+        "60560",
+        "60625",
+        "60817",
+        "60814",
+        "60821"
+      ],
+      "nar-CAT-competition": [
+        "60560",
+        "60562",
+        "60548",
+        "60700",
+        "60589",
+        "60557",
+        "60813",
+        "60815"
+      ],
+      "nar-COST-revenue-drivers": [
+        "59266",
+        "59229",
+        "59150",
+        "59243",
+        "59223",
+        "59217",
+        "59228",
+        "59203"
+      ],
+      "nar-COST-fx-exposure": [
+        "59242",
+        "59241",
+        "59217",
+        "59207",
+        "59226",
+        "59215",
+        "59266",
+        "59183"
+      ],
+      "nar-COST-supply-concentration": [
+        "59266",
+        "59177",
+        "59178",
+        "59154",
+        "59165",
+        "59150",
+        "59217",
+        "59163"
+      ],
+      "nar-JNJ-competition": [
+        "59637",
+        "59616",
+        "59614",
+        "59834",
+        "59607",
+        "59638",
+        "59849",
+        "59633"
+      ],
+      "nar-JNJ-fx-exposure": [
+        "59652",
+        "59776",
+        "59743",
+        "59697",
+        "59653",
+        "59698",
+        "59834",
+        "59709"
+      ],
+      "nar-JNJ-supply-concentration": [
+        "59614",
+        "59637",
+        "59644",
+        "59639",
+        "59616",
+        "59642",
+        "59640",
+        "59613"
+      ],
+      "nar-MSFT-competition": [
+        "57811",
+        "57870",
+        "57836",
+        "57879",
+        "57875",
+        "57985",
+        "57874",
+        "57877"
+      ],
+      "nar-MSFT-fx-exposure": [
+        "57901",
+        "57973",
+        "57872",
+        "57980",
+        "57783",
+        "57931",
+        "57878",
+        "57869"
+      ],
+      "nar-MSFT-legal": [
+        "57985",
+        "57980",
+        "57979",
+        "57867",
+        "57898",
+        "57783",
+        "57809",
+        "57982"
+      ],
+      "nar-NVDA-revenue-drivers": [
+        "58670",
+        "58591",
+        "58616",
+        "58590",
+        "58669",
+        "58650",
+        "58580",
+        "58671"
+      ],
+      "nar-NVDA-legal": [
+        "58658",
+        "58655",
+        "58657",
+        "58656",
+        "58466",
+        "58575",
+        "58674",
+        "58620"
+      ],
+      "nar-NVDA-fx-exposure": [
+        "58601",
+        "58651",
+        "58626",
+        "58602",
+        "58610",
+        "58466",
+        "58465",
+        "58580"
+      ],
+      "nar-PG-revenue-drivers": [
+        "62258",
+        "62190",
+        "62290",
+        "62378",
+        "62238",
+        "62380",
+        "62308",
+        "62307"
+      ],
+      "nar-PG-fx-exposure": [
+        "62354",
+        "62251",
+        "62299",
+        "62283",
+        "62311",
+        "62200",
+        "62284",
+        "62190"
+      ],
+      "nar-PG-legal": [
+        "62228",
+        "62378",
+        "62380",
+        "62299",
+        "62372",
+        "62190",
+        "62308",
+        "62381"
+      ],
+      "nar-UNH-competition": [
+        "61561",
+        "61594",
+        "61564",
+        "61716",
+        "61719",
+        "61715",
+        "61717",
+        "61604"
+      ],
+      "nar-UNH-legal": [
+        "61716",
+        "61715",
+        "61719",
+        "61718",
+        "61717",
+        "61724",
+        "61720",
+        "61597"
+      ],
+      "nar-UNH-supply-concentration": [
+        "61562",
+        "61561",
+        "61563",
+        "61560",
+        "61715",
+        "61532",
+        "61716",
+        "61719"
+      ]
+    },
+    "after": {
+      "num-CAT-CashAndCashEquivalentsAtCarryingValue-2025": [
+        "60812",
+        "60813",
+        "60817",
+        "60814",
+        "60820",
+        "60821",
+        "60819",
+        "60548"
+      ],
+      "num-CAT-ResearchAndDevelopmentExpense-2023": [
+        "61491",
+        "61492",
+        "61369",
+        "61490",
+        "61489",
+        "61494",
+        "61228",
+        "61241"
+      ],
+      "num-CAT-Revenues-2024": [
+        "61030",
+        "61153",
+        "61151",
+        "61154",
+        "61152",
+        "61156",
+        "61031",
+        "60899"
+      ],
+      "num-CAT-OperatingIncomeLoss-2023": [
+        "61492",
+        "61370",
+        "61490",
+        "61489",
+        "61369",
+        "61491",
+        "61241",
+        "61228"
+      ],
+      "num-CAT-CommonStockSharesOutstanding-2024": [
+        "61112",
+        "60990",
+        "61153",
+        "61111",
+        "61156",
+        "61154",
+        "60955",
+        "61035"
+      ],
+      "num-CAT-Liabilities-2025": [
+        "60694",
+        "60813",
+        "60812",
+        "60820",
+        "60811",
+        "60814",
+        "60821",
+        "60815"
+      ],
+      "num-CAT-Revenues-2025": [
+        "60820",
+        "60692",
+        "60812",
+        "60813",
+        "60811",
+        "60814",
+        "60817",
+        "60821"
+      ],
+      "num-CAT-Revenues-2023": [
+        "61491",
+        "61489",
+        "61492",
+        "61490",
+        "61494",
+        "61241",
+        "61477",
+        "61304"
+      ],
+      "num-CAT-CommonStockSharesOutstanding-2023": [
+        "61375",
+        "61489",
+        "61331",
+        "61392",
+        "61492",
+        "61491",
+        "61494",
+        "61451"
+      ],
+      "num-CAT-ResearchAndDevelopmentExpense-2024": [
+        "61154",
+        "61153",
+        "61152",
+        "60990",
+        "61156",
+        "60983",
+        "61030",
+        "60886"
+      ],
+      "num-CAT-Liabilities-2024": [
+        "61154",
+        "61153",
+        "61152",
+        "61032",
+        "60990",
+        "60899",
+        "61156",
+        "60983"
+      ],
+      "num-CAT-OperatingIncomeLoss-2024": [
+        "61154",
+        "61030",
+        "61031",
+        "61152",
+        "61153",
+        "61151",
+        "60899",
+        "61156"
+      ],
+      "num-CAT-CommonStockSharesOutstanding-2025": [
+        "60652",
+        "60771",
+        "60817",
+        "60770",
+        "60696",
+        "60813",
+        "60617",
+        "60616"
+      ],
+      "num-CAT-Assets-2023": [
+        "61491",
+        "61371",
+        "61489",
+        "61492",
+        "61490",
+        "61494",
+        "61241",
+        "61498"
+      ],
+      "num-CAT-EarningsPerShareDiluted-2023": [
+        "61491",
+        "61369",
+        "61489",
+        "61492",
+        "61494",
+        "61490",
+        "61451",
+        "61375"
+      ],
+      "num-CAT-EarningsPerShareDiluted-2025": [
+        "60619",
+        "60812",
+        "60813",
+        "60770",
+        "60820",
+        "60652",
+        "60692",
+        "60814"
+      ],
+      "num-CAT-CashAndCashEquivalentsAtCarryingValue-2023": [
+        "61352",
+        "61489",
+        "61492",
+        "61490",
+        "61494",
+        "61491",
+        "61360",
+        "61376"
+      ],
+      "num-CAT-OperatingIncomeLoss-2025": [
+        "60812",
+        "60548",
+        "60813",
+        "60814",
+        "60629",
+        "60817",
+        "60820",
+        "60821"
+      ],
+      "num-CAT-Assets-2025": [
+        "60694",
+        "60812",
+        "60820",
+        "60813",
+        "60814",
+        "60811",
+        "60817",
+        "60696"
+      ],
+      "num-CAT-Assets-2024": [
+        "61153",
+        "61032",
+        "61151",
+        "61154",
+        "61152",
+        "61156",
+        "60899",
+        "61159"
+      ],
+      "yoy-CAT-Revenues-2023-2024": [
+        "61153",
+        "60963",
+        "61152",
+        "61154",
+        "60886",
+        "60899",
+        "61156",
+        "60990"
+      ],
+      "yoy-CAT-ResearchAndDevelopmentExpense-2023-2024": [
+        "61153",
+        "61152",
+        "60886",
+        "61154",
+        "61030",
+        "60899",
+        "61014",
+        "61013"
+      ],
+      "yoy-CAT-EarningsPerShareDiluted-2023-2024": [
+        "61112",
+        "61153",
+        "61154",
+        "61152",
+        "60990",
+        "61030",
+        "61111",
+        "61159"
+      ],
+      "yoy-CAT-CashAndCashEquivalentsAtCarryingValue-2023-2024": [
+        "61152",
+        "61154",
+        "61153",
+        "60990",
+        "61013",
+        "60983",
+        "61158",
+        "61157"
+      ],
+      "yoy-CAT-OperatingIncomeLoss-2023-2024": [
+        "61152",
+        "61154",
+        "61153",
+        "60899",
+        "60886",
+        "61030",
+        "61159",
+        "61031"
+      ],
+      "yoy-CAT-Liabilities-2023-2024": [
+        "61153",
+        "61154",
+        "61152",
+        "60899",
+        "61032",
+        "61151",
+        "60983",
+        "60886"
+      ],
+      "num-PG-NetIncomeLoss-2025": [
+        "62519",
+        "62561",
+        "62507",
+        "62547",
+        "62468",
+        "62595",
+        "62524",
+        "62593"
+      ],
+      "num-PG-Assets-2024": [
+        "62734",
+        "62747",
+        "62804",
+        "62806",
+        "62737",
+        "62756",
+        "62769",
+        "62621"
+      ],
+      "num-PG-Liabilities-2026": [
+        "62299",
+        "62304",
+        "62380",
+        "62378",
+        "62322",
+        "62308",
+        "62290",
+        "62190"
+      ],
+      "num-PG-Liabilities-2024": [
+        "62734",
+        "62719",
+        "62758",
+        "62806",
+        "62756",
+        "62750",
+        "62801",
+        "62804"
+      ],
+      "num-PG-Revenues-2025": [
+        "62516",
+        "62408",
+        "62596",
+        "62521",
+        "62593",
+        "62547",
+        "62525",
+        "62595"
+      ],
+      "num-PG-EarningsPerShareDiluted-2026": [
+        "62335",
+        "62290",
+        "62302",
+        "62289",
+        "62380",
+        "62249",
+        "62304",
+        "62337"
+      ],
+      "num-PG-OperatingIncomeLoss-2025": [
+        "62516",
+        "62596",
+        "62468",
+        "62507",
+        "62547",
+        "62408",
+        "62525",
+        "62519"
+      ],
+      "num-PG-ResearchAndDevelopmentExpense-2024": [
+        "62729",
+        "62804",
+        "62806",
+        "62621",
+        "62724",
+        "62732",
+        "62734",
+        "62738"
+      ],
+      "num-PG-EarningsPerShareDiluted-2025": [
+        "62552",
+        "62507",
+        "62551",
+        "62519",
+        "62596",
+        "62521",
+        "62467",
+        "62593"
+      ],
+      "num-PG-ResearchAndDevelopmentExpense-2025": [
+        "62593",
+        "62596",
+        "62408",
+        "62595",
+        "62516",
+        "62594",
+        "62519",
+        "62468"
+      ],
+      "num-PG-Assets-2025": [
+        "62521",
+        "62596",
+        "62545",
+        "62524",
+        "62593",
+        "62558",
+        "62547",
+        "62595"
+      ],
+      "num-PG-EarningsPerShareDiluted-2024": [
+        "62762",
+        "62763",
+        "62804",
+        "62806",
+        "62735",
+        "62732",
+        "62720",
+        "62734"
+      ],
+      "num-PG-ResearchAndDevelopmentExpense-2026": [
+        "62378",
+        "62380",
+        "62381",
+        "62190",
+        "62382",
+        "62299",
+        "62290",
+        "62320"
+      ],
+      "num-PG-Assets-2026": [
+        "62304",
+        "62299",
+        "62380",
+        "62378",
+        "62190",
+        "62290",
+        "62382",
+        "62294"
+      ],
+      "num-PG-OperatingIncomeLoss-2024": [
+        "62729",
+        "62806",
+        "62687",
+        "62732",
+        "62758",
+        "62747",
+        "62724",
+        "62804"
+      ],
+      "num-PG-Liabilities-2025": [
+        "62521",
+        "62539",
+        "62593",
+        "62571",
+        "62596",
+        "62519",
+        "62547",
+        "62595"
+      ],
+      "num-PG-NetIncomeLoss-2024": [
+        "62679",
+        "62732",
+        "62729",
+        "62687",
+        "62758",
+        "62621",
+        "62806",
+        "62804"
+      ],
+      "num-PG-NetIncomeLoss-2026": [
+        "62380",
+        "62290",
+        "62378",
+        "62320",
+        "62331",
+        "62382",
+        "62381",
+        "62303"
+      ],
+      "num-PG-Revenues-2026": [
+        "62299",
+        "62190",
+        "62380",
+        "62378",
+        "62304",
+        "62290",
+        "62308",
+        "62381"
+      ],
+      "num-PG-Revenues-2024": [
+        "62804",
+        "62734",
+        "62621",
+        "62806",
+        "62749",
+        "62737",
+        "62747",
+        "62750"
+      ],
+      "yoy-PG-ResearchAndDevelopmentExpense-2024-2025": [
+        "62596",
+        "62547",
+        "62471",
+        "62516",
+        "62593",
+        "62519",
+        "62468",
+        "62525"
+      ],
+      "yoy-PG-Liabilities-2024-2025": [
+        "62521",
+        "62539",
+        "62524",
+        "62525",
+        "62547",
+        "62596",
+        "62519",
+        "62571"
+      ],
+      "yoy-PG-EarningsPerShareDiluted-2024-2025": [
+        "62507",
+        "62552",
+        "62596",
+        "62551",
+        "62519",
+        "62468",
+        "62593",
+        "62467"
+      ],
+      "yoy-PG-OperatingIncomeLoss-2024-2025": [
+        "62468",
+        "62507",
+        "62547",
+        "62596",
+        "62524",
+        "62525",
+        "62471",
+        "62528"
+      ],
+      "yoy-PG-Assets-2024-2025": [
+        "62521",
+        "62524",
+        "62596",
+        "62593",
+        "62558",
+        "62468",
+        "62545",
+        "62595"
+      ],
+      "yoy-PG-NetIncomeLoss-2024-2025": [
+        "62468",
+        "62561",
+        "62507",
+        "62524",
+        "62547",
+        "62519",
+        "62471",
+        "62596"
+      ],
+      "num-JNJ-EarningsPerShareDiluted-2025": [
+        "59777",
+        "59781",
+        "59718",
+        "59717",
+        "59834",
+        "59716",
+        "59862",
+        "59775"
+      ],
+      "num-JNJ-ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost-2023": [
+        "60481",
+        "60352",
+        "60305",
+        "60484",
+        "60304",
+        "60351",
+        "60291",
+        "60309"
+      ],
+      "num-JNJ-ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost-2024": [
+        "60040",
+        "59991",
+        "60174",
+        "60039",
+        "60177",
+        "60096",
+        "60176",
+        "59990"
+      ],
+      "num-JNJ-Liabilities-2024": [
+        "60174",
+        "60022",
+        "60059",
+        "60177",
+        "60176",
+        "60150",
+        "60028",
+        "60146"
+      ],
+      "num-JNJ-GrossProfit-2024": [
+        "60146",
+        "60177",
+        "60028",
+        "60001",
+        "60174",
+        "60002",
+        "60147",
+        "59922"
+      ],
+      "num-JNJ-NetIncomeLoss-2024": [
+        "60024",
+        "59992",
+        "60025",
+        "60174",
+        "60146",
+        "60177",
+        "60176",
+        "60075"
+      ],
+      "num-JNJ-RevenueFromContractWithCustomerExcludingAssessedTax-2025": [
+        "59863",
+        "59860",
+        "59834",
+        "59837",
+        "59848",
+        "59862",
+        "59715",
+        "59788"
+      ],
+      "num-JNJ-EarningsPerShareDiluted-2024": [
+        "60085",
+        "60146",
+        "60024",
+        "60025",
+        "60177",
+        "60001",
+        "60023",
+        "60028"
+      ],
+      "num-JNJ-GrossProfit-2023": [
+        "60481",
+        "60484",
+        "60454",
+        "60460",
+        "60340",
+        "60314",
+        "60291",
+        "60471"
+      ],
+      "num-JNJ-EarningsPerShareDiluted-2023": [
+        "60395",
+        "60400",
+        "60336",
+        "60337",
+        "60291",
+        "60459",
+        "60460",
+        "60314"
+      ],
+      "num-JNJ-ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost-2025": [
+        "59732",
+        "59832",
+        "59686",
+        "59687",
+        "59688",
+        "59860",
+        "59836",
+        "59837"
+      ],
+      "num-JNJ-Assets-2025": [
+        "59741",
+        "59688",
+        "59834",
+        "59860",
+        "59751",
+        "59862",
+        "59837",
+        "59774"
+      ],
+      "num-JNJ-CashAndCashEquivalentsAtCarryingValue-2024": [
+        "60045",
+        "60000",
+        "60174",
+        "59992",
+        "60027",
+        "60176",
+        "60150",
+        "60177"
+      ],
+      "num-JNJ-Liabilities-2023": [
+        "60368",
+        "60481",
+        "60291",
+        "60307",
+        "60365",
+        "60484",
+        "60414",
+        "60460"
+      ],
+      "num-JNJ-NetIncomeLoss-2025": [
+        "59836",
+        "59688",
+        "59718",
+        "59775",
+        "59717",
+        "59777",
+        "59835",
+        "59834"
+      ],
+      "num-JNJ-Assets-2024": [
+        "60146",
+        "60177",
+        "60022",
+        "60174",
+        "60176",
+        "60001",
+        "60103",
+        "60048"
+      ],
+      "num-JNJ-NetIncomeLoss-2023": [
+        "60306",
+        "60395",
+        "60337",
+        "60460",
+        "60481",
+        "60314",
+        "60454",
+        "60365"
+      ],
+      "num-JNJ-CashAndCashEquivalentsAtCarryingValue-2023": [
+        "60311",
+        "60307",
+        "60356",
+        "60481",
+        "60339",
+        "60460",
+        "60484",
+        "60337"
+      ],
+      "num-JNJ-CashAndCashEquivalentsAtCarryingValue-2025": [
+        "59863",
+        "59860",
+        "59695",
+        "59718",
+        "59862",
+        "59837",
+        "59720",
+        "59715"
+      ],
+      "num-JNJ-RevenueFromContractWithCustomerExcludingAssessedTax-2024": [
+        "60177",
+        "60174",
+        "60146",
+        "60001",
+        "60028",
+        "60096",
+        "60147",
+        "60002"
+      ],
+      "yoy-JNJ-Liabilities-2023-2024": [
+        "59992",
+        "60059",
+        "60174",
+        "60177",
+        "60022",
+        "60176",
+        "60065",
+        "60075"
+      ],
+      "yoy-JNJ-NetIncomeLoss-2023-2024": [
+        "60024",
+        "59992",
+        "60025",
+        "60147",
+        "60146",
+        "60002",
+        "60083",
+        "60085"
+      ],
+      "yoy-JNJ-GrossProfit-2023-2024": [
+        "59992",
+        "60146",
+        "60024",
+        "60002",
+        "60177",
+        "60147",
+        "60150",
+        "60001"
+      ],
+      "yoy-JNJ-CashAndCashEquivalentsAtCarryingValue-2023-2024": [
+        "60045",
+        "60177",
+        "60174",
+        "60000",
+        "59999",
+        "60025",
+        "60027",
+        "60065"
+      ],
+      "yoy-JNJ-Assets-2023-2024": [
+        "59992",
+        "60146",
+        "60177",
+        "60174",
+        "60059",
+        "60176",
+        "60022",
+        "60162"
+      ],
+      "yoy-JNJ-ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost-2023-2024": [
+        "59991",
+        "59992",
+        "60040",
+        "60174",
+        "59996",
+        "60107",
+        "60144",
+        "60143"
+      ],
+      "num-AAPL-NetIncomeLoss-2024": [
+        "57573",
+        "57603",
+        "57572",
+        "57608",
+        "57574",
+        "57576",
+        "57560",
+        "57561"
+      ],
+      "num-AAPL-CommonStockSharesOutstanding-2024": [
+        "57598",
+        "57575",
+        "57495",
+        "57572",
+        "57574",
+        "57560",
+        "57557",
+        "57559"
+      ],
+      "num-AAPL-OperatingIncomeLoss-2024": [
+        "57560",
+        "57603",
+        "57559",
+        "57572",
+        "57573",
+        "57576",
+        "57608",
+        "57577"
+      ],
+      "num-AAPL-ResearchAndDevelopmentExpense-2025": [
+        "57431",
+        "57469",
+        "57433",
+        "57451",
+        "57474",
+        "57434",
+        "57363",
+        "57413"
+      ],
+      "num-AAPL-StockholdersEquity-2023": [
+        "57748",
+        "57712",
+        "57711",
+        "57745",
+        "57695",
+        "57709",
+        "57710",
+        "57637"
+      ],
+      "num-AAPL-ResearchAndDevelopmentExpense-2023": [
+        "57748",
+        "57745",
+        "57709",
+        "57744",
+        "57702",
+        "57711",
+        "57712",
+        "57640"
+      ],
+      "num-AAPL-EarningsPerShareDiluted-2025": [
+        "57432",
+        "57434",
+        "57431",
+        "57442",
+        "57458",
+        "57433",
+        "57469",
+        "57441"
+      ],
+      "num-AAPL-OperatingIncomeLoss-2025": [
+        "57432",
+        "57431",
+        "57469",
+        "57433",
+        "57435",
+        "57451",
+        "57434",
+        "57474"
+      ],
+      "num-AAPL-Liabilities-2025": [
+        "57433",
+        "57451",
+        "57416",
+        "57434",
+        "57431",
+        "57436",
+        "57432",
+        "57456"
+      ],
+      "num-AAPL-GrossProfit-2024": [
+        "57560",
+        "57562",
+        "57559",
+        "57572",
+        "57608",
+        "57573",
+        "57561",
+        "57577"
+      ],
+      "num-AAPL-Liabilities-2024": [
+        "57574",
+        "57560",
+        "57559",
+        "57575",
+        "57572",
+        "57608",
+        "57577",
+        "57588"
+      ],
+      "num-AAPL-EarningsPerShareDiluted-2023": [
+        "57709",
+        "57712",
+        "57710",
+        "57719",
+        "57713",
+        "57720",
+        "57711",
+        "57748"
+      ],
+      "num-AAPL-OperatingIncomeLoss-2023": [
+        "57710",
+        "57748",
+        "57709",
+        "57702",
+        "57745",
+        "57713",
+        "57711",
+        "57743"
+      ],
+      "num-AAPL-NetIncomeLoss-2023": [
+        "57710",
+        "57709",
+        "57700",
+        "57713",
+        "57744",
+        "57711",
+        "57748",
+        "57714"
+      ],
+      "num-AAPL-CommonStockSharesOutstanding-2025": [
+        "57434",
+        "57458",
+        "57433",
+        "57431",
+        "57415",
+        "57414",
+        "57351",
+        "57469"
+      ],
+      "num-AAPL-CashAndCashEquivalentsAtCarryingValue-2024": [
+        "57577",
+        "57576",
+        "57574",
+        "57608",
+        "57572",
+        "57590",
+        "57575",
+        "57623"
+      ],
+      "num-AAPL-Assets-2023": [
+        "57711",
+        "57744",
+        "57709",
+        "57712",
+        "57748",
+        "57713",
+        "57710",
+        "57727"
+      ],
+      "num-AAPL-ResearchAndDevelopmentExpense-2024": [
+        "57559",
+        "57560",
+        "57572",
+        "57608",
+        "57616",
+        "57596",
+        "57603",
+        "57577"
+      ],
+      "num-AAPL-StockholdersEquity-2025": [
+        "57434",
+        "57433",
+        "57415",
+        "57432",
+        "57352",
+        "57431",
+        "57435",
+        "57481"
+      ],
+      "num-AAPL-EarningsPerShareDiluted-2024": [
+        "57582",
+        "57575",
+        "57573",
+        "57572",
+        "57560",
+        "57559",
+        "57598",
+        "57574"
+      ],
+      "yoy-AAPL-CashAndCashEquivalentsAtCarryingValue-2023-2024": [
+        "57577",
+        "57559",
+        "57560",
+        "57576",
+        "57573",
+        "57574",
+        "57561",
+        "57608"
+      ],
+      "yoy-AAPL-NetIncomeLoss-2023-2024": [
+        "57573",
+        "57560",
+        "57561",
+        "57603",
+        "57572",
+        "57576",
+        "57577",
+        "57559"
+      ],
+      "yoy-AAPL-RevenueFromContractWithCustomerExcludingAssessedTax-2023-2024": [
+        "57572",
+        "57573",
+        "57574",
+        "57581",
+        "57575",
+        "57560",
+        "57499",
+        "57588"
+      ],
+      "yoy-AAPL-OperatingIncomeLoss-2023-2024": [
+        "57603",
+        "57573",
+        "57560",
+        "57572",
+        "57559",
+        "57576",
+        "57577",
+        "57499"
+      ],
+      "yoy-AAPL-Assets-2023-2024": [
+        "57574",
+        "57573",
+        "57572",
+        "57575",
+        "57588",
+        "57608",
+        "57576",
+        "57560"
+      ],
+      "yoy-AAPL-GrossProfit-2023-2024": [
+        "57562",
+        "57560",
+        "57559",
+        "57573",
+        "57572",
+        "57561",
+        "57577",
+        "57608"
+      ],
+      "num-UNH-Liabilities-2024": [
+        "61862",
+        "61863",
+        "61933",
+        "61942",
+        "61938",
+        "61940",
+        "61935",
+        "61943"
+      ],
+      "num-UNH-Assets-2024": [
+        "61938",
+        "61933",
+        "61862",
+        "61936",
+        "61937",
+        "61935",
+        "61934",
+        "61863"
+      ],
+      "num-UNH-NetIncomeLoss-2024": [
+        "61938",
+        "61933",
+        "61937",
+        "61936",
+        "61934",
+        "61935",
+        "61943",
+        "61864"
+      ],
+      "num-UNH-EarningsPerShareDiluted-2023": [
+        "62055",
+        "62156",
+        "62082",
+        "62153",
+        "62084",
+        "62155",
+        "62151",
+        "61969"
+      ],
+      "num-UNH-Assets-2025": [
+        "61716",
+        "61717",
+        "61636",
+        "61637",
+        "61718",
+        "61715",
+        "61721",
+        "61719"
+      ],
+      "num-UNH-CommonStockSharesOutstanding-2025": [
+        "61716",
+        "61662",
+        "61639",
+        "61637",
+        "61599",
+        "61688",
+        "61719",
+        "61717"
+      ],
+      "num-UNH-Liabilities-2025": [
+        "61636",
+        "61716",
+        "61717",
+        "61718",
+        "61637",
+        "61721",
+        "61722",
+        "61715"
+      ],
+      "num-UNH-CashAndCashEquivalentsAtCarryingValue-2023": [
+        "62087",
+        "62163",
+        "62156",
+        "62158",
+        "62153",
+        "62151",
+        "62164",
+        "62155"
+      ],
+      "num-UNH-EarningsPerShareDiluted-2024": [
+        "61863",
+        "61933",
+        "61937",
+        "61882",
+        "61935",
+        "61936",
+        "61934",
+        "61865"
+      ],
+      "num-UNH-NetIncomeLoss-2025": [
+        "61716",
+        "61718",
+        "61722",
+        "61639",
+        "61637",
+        "61638",
+        "61719",
+        "61717"
+      ],
+      "num-UNH-CashAndCashEquivalentsAtCarryingValue-2024": [
+        "61935",
+        "61934",
+        "61938",
+        "61944",
+        "61936",
+        "61945",
+        "61933",
+        "61844"
+      ],
+      "num-UNH-OperatingIncomeLoss-2023": [
+        "62156",
+        "62162",
+        "62082",
+        "62158",
+        "62055",
+        "62153",
+        "62164",
+        "62154"
+      ],
+      "num-UNH-Assets-2023": [
+        "62156",
+        "62081",
+        "62151",
+        "62082",
+        "62153",
+        "62155",
+        "62154",
+        "62150"
+      ],
+      "num-UNH-EarningsPerShareDiluted-2025": [
+        "61637",
+        "61662",
+        "61716",
+        "61639",
+        "61638",
+        "61717",
+        "61718",
+        "61719"
+      ],
+      "num-UNH-CashAndCashEquivalentsAtCarryingValue-2025": [
+        "61716",
+        "61723",
+        "61717",
+        "61724",
+        "61718",
+        "61618",
+        "61719",
+        "61637"
+      ],
+      "num-UNH-NetIncomeLoss-2023": [
+        "62156",
+        "62162",
+        "62082",
+        "62083",
+        "62153",
+        "62158",
+        "62155",
+        "62084"
+      ],
+      "num-UNH-Revenues-2025": [
+        "61717",
+        "61637",
+        "61716",
+        "61718",
+        "61719",
+        "61722",
+        "61702",
+        "61613"
+      ],
+      "num-UNH-Revenues-2023": [
+        "62156",
+        "62082",
+        "62059",
+        "62137",
+        "62154",
+        "62155",
+        "62151",
+        "62153"
+      ],
+      "num-UNH-Liabilities-2023": [
+        "62156",
+        "62082",
+        "62081",
+        "62153",
+        "62162",
+        "62161",
+        "62151",
+        "62154"
+      ],
+      "num-UNH-Revenues-2024": [
+        "61938",
+        "61933",
+        "61937",
+        "61934",
+        "61936",
+        "61863",
+        "61935",
+        "61839"
+      ],
+      "yoy-UNH-CommonStockSharesOutstanding-2023-2024": [
+        "61935",
+        "61936",
+        "61933",
+        "61938",
+        "61934",
+        "61865",
+        "61863",
+        "61937"
+      ],
+      "yoy-UNH-Liabilities-2023-2024": [
+        "61938",
+        "61935",
+        "61863",
+        "61936",
+        "61862",
+        "61933",
+        "61942",
+        "61940"
+      ],
+      "yoy-UNH-Assets-2023-2024": [
+        "61938",
+        "61936",
+        "61862",
+        "61933",
+        "61935",
+        "61937",
+        "61934",
+        "61863"
+      ],
+      "yoy-UNH-EarningsPerShareDiluted-2023-2024": [
+        "61935",
+        "61936",
+        "61863",
+        "61934",
+        "61938",
+        "61864",
+        "61933",
+        "61937"
+      ],
+      "yoy-UNH-CashAndCashEquivalentsAtCarryingValue-2023-2024": [
+        "61938",
+        "61935",
+        "61936",
+        "61944",
+        "61934",
+        "61844",
+        "61933",
+        "61940"
+      ],
+      "yoy-UNH-NetIncomeLoss-2023-2024": [
+        "61938",
+        "61935",
+        "61865",
+        "61943",
+        "61864",
+        "61944",
+        "61936",
+        "61937"
+      ],
+      "num-MSFT-EarningsPerShareDiluted-2024": [
+        "58384",
+        "58336",
+        "58383",
+        "58437",
+        "58335",
+        "58416",
+        "58225",
+        "58397"
+      ],
+      "num-MSFT-CashAndCashEquivalentsAtCarryingValue-2024": [
+        "58444",
+        "58449",
+        "58348",
+        "58447",
+        "58445",
+        "58349",
+        "58331",
+        "58333"
+      ],
+      "num-MSFT-Liabilities-2025": [
+        "58106",
+        "58185",
+        "58108",
+        "58157",
+        "58094",
+        "58129",
+        "58175",
+        "58161"
+      ],
+      "num-MSFT-StockholdersEquity-2026": [
+        "57868",
+        "57985",
+        "57979",
+        "57980",
+        "57783",
+        "57906",
+        "57904",
+        "57891"
+      ],
+      "num-MSFT-CashAndCashEquivalentsAtCarryingValue-2026": [
+        "57960",
+        "57985",
+        "57980",
+        "57973",
+        "57979",
+        "57965",
+        "57780",
+        "57984"
+      ],
+      "num-MSFT-GrossProfit-2025": [
+        "58103",
+        "58101",
+        "58193",
+        "58180",
+        "58205",
+        "58185",
+        "58102",
+        "58094"
+      ],
+      "num-MSFT-CommonStockSharesOutstanding-2025": [
+        "58091",
+        "58147",
+        "58205",
+        "58174",
+        "58177",
+        "58173",
+        "58092",
+        "58200"
+      ],
+      "num-MSFT-CommonStockSharesOutstanding-2024": [
+        "58325",
+        "58416",
+        "58384",
+        "58225",
+        "58437",
+        "58421",
+        "58383",
+        "58228"
+      ],
+      "num-MSFT-Assets-2026": [
+        "57941",
+        "57882",
+        "57965",
+        "57937",
+        "57985",
+        "57956",
+        "57868",
+        "57878"
+      ],
+      "num-MSFT-CommonStockSharesOutstanding-2026": [
+        "57868",
+        "57926",
+        "57955",
+        "57956",
+        "57959",
+        "57958",
+        "57954",
+        "57985"
+      ],
+      "num-MSFT-Assets-2025": [
+        "58205",
+        "58185",
+        "58103",
+        "58157",
+        "58200",
+        "58161",
+        "58158",
+        "58126"
+      ],
+      "num-MSFT-RevenueFromContractWithCustomerExcludingAssessedTax-2025": [
+        "58103",
+        "58101",
+        "58094",
+        "58102",
+        "58104",
+        "58100",
+        "58183",
+        "58180"
+      ],
+      "num-MSFT-OperatingIncomeLoss-2024": [
+        "58437",
+        "58361",
+        "58335",
+        "58343",
+        "58337",
+        "58326",
+        "58336",
+        "58383"
+      ],
+      "num-MSFT-GrossProfit-2024": [
+        "58336",
+        "58331",
+        "58339",
+        "58338",
+        "58444",
+        "58423",
+        "58449",
+        "58326"
+      ],
+      "num-MSFT-StockholdersEquity-2024": [
+        "58325",
+        "58228",
+        "58443",
+        "58449",
+        "58444",
+        "58362",
+        "58364",
+        "58386"
+      ],
+      "num-MSFT-ResearchAndDevelopmentExpense-2026": [
+        "57882",
+        "57881",
+        "57915",
+        "57877",
+        "57878",
+        "57879",
+        "57985",
+        "57870"
+      ],
+      "num-MSFT-ResearchAndDevelopmentExpense-2024": [
+        "58340",
+        "58437",
+        "58341",
+        "58374",
+        "58375",
+        "58444",
+        "58449",
+        "58436"
+      ],
+      "num-MSFT-Liabilities-2026": [
+        "57980",
+        "57985",
+        "57965",
+        "57979",
+        "57904",
+        "57936",
+        "57878",
+        "57984"
+      ],
+      "num-MSFT-OperatingIncomeLoss-2026": [
+        "57878",
+        "57963",
+        "57877",
+        "57960",
+        "57869",
+        "57956",
+        "57876",
+        "57903"
+      ],
+      "num-MSFT-EarningsPerShareDiluted-2026": [
+        "57926",
+        "57985",
+        "57878",
+        "57876",
+        "57925",
+        "57980",
+        "57868",
+        "57886"
+      ],
+      "yoy-MSFT-GrossProfit-2024-2025": [
+        "58103",
+        "58094",
+        "58098",
+        "58101",
+        "58205",
+        "58180",
+        "58200",
+        "58102"
+      ],
+      "yoy-MSFT-RevenueFromContractWithCustomerExcludingAssessedTax-2024-2025": [
+        "58103",
+        "58094",
+        "58101",
+        "58098",
+        "58102",
+        "58104",
+        "58100",
+        "58106"
+      ],
+      "yoy-MSFT-Liabilities-2024-2025": [
+        "58200",
+        "58103",
+        "58094",
+        "58129",
+        "58098",
+        "58205",
+        "58100",
+        "58180"
+      ],
+      "yoy-MSFT-OperatingIncomeLoss-2024-2025": [
+        "58102",
+        "58108",
+        "58103",
+        "58094",
+        "58183",
+        "58107",
+        "58125",
+        "58129"
+      ],
+      "yoy-MSFT-CashAndCashEquivalentsAtCarryingValue-2024-2025": [
+        "58200",
+        "58129",
+        "58098",
+        "58112",
+        "58097",
+        "58103",
+        "58205",
+        "58094"
+      ],
+      "yoy-MSFT-EarningsPerShareDiluted-2024-2025": [
+        "58147",
+        "58148",
+        "58177",
+        "58091",
+        "58094",
+        "58200",
+        "58205",
+        "58158"
+      ],
+      "num-COST-EarningsPerShareDiluted-2025": [
+        "59263",
+        "59223",
+        "59266",
+        "59147",
+        "59276",
+        "59229",
+        "59226",
+        "59204"
+      ],
+      "num-COST-Liabilities-2024": [
+        "59364",
+        "59365",
+        "59403",
+        "59392",
+        "59355",
+        "59362",
+        "59415",
+        "59390"
+      ],
+      "num-COST-OperatingIncomeLoss-2025": [
+        "59217",
+        "59223",
+        "59269",
+        "59266",
+        "59229",
+        "59150",
+        "59228",
+        "59275"
+      ],
+      "num-COST-CashAndCashEquivalentsAtCarryingValue-2024": [
+        "59367",
+        "59346",
+        "59348",
+        "59368",
+        "59355",
+        "59364",
+        "59417",
+        "59347"
+      ],
+      "num-COST-EarningsPerShareDiluted-2024": [
+        "59355",
+        "59341",
+        "59401",
+        "59289",
+        "59362",
+        "59340",
+        "59394",
+        "59369"
+      ],
+      "num-COST-Assets-2025": [
+        "59225",
+        "59217",
+        "59266",
+        "59275",
+        "59270",
+        "59229",
+        "59226",
+        "59159"
+      ],
+      "num-COST-EarningsPerShareDiluted-2023": [
+        "59478",
+        "59430",
+        "59499",
+        "59525",
+        "59552",
+        "59506",
+        "59540",
+        "59492"
+      ],
+      "num-COST-StockholdersEquity-2025": [
+        "59226",
+        "59217",
+        "59225",
+        "59266",
+        "59147",
+        "59275",
+        "59229",
+        "59195"
+      ],
+      "num-COST-NetIncomeLoss-2023": [
+        "59499",
+        "59478",
+        "59430",
+        "59504",
+        "59506",
+        "59540",
+        "59492",
+        "59502"
+      ],
+      "num-COST-CashAndCashEquivalentsAtCarryingValue-2025": [
+        "59229",
+        "59228",
+        "59217",
+        "59266",
+        "59275",
+        "59210",
+        "59230",
+        "59150"
+      ],
+      "num-COST-StockholdersEquity-2023": [
+        "59502",
+        "59501",
+        "59492",
+        "59552",
+        "59550",
+        "59428",
+        "59551",
+        "59540"
+      ],
+      "num-COST-OperatingIncomeLoss-2023": [
+        "59499",
+        "59492",
+        "59430",
+        "59504",
+        "59478",
+        "59540",
+        "59552",
+        "59539"
+      ],
+      "num-COST-Liabilities-2023": [
+        "59501",
+        "59478",
+        "59506",
+        "59430",
+        "59540",
+        "59529",
+        "59552",
+        "59492"
+      ],
+      "num-COST-Assets-2023": [
+        "59501",
+        "59552",
+        "59502",
+        "59546",
+        "59551",
+        "59478",
+        "59540",
+        "59492"
+      ],
+      "num-COST-OperatingIncomeLoss-2024": [
+        "59289",
+        "59355",
+        "59362",
+        "59369",
+        "59340",
+        "59367",
+        "59416",
+        "59403"
+      ],
+      "num-COST-Liabilities-2025": [
+        "59225",
+        "59217",
+        "59266",
+        "59229",
+        "59254",
+        "59275",
+        "59226",
+        "59269"
+      ],
+      "num-COST-NetIncomeLoss-2024": [
+        "59362",
+        "59355",
+        "59367",
+        "59289",
+        "59369",
+        "59340",
+        "59365",
+        "59416"
+      ],
+      "num-COST-RevenueFromContractWithCustomerExcludingAssessedTax-2025": [
+        "59217",
+        "59150",
+        "59230",
+        "59266",
+        "59203",
+        "59229",
+        "59225",
+        "59223"
+      ],
+      "num-COST-StockholdersEquity-2024": [
+        "59365",
+        "59287",
+        "59364",
+        "59416",
+        "59355",
+        "59332",
+        "59415",
+        "59414"
+      ],
+      "num-COST-CommonStockSharesOutstanding-2025": [
+        "59217",
+        "59266",
+        "59225",
+        "59226",
+        "59147",
+        "59195",
+        "59263",
+        "59229"
+      ],
+      "yoy-COST-Liabilities-2023-2024": [
+        "59364",
+        "59355",
+        "59369",
+        "59289",
+        "59392",
+        "59340",
+        "59403",
+        "59365"
+      ],
+      "yoy-COST-Assets-2023-2024": [
+        "59364",
+        "59375",
+        "59367",
+        "59362",
+        "59403",
+        "59365",
+        "59410",
+        "59355"
+      ],
+      "yoy-COST-EarningsPerShareDiluted-2023-2024": [
+        "59362",
+        "59401",
+        "59341",
+        "59340",
+        "59364",
+        "59365",
+        "59403",
+        "59416"
+      ],
+      "yoy-COST-RevenueFromContractWithCustomerExcludingAssessedTax-2023-2024": [
+        "59340",
+        "59289",
+        "59343",
+        "59355",
+        "59342",
+        "59362",
+        "59369",
+        "59410"
+      ],
+      "yoy-COST-StockholdersEquity-2023-2024": [
+        "59365",
+        "59355",
+        "59364",
+        "59416",
+        "59287",
+        "59369",
+        "59289",
+        "59403"
+      ],
+      "yoy-COST-OperatingIncomeLoss-2023-2024": [
+        "59362",
+        "59289",
+        "59367",
+        "59355",
+        "59403",
+        "59340",
+        "59363",
+        "59364"
+      ],
+      "num-NVDA-CashAndCashEquivalentsAtCarryingValue-2024": [
+        "59129",
+        "59098",
+        "59041",
+        "59055",
+        "59068",
+        "59114",
+        "59079",
+        "59105"
+      ],
+      "num-NVDA-OperatingIncomeLoss-2024": [
+        "59129",
+        "59049",
+        "59121",
+        "59098",
+        "59041",
+        "59074",
+        "59048",
+        "59068"
+      ],
+      "num-NVDA-Liabilities-2024": [
+        "59076",
+        "59049",
+        "59111",
+        "59068",
+        "59133",
+        "59129",
+        "59116",
+        "59122"
+      ],
+      "num-NVDA-NetIncomeLoss-2024": [
+        "59049",
+        "59121",
+        "59079",
+        "59129",
+        "59041",
+        "59075",
+        "59074",
+        "59098"
+      ],
+      "num-NVDA-ResearchAndDevelopmentExpense-2024": [
+        "59049",
+        "59042",
+        "59074",
+        "59052",
+        "59098",
+        "59133",
+        "58926",
+        "58964"
+      ],
+      "num-NVDA-CommonStockSharesOutstanding-2025": [
+        "58849",
+        "58692",
+        "58848",
+        "58906",
+        "58803",
+        "58907",
+        "58804",
+        "58870"
+      ],
+      "num-NVDA-StockholdersEquity-2025": [
+        "58848",
+        "58849",
+        "58840",
+        "58907",
+        "58838",
+        "58876",
+        "58694",
+        "58805"
+      ],
+      "num-NVDA-Assets-2025": [
+        "58848",
+        "58903",
+        "58906",
+        "58865",
+        "58840",
+        "58875",
+        "58893",
+        "58874"
+      ],
+      "num-NVDA-CashAndCashEquivalentsAtCarryingValue-2025": [
+        "58875",
+        "58840",
+        "58883",
+        "58851",
+        "58829",
+        "58904",
+        "58852",
+        "58826"
+      ],
+      "num-NVDA-EarningsPerShareDiluted-2024": [
+        "59077",
+        "59133",
+        "59074",
+        "59103",
+        "59129",
+        "59075",
+        "59076",
+        "58924"
+      ],
+      "num-NVDA-CommonStockSharesOutstanding-2026": [
+        "58618",
+        "58641",
+        "58617",
+        "58576",
+        "58616",
+        "58464",
+        "58580",
+        "58606"
+      ],
+      "num-NVDA-CashAndCashEquivalentsAtCarryingValue-2026": [
+        "58620",
+        "58617",
+        "58621",
+        "58580",
+        "58674",
+        "58596",
+        "58465",
+        "58610"
+      ],
+      "num-NVDA-StockholdersEquity-2024": [
+        "59076",
+        "59077",
+        "59066",
+        "59068",
+        "59134",
+        "59049",
+        "59129",
+        "59102"
+      ],
+      "num-NVDA-NetIncomeLoss-2025": [
+        "58847",
+        "58892",
+        "58848",
+        "58851",
+        "58846",
+        "58849",
+        "58821",
+        "58820"
+      ],
+      "num-NVDA-NetIncomeLoss-2026": [
+        "58616",
+        "58590",
+        "58620",
+        "58660",
+        "58669",
+        "58661",
+        "58618",
+        "58617"
+      ],
+      "num-NVDA-ResearchAndDevelopmentExpense-2025": [
+        "58824",
+        "58883",
+        "58904",
+        "58815",
+        "58820",
+        "58722",
+        "58869",
+        "58898"
+      ],
+      "num-NVDA-Revenues-2026": [
+        "58671",
+        "58590",
+        "58591",
+        "58650",
+        "58616",
+        "58670",
+        "58669",
+        "58617"
+      ],
+      "num-NVDA-Liabilities-2026": [
+        "58650",
+        "58671",
+        "58662",
+        "58617",
+        "58584",
+        "58590",
+        "58643",
+        "58669"
+      ],
+      "num-NVDA-Revenues-2024": [
+        "59129",
+        "59049",
+        "59133",
+        "59076",
+        "59130",
+        "59042",
+        "59041",
+        "59111"
+      ],
+      "num-NVDA-Assets-2024": [
+        "59129",
+        "59110",
+        "59076",
+        "59098",
+        "59041",
+        "59131",
+        "59130",
+        "59049"
+      ],
+      "yoy-NVDA-ResearchAndDevelopmentExpense-2024-2025": [
+        "58824",
+        "58846",
+        "58734",
+        "58869",
+        "58892",
+        "58855",
+        "58723",
+        "58898"
+      ],
+      "yoy-NVDA-EarningsPerShareDiluted-2024-2025": [
+        "58870",
+        "58846",
+        "58847",
+        "58849",
+        "58869",
+        "58906",
+        "58848",
+        "58804"
+      ],
+      "yoy-NVDA-StockholdersEquity-2024-2025": [
+        "58848",
+        "58849",
+        "58907",
+        "58880",
+        "58876",
+        "58851",
+        "58838",
+        "58693"
+      ],
+      "yoy-NVDA-Revenues-2024-2025": [
+        "58903",
+        "58883",
+        "58822",
+        "58820",
+        "58821",
+        "58848",
+        "58824",
+        "58823"
+      ],
+      "yoy-NVDA-CommonStockSharesOutstanding-2024-2025": [
+        "58849",
+        "58692",
+        "58848",
+        "58906",
+        "58803",
+        "58870",
+        "58872",
+        "58847"
+      ],
+      "yoy-NVDA-OperatingIncomeLoss-2024-2025": [
+        "58846",
+        "58820",
+        "58892",
+        "58821",
+        "58851",
+        "58847",
+        "58883",
+        "58904"
+      ],
+      "nar-AAPL-legal": [
+        "57427",
+        "57391",
+        "57413",
+        "57412",
+        "57397",
+        "57481",
+        "57389",
+        "57398"
+      ],
+      "nar-AAPL-supply-concentration": [
+        "57377",
+        "57376",
+        "57370",
+        "57462",
+        "57365",
+        "57434",
+        "57404",
+        "57367"
+      ],
+      "nar-AAPL-revenue-drivers": [
+        "57432",
+        "57431",
+        "57433",
+        "57355",
+        "57434",
+        "57395",
+        "57356",
+        "57419"
+      ],
+      "nar-CAT-fx-exposure": [
+        "60819",
+        "60559",
+        "60668",
+        "60818",
+        "60812",
+        "60821",
+        "60817",
+        "60638"
+      ],
+      "nar-CAT-revenue-drivers": [
+        "60548",
+        "60813",
+        "60812",
+        "60560",
+        "60625",
+        "60817",
+        "60814",
+        "60821"
+      ],
+      "nar-CAT-competition": [
+        "60560",
+        "60562",
+        "60548",
+        "60700",
+        "60589",
+        "60557",
+        "60813",
+        "60815"
+      ],
+      "nar-COST-revenue-drivers": [
+        "59266",
+        "59229",
+        "59150",
+        "59243",
+        "59223",
+        "59217",
+        "59228",
+        "59203"
+      ],
+      "nar-COST-fx-exposure": [
+        "59242",
+        "59241",
+        "59217",
+        "59207",
+        "59226",
+        "59215",
+        "59266",
+        "59183"
+      ],
+      "nar-COST-supply-concentration": [
+        "59266",
+        "59177",
+        "59178",
+        "59154",
+        "59165",
+        "59150",
+        "59217",
+        "59163"
+      ],
+      "nar-JNJ-competition": [
+        "59637",
+        "59616",
+        "59614",
+        "59834",
+        "59607",
+        "59638",
+        "59849",
+        "59633"
+      ],
+      "nar-JNJ-fx-exposure": [
+        "59652",
+        "59776",
+        "59743",
+        "59697",
+        "59653",
+        "59698",
+        "59834",
+        "59709"
+      ],
+      "nar-JNJ-supply-concentration": [
+        "59614",
+        "59637",
+        "59644",
+        "59639",
+        "59616",
+        "59642",
+        "59640",
+        "59613"
+      ],
+      "nar-MSFT-competition": [
+        "57811",
+        "57870",
+        "57836",
+        "57879",
+        "57875",
+        "57985",
+        "57874",
+        "57877"
+      ],
+      "nar-MSFT-fx-exposure": [
+        "57901",
+        "57973",
+        "57872",
+        "57980",
+        "57783",
+        "57931",
+        "57878",
+        "57869"
+      ],
+      "nar-MSFT-legal": [
+        "57985",
+        "57980",
+        "57979",
+        "57867",
+        "57898",
+        "57783",
+        "57809",
+        "57982"
+      ],
+      "nar-NVDA-revenue-drivers": [
+        "58670",
+        "58591",
+        "58616",
+        "58590",
+        "58669",
+        "58650",
+        "58580",
+        "58671"
+      ],
+      "nar-NVDA-legal": [
+        "58658",
+        "58655",
+        "58657",
+        "58656",
+        "58466",
+        "58575",
+        "58674",
+        "58620"
+      ],
+      "nar-NVDA-fx-exposure": [
+        "58601",
+        "58651",
+        "58626",
+        "58602",
+        "58610",
+        "58466",
+        "58465",
+        "58580"
+      ],
+      "nar-PG-revenue-drivers": [
+        "62258",
+        "62190",
+        "62290",
+        "62378",
+        "62238",
+        "62380",
+        "62308",
+        "62307"
+      ],
+      "nar-PG-fx-exposure": [
+        "62354",
+        "62251",
+        "62299",
+        "62283",
+        "62311",
+        "62200",
+        "62284",
+        "62190"
+      ],
+      "nar-PG-legal": [
+        "62228",
+        "62378",
+        "62380",
+        "62299",
+        "62372",
+        "62190",
+        "62308",
+        "62381"
+      ],
+      "nar-UNH-competition": [
+        "61561",
+        "61594",
+        "61564",
+        "61716",
+        "61719",
+        "61715",
+        "61717",
+        "61604"
+      ],
+      "nar-UNH-legal": [
+        "61716",
+        "61715",
+        "61719",
+        "61718",
+        "61717",
+        "61724",
+        "61720",
+        "61597"
+      ],
+      "nar-UNH-supply-concentration": [
+        "61562",
+        "61561",
+        "61563",
+        "61560",
+        "61715",
+        "61532",
+        "61716",
+        "61719"
+      ]
+    }
+  },
+  "run": {
+    "started_at": "2026-11-11 20:11:59.956252+00:00",
+    "status": "ok",
+    "filings_added": 2,
+    "trigger": "manual",
+    "git_sha": "dfd62aa",
+    "new_filings": [
+      {
+        "accession": "0000320193-26-000026",
+        "form": "10-K",
+        "filing_date": "2026-11-03",
+        "period_end": "2026-09-26",
+        "primary_doc": "aapl-20260926.htm",
+        "cik": "0000320193",
+        "ticker": "AAPL",
+        "name": "Apple Inc.",
+        "fiscal_year": 2026
+      },
+      {
+        "accession": "0000909832-26-000093",
+        "form": "10-K",
+        "filing_date": "2026-10-07",
+        "period_end": "2026-08-30",
+        "primary_doc": "cost-20260830.htm",
+        "cik": "0000909832",
+        "ticker": "COST",
+        "name": "COSTCO WHOLESALE CORP /NEW",
+        "fiscal_year": 2026
+      }
+    ],
+    "dry_run": false
+  },
+  "checks": [
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "text extracted",
+      "passed": true,
+      "detail": "249,436 chars"
+    },
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "required items located",
+      "passed": true,
+      "detail": "found 1, 1A, 1B, 2, 3, 5, 7, 7A, 8, 9A"
+    },
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "offsets on body, not table of contents",
+      "passed": true,
+      "detail": "10 headings spanning 83% of the document"
+    },
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "located items survive splitting",
+      "passed": true,
+      "detail": "all located items became sections"
+    },
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "substantive items have content",
+      "passed": true,
+      "detail": "Items 1, 1A and 7 all have full bodies"
+    },
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "MD&A retained figures",
+      "passed": true,
+      "detail": "177 large numbers, 217 table separators"
+    },
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "risk factors not fused with financials",
+      "passed": true,
+      "detail": "86,552 chars, 19 large numbers"
+    },
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "items in document order",
+      "passed": true,
+      "detail": "ascending"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "text extracted",
+      "passed": true,
+      "detail": "222,925 chars"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "required items located",
+      "passed": true,
+      "detail": "found 1, 1A, 1B, 2, 3, 5, 7, 7A, 8, 9A"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "offsets on body, not table of contents",
+      "passed": true,
+      "detail": "10 headings spanning 86% of the document"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "located items survive splitting",
+      "passed": true,
+      "detail": "all located items became sections"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "substantive items have content",
+      "passed": true,
+      "detail": "Items 1, 1A and 7 all have full bodies"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "MD&A retained figures",
+      "passed": true,
+      "detail": "157 large numbers, 181 table separators"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "risk factors not fused with financials",
+      "passed": true,
+      "detail": "44,315 chars, 5 large numbers"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "items in document order",
+      "passed": true,
+      "detail": "ascending"
+    },
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "same core XBRL facts as last year",
+      "passed": true,
+      "detail": "11 core facts for FY2026, 11 for FY2025"
+    },
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "XBRL figures appear in the filing text",
+      "passed": true,
+      "detail": "11 of 11 found (0 too round to look for)"
+    },
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "chunks embedded",
+      "passed": true,
+      "detail": "161 chunks, 161 embedded, 0 empty"
+    },
+    {
+      "subject": "AAPL 0000320193-26-000026 FY2026",
+      "name": "chunk count in line with last year",
+      "passed": true,
+      "detail": "161 vs 144 for FY2025 (1.12x; allowed 0.5x to 2x)"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "same core XBRL facts as last year",
+      "passed": true,
+      "detail": "9 core facts for FY2026, 9 for FY2025"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "XBRL figures appear in the filing text",
+      "passed": true,
+      "detail": "9 of 9 found (0 too round to look for)"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "chunks embedded",
+      "passed": true,
+      "detail": "143 chunks, 143 embedded, 0 empty"
+    },
+    {
+      "subject": "COST 0000909832-26-000093 FY2026",
+      "name": "chunk count in line with last year",
+      "passed": true,
+      "detail": "143 vs 140 for FY2025 (1.02x; allowed 0.5x to 2x)"
+    },
+    {
+      "subject": "AAPL XBRL facts, all years",
+      "name": "one value per tag and year",
+      "passed": true,
+      "detail": "none conflict"
+    },
+    {
+      "subject": "AAPL XBRL facts, all years",
+      "name": "fact periods agree with the filing index",
+      "passed": true,
+      "detail": "all within a week"
+    },
+    {
+      "subject": "AAPL XBRL facts, all years",
+      "name": "year labels advance with period ends",
+      "passed": true,
+      "detail": "all consistent"
+    },
+    {
+      "subject": "AAPL XBRL facts, all years",
+      "name": "no fiscal year skipped",
+      "passed": true,
+      "detail": "none skipped"
+    },
+    {
+      "subject": "COST XBRL facts, all years",
+      "name": "one value per tag and year",
+      "passed": true,
+      "detail": "none conflict"
+    },
+    {
+      "subject": "COST XBRL facts, all years",
+      "name": "fact periods agree with the filing index",
+      "passed": true,
+      "detail": "all within a week"
+    },
+    {
+      "subject": "COST XBRL facts, all years",
+      "name": "year labels advance with period ends",
+      "passed": true,
+      "detail": "all consistent"
+    },
+    {
+      "subject": "COST XBRL facts, all years",
+      "name": "no fiscal year skipped",
+      "passed": true,
+      "detail": "none skipped"
+    },
+    {
+      "subject": "golden set",
+      "name": "new questions have evidence in their filing",
+      "passed": true,
+      "detail": "20 of 20 linked"
+    },
+    {
+      "subject": "eval gate",
+      "name": "existing questions retrieve as before",
+      "passed": true,
+      "detail": "0 of 232 changed passages; hit@5 0.7662 -> 0.7662"
+    },
+    {
+      "subject": "eval gate",
+      "name": "new questions answered",
+      "passed": true,
+      "detail": "18/20 = 0.900; floor 0.706 is exp-prompt-conventions-c0f6e105's 0.8606 less 2 standard errors at n=20; $0.0134; WRONG num-COST-CashAndCashEquivalentsAtCarryingValue-2026: expected $20.21 billion, got 'Cash and cash equivalents were $21,301 million at August 30, 2026, and $15,284 m'; WRONG yoy-COST-CashAndCashEquivalentsAtCarryingValue-2025-2026: expected increased 42.7%, got 'Cash and cash equivalents increased from $15,284 million at August 31, 2025, to '"
+    }
+  ]
+}

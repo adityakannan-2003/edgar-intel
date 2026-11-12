@@ -241,6 +241,82 @@ That was on the v6 set. On the rebuilt labels, the free sweep tells the same
 story: reranking moves hit@5 0.762 → 0.749 and nDCG@10 0.429 → 0.454, for
 about 530 ms. The paid single-variable run has not been repeated on the v7 set.
 
+### Tied passages: ordered by chunk id since 11 Nov
+
+**Found by** the week-4 refresh (PR #6, `docs/REFRESH.md`, "tied passages
+follow the visibility map"). On identical data, the golden set scored hybrid
+hit@5 0.7619 when `chunks` had not been vacuumed and 0.7662 after a VACUUM, and
+93 of 232 questions changed passages. Many chunks share a `ts_rank_cd` score,
+and search returned tied chunks in whatever order the plan produced.
+
+**Fix.** Every ordering now breaks ties by chunk id. Lexical sorts on
+`ts_rank_cd DESC, c.id`, and RRF sorts on score, then chunk id. Dense sorts on
+distance, then id, in an outer query. The inner query keeps a bare
+`ORDER BY distance`, because pgvector's HNSW index can serve nothing else:
+EXPLAIN shows `, c.id` there turning unfiltered and year-only searches into
+exact scans, which would change their results. `FETCH FIRST k ROWS WITH TIES`
+means the id also decides which tied rows make the cut at k. Dense ties are
+real, though not on this golden set: 130 chunk texts repeat across one
+company's years, but none repeats within one filing.
+
+Seen on the way and not changed: a dense search filtered on fiscal year alone
+uses HNSW and gets 15 rows, not 50, because pgvector filters after the index
+returns its 40 candidates (`docs/DEPLOY.md` §2d). Every golden question filters
+on ticker too, so no metric here sees it. `/search` and the agent's
+`search_filings` can.
+
+**Proof, free.** `scripts/refresh_proofs/plan_stability.py` (PR #6), run
+against a fresh copy of `edgar_deploy` each time:
+
+| `MODE` | before the fix | with the fix |
+|---|---|---|
+| `vacuum-then-analyze` | 93 of 232 changed, hit@5 0.7662 → 0.7619 | **0 of 232**, 0.7749 → 0.7749 |
+| `vacuum-both` | 0 of 232 (PR #6) | 0 of 232, 0.7749 → 0.7749 |
+| `none` | 0 of 232 (PR #6) | 0 of 232, 0.7749 → 0.7749 |
+
+**Which way it lands: up, by about three cases.** These are free sweeps of the
+shipped configuration on the D15 labels. The old code, re-run today on the same
+database, reproduces the 5 Oct sweep on every metric, so the change is the
+tiebreak alone (`reports/retrieval_tiebreak.json`):
+
+| shipped config (hybrid, k=50, top_n=8) | hit@1 | hit@5 | hit@8 | recall@5 | MRR | nDCG@10 |
+|---|---|---|---|---|---|---|
+| before, 5 Oct and today | 0.4026 | 0.7619 | 0.8528 | 0.4084 | 0.5552 | 0.4288 |
+| SQL tiebreak only, RRF unchanged | 0.4199 | 0.7706 | 0.8528 | 0.4142 | 0.5647 | 0.4357 |
+| **SQL and RRF tiebreak (shipped)** | 0.4113 | **0.7749** | 0.8528 | 0.4151 | **0.5603** | 0.4341 |
+
+Dense-only is identical on every metric. Lexical-only moves hit@5 0.6667 →
+0.6797 and MRR 0.4827 → 0.4863. Before, RRF already ordered ties by the order
+the lists arrived in, dense first, which is deterministic once the SQL is. The
+id tiebreak there is a choice, not a fix: it gains one case at hit@5, loses two
+at hit@1 and costs 0.004 MRR. That is noise either way.
+
+Three cases out of 231 is within noise (one standard error of hit@5 is about
+0.028). The old tie order was no better founded than the new one. What matters
+is that the order no longer depends on the table's physical state. hit@8, which
+counts the passages the model actually reads, does not move: one question gains
+its evidence (`num-UNH-CashAndCashEquivalentsAtCarryingValue-2025`) and one
+loses it (`nar-COST-supply-concentration`).
+
+**Answers will move more than hit@5 suggests.** Against the reference run
+(`exp-prompt-conventions-c0f6e105`), whose stored contexts the old code
+reproduces for 232 of 232 questions, 184 questions now read a different context.
+118 get the same passages in a different order, and 66 get at least one
+different passage. The SQL tiebreak accounts for 182 of those, RRF for 2. Until
+a paid run records a new reference, the headline stays hit@5 0.762 / MRR 0.555,
+the figures the stored reference run carries.
+
+**Prediction for the paid `eval run`, written before it (about $0.18, not yet
+run).** Numeric 0.856 (178 of 208, against 179), range 0.841–0.880 (175–183).
+Five to ten cases flip each way, almost all among the 163 numeric questions
+whose context changed, and at most one among the 45 whose context did not.
+Narrative 20–22 of 24 (21 now). `num-UNH-CashAndCashEquivalentsAtCarryingValue-2025`
+turns to a pass now that its evidence is in the context. Reasoning: hit@8 does
+not move, so this is reordering noise. Earlier evidence: a new embedder that
+reordered most questions' passages flipped 9 cases one way and 10 the other. A
+same-config re-run moves about one case. The point estimate leans down by one
+case because the reference is the best of several runs.
+
 ---
 
 ## 2. The eval set itself
@@ -1545,6 +1621,93 @@ edgar-intel eval long-context report reports/long_context/luna-{rag,lc}-p{1,2}.j
 edgar-intel eval long-context regrade reports/long_context/luna-{rag,lc}-p{1,2}.jsonl   # free; writes regrade-<sha>.json
 ```
 
+## 11. Data refresh
+
+**Status: built and proven locally, 11 Nov 2026; not yet run against Neon**
+(`docs/REFRESH.md`; `reports/refresh/`). Predictions were committed before
+the first run (`9f46f14`) and are scored in the doc: 9 of 11 held outright,
+one missed (a truncated filing passed the parse checks), and one held only
+after the fix below.
+
+A weekly GitHub Actions job finds 10-Ks newer than the live database holds,
+builds them in a staging copy of live, checks them, and gates them. It writes
+to live in one transaction only if everything passed. On 11 Nov two such
+filings existed on EDGAR (AAPL and COST, FY2026), so the proofs used real
+filings against a local stand-in for Neon:
+
+| proof | result |
+|---|---|
+| nothing new | "nothing new", exit 0; every live table byte-identical (md5 per table); 8 SEC requests |
+| corrupted data (AAPL revenue ×10 in companyfacts; COST's 10-K truncated to 40%) | **blocked**, exit 1, $0; the report names both filings and the failing check; live corpus byte-identical |
+| real new 10-Ks | 35 of 35 checks passed; new questions **18/20** against a floor of 0.706; 0 of 232 existing questions changed passages; published 2 filings, 304 chunks, 20 facts and 20 golden questions in one transaction; $0.0134 |
+| crash mid-publish, and a concurrent writer | rolled back with live byte-identical; refused with live unchanged |
+
+The figure check is the one that caught both corruptions. It requires each
+core XBRL fact to appear verbatim in its own filing's text, so two separate
+SEC sources have to agree. It raised 0 false alarms on the 24 filings
+already in the corpus (210 of 219 figures checkable), after a first version
+raised 10.
+
+**Found on the way:** which of several tied passages a question retrieves
+depends on the table's physical state. The same 232 questions on identical
+data score hit@5 **0.7619 or 0.7662** depending on whether autovacuum has
+vacuumed `chunks`, and 93 change passages between the two states. Reproduced
+exactly with autovacuum off (`reports/refresh/plan_stability.txt`). The
+refresh now vacuums staging before each pass. A deterministic tiebreaker in
+`retrieval/search.py` is the real fix, and it is not made here.
+
+**Expect to be asked:** *How do you know bad data can't reach production?*
+Production is written once per run, in one transaction, after every check
+has passed, and only with rows above a snapshot's high-water mark. The proof
+crashes a publish after every row is copied and shows live unchanged. *Why
+not re-run the whole eval set each week?* Search filters each question to its
+company and year, so a new filing cannot change an old question's context.
+The gate measures that for free (0 of 232 changed) and spends money only on
+the new questions.
+
+**Produce it**
+
+```bash
+# local: an empty staging database, and a copy of the deployed corpus standing in for Neon
+psql "$LOCAL/postgres" -c "CREATE DATABASE edgar_refresh_live TEMPLATE edgar_deploy;" -c "CREATE DATABASE edgar_refresh_stage;"
+EDGAR_DB_DSN=$LOCAL/edgar_refresh_stage REFRESH_LIVE_DSN=$LOCAL/edgar_refresh_live edgar-intel refresh run   # spends ~$0.013 per new filing pair
+```
+
+---
+
+## 11. Live monitoring
+
+**Status: built 11 Nov 2026; numbers read from the live database. The latency
+window fills only once the change is deployed.** `docs/MONITORING.md` has each
+panel, its source and its limits.
+
+`/dashboard` draws `/stats/monitoring`, a read-only endpoint over the live
+system. Latency p50/p95 per endpoint (`/ask`, `/search`, `/mcp`) comes from a
+1,000-request window in the serving process, which a deploy empties. Cost per
+`/ask` request comes from `agent_traces`. Eval score over time comes from
+`eval_runs`, judge-free fields only. Freshness comes from `filings` and the
+scheduled refresh's `refresh_runs`, which is pending until that job merges.
+
+Read from the live Neon database on 11 Nov
+(`docs/monitoring/stats-monitoring-neon-20261111.json`):
+
+| | |
+|---|---|
+| `/ask` runs recorded | 9, 28 Sep to 22 Oct |
+| cost per `/ask` request | mean **$0.000453** ($0.45 per 1,000), p50 $0.000393, p95 $0.001101 |
+| agent latency per `/ask` | p50 5,582 ms, p95 17,072 ms |
+| eval history | 25 full-set runs, 12 Sep to 7 Oct; latest RAG 0.8606, latest agent 0.9615 |
+| data | 24 filings, newest loaded 11 Sep, newest SEC filing date 4 Aug 2026 |
+
+**Bullet shape: usable once deployed**
+
+> Built a live monitoring page for a deployed RAG and agent API: p50/p95 latency
+> per endpoint, model cost per request from recorded agent runs ($0.00045 mean),
+> eval accuracy across 25 runs, and data freshness from the scheduled refresh.
+
+**Caveat:** nine runs is not traffic. Quote the cost per request as measured on
+nine requests, not as a load figure. §8 has the load figures.
+
 ---
 
 ## 11. Return on investment
@@ -1598,6 +1761,8 @@ The lookup and check times are **assumptions, not timings**.
 | regression gate in CI | ✅ running since 5 Oct against a committed baseline; fails on a deliberate regression; nothing caught yet (§4) |
 | LoRA fine-tune comparison: Qwen3-8B + LoRA 0.91 against gpt-6.1-sol few-shot 0.98 micro F1 on 532 company-disjoint cases; $0.06 against $1.54–2.07 per 1k at load; 0.77 GPU-hours | ✅ measured (§9) |
 | fine-tune labels: 50 of 50 audited held-out labels right, after a first audit's 49 of 50 led to a fix | ✅ measured, confirmed by Aditya (§9) |
+| weekly data refresh: new 10-Ks staged, checked and gated, then published to live in one transaction or not at all; a corrupted figure and a truncated filing blocked with a report naming each; 2 real FY2026 10-Ks published end to end (new questions 18/20, 0 of 232 old questions moved) | ✅ proven locally against a stand-in for Neon (§11); first live run after merge |
+| retrieval's tie order depends on the table's physical state: hit@5 0.7619 or 0.7662 on identical data, 93 of 232 questions moved | ✅ measured, reproduced with autovacuum off (§11); fix not made |
 | live URL: **https://edgar-intel.fly.dev** — `/ask` returns 401 without the key and answers with it; `/stats/eval` serves the reference run | ✅ deployed 18 Oct, verified in `docs/DEPLOY.md` §4's order (§8) |
 
 ## Metrics that carry the most weight, ranked

@@ -1,0 +1,469 @@
+{
+  "generated_at": "2026-11-11T19:41:11.115290Z",
+  "latency": {
+    "source": "this process, last 1000 POSTs per endpoint; 4xx/5xx excluded from p50/p95",
+    "since": "2026-11-11T19:41:10.369968Z",
+    "endpoints": {
+      "/ask": {
+        "requests": 0,
+        "ok": 0,
+        "client_errors": 0,
+        "server_errors": 0,
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "/search": {
+        "requests": 0,
+        "ok": 0,
+        "client_errors": 0,
+        "server_errors": 0,
+        "p50_ms": null,
+        "p95_ms": null
+      },
+      "/mcp": {
+        "requests": 0,
+        "ok": 0,
+        "client_errors": 0,
+        "server_errors": 0,
+        "p50_ms": null,
+        "p95_ms": null
+      }
+    }
+  },
+  "cost": {
+    "source": "agent_traces, last 500 /ask runs; /search and /mcp call no paid model",
+    "runs": 9,
+    "mean_usd": 0.0004525555555555556,
+    "p50_usd": 0.000393,
+    "p95_usd": 0.001101,
+    "per_1k_usd": 0.4525555555555556,
+    "total_usd": 0.004073,
+    "p50_latency_ms": 5582,
+    "p95_latency_ms": 17072,
+    "first_at": "2026-09-28T00:46:54.593844Z",
+    "last_at": "2026-10-22T18:15:14.974763Z",
+    "recent": [
+      {
+        "created_at": "2026-10-22T18:15:14.974763Z",
+        "outcome": "answered",
+        "latency_ms": 7417,
+        "cost_usd": 0.000433
+      },
+      {
+        "created_at": "2026-10-18T18:15:09.500128Z",
+        "outcome": "answered",
+        "latency_ms": 4674,
+        "cost_usd": 0.000425
+      },
+      {
+        "created_at": "2026-10-18T17:25:44.181840Z",
+        "outcome": "answered",
+        "latency_ms": 5582,
+        "cost_usd": 0.001101
+      },
+      {
+        "created_at": "2026-10-18T17:25:38.592987Z",
+        "outcome": "answered",
+        "latency_ms": 2216,
+        "cost_usd": 0.000252
+      },
+      {
+        "created_at": "2026-10-18T17:25:36.361893Z",
+        "outcome": "answered",
+        "latency_ms": 17072,
+        "cost_usd": 0.000376
+      },
+      {
+        "created_at": "2026-10-18T17:25:19.279820Z",
+        "outcome": "answered",
+        "latency_ms": 2382,
+        "cost_usd": 0.000274
+      },
+      {
+        "created_at": "2026-10-18T17:25:16.870607Z",
+        "outcome": "answered",
+        "latency_ms": 5315,
+        "cost_usd": 0.000451
+      },
+      {
+        "created_at": "2026-09-28T00:47:30.066584Z",
+        "outcome": "answered",
+        "latency_ms": 15353,
+        "cost_usd": 0.000368
+      },
+      {
+        "created_at": "2026-09-28T00:46:54.593844Z",
+        "outcome": "escalated",
+        "latency_ms": 8061,
+        "cost_usd": 0.000393
+      }
+    ]
+  },
+  "eval": {
+    "source": "eval_runs with at least 100 cases; judge-free fields only",
+    "runs": [
+      {
+        "run_key": "baseline-f6da95f6",
+        "label": "baseline",
+        "git_sha": "cb67529",
+        "finished_at": "2026-09-12T14:25:43.732430Z",
+        "n_cases": 232,
+        "pipeline": "rag",
+        "numeric_accuracy": 0.0,
+        "abstention_rate": null,
+        "hallucination_rate": null,
+        "hit_at_5": null,
+        "mrr": 0.3197,
+        "cost_per_1k_usd": 0.4283
+      },
+      {
+        "run_key": "baseline-c8d68dd6",
+        "label": "baseline",
+        "git_sha": "8b8bafa",
+        "finished_at": "2026-09-12T14:50:57.855014Z",
+        "n_cases": 232,
+        "pipeline": "rag",
+        "numeric_accuracy": 0.0337,
+        "abstention_rate": null,
+        "hallucination_rate": null,
+        "hit_at_5": 0.4612,
+        "mrr": 0.3197,
+        "cost_per_1k_usd": 0.4295
+      },
+      {
+        "run_key": "baseline-45536dc9",
+        "label": "baseline",
+        "git_sha": "1994ca2",
+        "finished_at": "2026-09-12T15:45:44.873129Z",
+        "n_cases": 232,
+        "pipeline": "rag",
+        "numeric_accuracy": 0.0,
+        "abstention_rate": null,
+        "hallucination_rate": null,
+        "hit_at_5": null,
+        "mrr": null,
+        "cost_per_1k_usd": 0.0
+      },
+      {
+        "run_key": "baseline-d2f33b7b",
+        "label": "baseline",
+        "git_sha": "e10b653",
+        "finished_at": "2026-09-15T19:25:47.687817Z",
+        "n_cases": 232,
+        "pipeline": "rag",
+        "numeric_accuracy": 0.5625,
+        "abstention_rate": 0.1538,
+        "hallucination_rate": 0.2837,
+        "hit_at_5": 0.5337,
+        "mrr": 0.3618,
+        "cost_per_1k_usd": 0.4634
+      },
+      {
+        "run_key": "baseline-v2-0c4cb1a7",
+        "label": "baseline-v2",
+        "git_sha": "e10b653",
+        "finished_at": "2026-09-15T23:37:12.760549Z",
+        "n_cases": 232,
+        "pipeline": "rag",
+        "numeric_accuracy": 0.6154,
+        "abstention_rate": 0.1635,
+        "hallucination_rate": 0.2212,
+        "hit_at_5": 0.5288,
+        "mrr": 0.3752,
+        "cost_per_1k_usd": 0.449
+      },
+      {
+        "run_key": "baseline-v3-77930d0f",
+        "label": "baseline-v3",
+        "git_sha": "f5232e6",
+        "finished_at": "2026-09-16T03:55:31.532032Z",
+        "n_cases": 232,
+        "pipeline": "rag",
+        "numeric_accuracy": 0.6202,
+        "abstention_rate": 0.1635,
+        "hallucination_rate": 0.2163,
+        "hit_at_5": 0.6538,
+        "mrr": 0.4678,
+        "cost_per_1k_usd": 0.4487
+      },
+      {
+        "run_key": "baseline-v4-0f8357ee",
+        "label": "baseline-v4",
+        "git_sha": "c08b985",
+        "finished_at": "2026-09-16T21:39:07.723397Z",
+        "n_cases": 232,
+        "pipeline": "rag",
+        "numeric_accuracy": 0.6202,
+        "abstention_rate": 0.1683,
+        "hallucination_rate": 0.2115,
+        "hit_at_5": 0.6595,
+        "mrr": 0.4738,
+        "cost_per_1k_usd": 0.5067
+      },
+      {
+        "run_key": "baseline-v5-2943b37a",
+        "label": "baseline-v5",
+        "git_sha": "a9e9c08",
+        "finished_at": "2026-09-17T18:56:27.041014Z",
+        "n_cases": 232,
+        "pipeline": "rag",
+        "numeric_accuracy": 0.6202,
+        "abstention_rate": 0.1587,
+        "hallucination_rate": 0.2212,
+        "hit_at_5": 0.6595,
+        "mrr": 0.4738,
+        "cost_per_1k_usd": 0.5435
+      },
+      {
+        "run_key": "baseline-v6-rerank-8d0eb06a",
+        "label": "baseline-v6-rerank",
+        "git_sha": "cc0a69c",
+        "finished_at": "2026-09-26T17:35:29.485078Z",
+        "n_cases": 232,
+        "pipeline": "rag",
+        "numeric_accuracy": 0.7356,
+        "abstention_rate": 0.1442,
+        "hallucination_rate": 0.1202,
+        "hit_at_5": 0.6379,
+        "mrr": 0.47,
+        "cost_per_1k_usd": 0.5582
+      },
+      {
+        "run_key": "baseline-v6-no-rerank-7362c6c7",
+        "label": "baseline-v6-no-rerank",
+        "git_sha": "cc0a69c",
+        "finished_at": "2026-09-26T17:40:01.164223Z",
+        "n_cases": 232,
+        "pipeline": "rag",
+        "numeric_accuracy": 0.7404,
+        "abstention_rate": 0.1635,
+        "hallucination_rate": 0.0962,
+        "hit_at_5": 0.6595,
+        "mrr": 0.4738,
+        "cost_per_1k_usd": 0.5439
+      },
+      {
+        "run_key": "baseline-v7-99204312",
+        "label": "baseline-v7",
+        "git_sha": "47251c1",
+        "finished_at": "2026-10-05T23:44:27.792614Z",
+        "n_cases": 232,
+        "pipeline": "rag",
+        "numeric_accuracy": 0.7788,
+        "abstention_rate": 0.1731,
+        "hallucination_rate": 0.0481,
+        "hit_at_5": 0.7619,
+        "mrr": 0.5552,
+        "cost_per_1k_usd": 0.5428
+      },
+      {
+        "run_key": "exp-ctx20k-834a873e",
+        "label": "exp-ctx20k",
+        "git_sha": "0e96e20",
+        "finished_at": "2026-10-06T01:57:20.048619Z",
+        "n_cases": 232,
+        "pipeline": "rag",
+        "numeric_accuracy": 0.8413,
+        "abstention_rate": 0.1106,
+        "hallucination_rate": 0.0481,
+        "hit_at_5": 0.7619,
+        "mrr": 0.5552,
+        "cost_per_1k_usd": 0.7539
+      },
+      {
+        "run_key": "exp-bge512-e5726731",
+        "label": "exp-bge512",
+        "git_sha": "c152a61",
+        "finished_at": "2026-10-06T16:38:48.138388Z",
+        "n_cases": 232,
+        "pipeline": "rag",
+        "numeric_accuracy": 0.8365,
+        "abstention_rate": 0.101,
+        "hallucination_rate": 0.0625,
+        "hit_at_5": 0.8052,
+        "mrr": 0.6151,
+        "cost_per_1k_usd": 0.7686
+      },
+      {
+        "run_key": "baseline-v8-7ae05834",
+        "label": "baseline-v8",
+        "git_sha": "c152a61",
+        "finished_at": "2026-10-06T16:53:53.551420Z",
+        "n_cases": 232,
+        "pipeline": "rag",
+        "numeric_accuracy": 0.8365,
+        "abstention_rate": 0.1058,
+        "hallucination_rate": 0.0577,
+        "hit_at_5": 0.7619,
+        "mrr": 0.5552,
+        "cost_per_1k_usd": 0.7541
+      },
+      {
+        "run_key": "strategy-fixed_d9-f767586c",
+        "label": "strategy-fixed_d9",
+        "git_sha": "82cf0b7",
+        "finished_at": "2026-10-06T17:27:33.445301Z",
+        "n_cases": 232,
+        "pipeline": "rag",
+        "numeric_accuracy": 0.7837,
+        "abstention_rate": 0.125,
+        "hallucination_rate": 0.0913,
+        "hit_at_5": 0.6926,
+        "mrr": 0.4501,
+        "cost_per_1k_usd": 0.7621
+      },
+      {
+        "run_key": "strategy-recursive_d9-0e7a5d5a",
+        "label": "strategy-recursive_d9",
+        "git_sha": "82cf0b7",
+        "finished_at": "2026-10-06T17:32:45.437092Z",
+        "n_cases": 232,
+        "pipeline": "rag",
+        "numeric_accuracy": 0.7885,
+        "abstention_rate": 0.1346,
+        "hallucination_rate": 0.0769,
+        "hit_at_5": 0.7013,
+        "mrr": 0.4827,
+        "cost_per_1k_usd": 0.6981
+      },
+      {
+        "run_key": "strategy-section_aware_d9-9573df62",
+        "label": "strategy-section_aware_d9",
+        "git_sha": "82cf0b7",
+        "finished_at": "2026-10-06T17:38:17.469169Z",
+        "n_cases": 232,
+        "pipeline": "rag",
+        "numeric_accuracy": 0.7837,
+        "abstention_rate": 0.1298,
+        "hallucination_rate": 0.0865,
+        "hit_at_5": 0.71,
+        "mrr": 0.4961,
+        "cost_per_1k_usd": 0.6985
+      },
+      {
+        "run_key": "strategy-semantic_d9-72ec5ff0",
+        "label": "strategy-semantic_d9",
+        "git_sha": "82cf0b7",
+        "finished_at": "2026-10-06T17:43:31.794229Z",
+        "n_cases": 232,
+        "pipeline": "rag",
+        "numeric_accuracy": 0.7452,
+        "abstention_rate": 0.1731,
+        "hallucination_rate": 0.0817,
+        "hit_at_5": 0.6522,
+        "mrr": 0.4718,
+        "cost_per_1k_usd": 0.6248
+      },
+      {
+        "run_key": "exp-sa-d9t600-ccd9a5b3",
+        "label": "exp-sa-d9t600",
+        "git_sha": "82cf0b7",
+        "finished_at": "2026-10-06T17:59:24.133012Z",
+        "n_cases": 232,
+        "pipeline": "rag",
+        "numeric_accuracy": 0.8173,
+        "abstention_rate": 0.1202,
+        "hallucination_rate": 0.0625,
+        "hit_at_5": 0.7489,
+        "mrr": 0.5493,
+        "cost_per_1k_usd": 0.7981
+      },
+      {
+        "run_key": "exp-prompt-conventions-c0f6e105",
+        "label": "exp-prompt-conventions",
+        "git_sha": "bee5dc0",
+        "finished_at": "2026-10-06T19:09:18.926867Z",
+        "n_cases": 232,
+        "pipeline": "rag",
+        "numeric_accuracy": 0.8606,
+        "abstention_rate": 0.0865,
+        "hallucination_rate": 0.0529,
+        "hit_at_5": 0.7619,
+        "mrr": 0.5552,
+        "cost_per_1k_usd": 0.7804
+      },
+      {
+        "run_key": "agent-as-deployed-7a4e5c17",
+        "label": "agent-as-deployed",
+        "git_sha": "274419a",
+        "finished_at": "2026-10-06T20:16:32.591894Z",
+        "n_cases": 232,
+        "pipeline": "agent",
+        "numeric_accuracy": 0.4135,
+        "abstention_rate": 0.5433,
+        "hallucination_rate": 0.0433,
+        "hit_at_5": null,
+        "mrr": null,
+        "cost_per_1k_usd": 0.5893
+      },
+      {
+        "run_key": "agent-citation-fix-c3da771e",
+        "label": "agent-citation-fix",
+        "git_sha": "c4a7424",
+        "finished_at": "2026-10-06T22:13:55.518953Z",
+        "n_cases": 232,
+        "pipeline": "agent",
+        "numeric_accuracy": 0.6875,
+        "abstention_rate": 0.2537,
+        "hallucination_rate": 0.0348,
+        "hit_at_5": null,
+        "mrr": null,
+        "cost_per_1k_usd": 0.4103
+      },
+      {
+        "run_key": "agent-citation-fix-rerun-65631f87",
+        "label": "agent-citation-fix-rerun",
+        "git_sha": "6451ac4",
+        "finished_at": "2026-10-06T22:39:08.056761Z",
+        "n_cases": 232,
+        "pipeline": "agent",
+        "numeric_accuracy": 0.7067,
+        "abstention_rate": 0.2452,
+        "hallucination_rate": 0.0481,
+        "hit_at_5": null,
+        "mrr": null,
+        "cost_per_1k_usd": 0.4304
+      },
+      {
+        "run_key": "agent-calendar-393d6b00",
+        "label": "agent-calendar",
+        "git_sha": "decc853",
+        "finished_at": "2026-10-07T01:35:44.123823Z",
+        "n_cases": 232,
+        "pipeline": "agent",
+        "numeric_accuracy": 0.6779,
+        "abstention_rate": 0.226,
+        "hallucination_rate": 0.0962,
+        "hit_at_5": null,
+        "mrr": null,
+        "cost_per_1k_usd": 0.3992
+      },
+      {
+        "run_key": "agent-date-in-prompt-a74f3c03",
+        "label": "agent-date-in-prompt",
+        "git_sha": "ee226ed",
+        "finished_at": "2026-10-07T02:57:31.202259Z",
+        "n_cases": 232,
+        "pipeline": "agent",
+        "numeric_accuracy": 0.9615,
+        "abstention_rate": 0.0096,
+        "hallucination_rate": 0.0288,
+        "hit_at_5": null,
+        "mrr": null,
+        "cost_per_1k_usd": 0.3601
+      }
+    ]
+  },
+  "freshness": {
+    "data": {
+      "filings": 24,
+      "newest_ingested_at": "2026-09-11T19:44:25.730772Z",
+      "newest_filing_date": "2026-08-04"
+    },
+    "job": {
+      "status": "pending",
+      "last_run": null,
+      "last_ok": null
+    }
+  }
+}

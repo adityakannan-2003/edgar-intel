@@ -1,0 +1,12 @@
+{
+  "run": {
+    "started_at": "2026-11-11 20:13:19.658159+00:00",
+    "status": "ok",
+    "filings_added": 0,
+    "trigger": "manual",
+    "git_sha": "dfd62aa",
+    "new_filings": [],
+    "dry_run": true
+  },
+  "checks": []
+}

@@ -1,0 +1,6 @@
+src at dfd62aa
+staged rows above the snapshot: {'filings': 2, 'sections': 22, 'chunks': 304, 'xbrl_facts': 20}
+A raised: simulated crash mid-publish (live transaction sees 5772 chunks)
+A live unchanged: True (5468, 'b1dde5c896cc')
+B refused: live changed while the refresh ran (high-water {'filings': 24, 'sections': 1056, 'chunks': 62808, 'xbrl_facts': 10446} -> {'filings': 97, 'sections': 1056, 'chunks': 62808, 'xbrl_facts': 10446}); nothing was published, run again
+B live unchanged: True

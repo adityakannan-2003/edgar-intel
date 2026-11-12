@@ -545,7 +545,8 @@ def run(live_dsn: str, tickers: list[str] | None = None, dry_run: bool = False, 
     """One refresh. Returns (status, report, report path). `client` is for tests and proofs."""
     from .ingest.edgar_client import EdgarClient
 
-    if live_dsn.strip() == get_settings().db_dsn.strip():
+    live_dsn = live_dsn.strip()  # a pasted secret's trailing newline breaks libpq (refresh #1)
+    if live_dsn == get_settings().db_dsn.strip():
         raise RefreshError("REFRESH_LIVE_DSN and EDGAR_DB_DSN are the same database; staging must be separate")
     os.makedirs(report_dir, exist_ok=True)
     rec = {"started_at": datetime.now(UTC), "status": "failed", "filings_added": 0, "trigger": trigger,

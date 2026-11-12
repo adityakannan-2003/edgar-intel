@@ -80,7 +80,13 @@ jobs:
           TRIGGER: ${{ github.event_name == 'schedule' && 'schedule' || 'manual' }}
           DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
           TICKERS: ${{ inputs.tickers }}
-        run: edgar-intel refresh run --trigger "$TRIGGER" $DRY_RUN ${TICKERS:+--tickers "$TICKERS"}
+        run: |
+          # A secret pasted into GitHub's form keeps its trailing newline, which libpq and HTTP headers
+          # reject: refresh #1 failed on 'invalid channel_binding value: "require\n"'.
+          for name in REFRESH_LIVE_DSN EDGAR_USER_AGENT EDGAR_LLM_API_KEY; do
+            export "$name=$(printf '%s' "${!name}" | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+          done
+          edgar-intel refresh run --trigger "$TRIGGER" $DRY_RUN ${TICKERS:+--tickers "$TICKERS"}
       - name: Report
         if: always()
         run: cat reports/refresh/latest.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "no report written" >> "$GITHUB_STEP_SUMMARY"

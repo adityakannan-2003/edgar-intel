@@ -259,11 +259,9 @@ means the id also decides which tied rows make the cut at k. Dense ties are
 real, though not on this golden set: 130 chunk texts repeat across one
 company's years, but none repeats within one filing.
 
-Seen on the way and not changed: a dense search filtered on fiscal year alone
-uses HNSW and gets 15 rows, not 50, because pgvector filters after the index
-returns its 40 candidates (`docs/DEPLOY.md` §2d). Every golden question filters
-on ticker too, so no metric here sees it. `/search` and the agent's
-`search_filings` can.
+Seen on the way: a dense search filtered on fiscal year alone uses HNSW and gets
+15 rows, not 50, because pgvector filters after the index returns its 40
+candidates. Fixed separately; see "Dense rows without a ticker" below.
 
 **Proof, free.** `scripts/refresh_proofs/plan_stability.py` (PR #6), run
 against a fresh copy of `edgar_deploy` each time:
@@ -316,6 +314,72 @@ not move, so this is reordering noise. Earlier evidence: a new embedder that
 reordered most questions' passages flipped 9 cases one way and 10 the other. A
 same-config re-run moves about one case. The point estimate leans down by one
 case because the reference is the best of several runs.
+
+### Dense rows without a ticker: k since 11 Nov
+
+pgvector applies every WHERE clause, strategy included, after the HNSW index
+returns its `hnsw.ef_search` candidates (40). Whether Postgres picks HNSW
+depends on the filter and on the corpus, so the short results had no single
+shape. Dense search, k=50, the 232 golden questions run with each filter:
+
+| filter | `edgar_deploy` (5,468 chunks, one strategy) | `edgar` (55,670 chunks, five strategies) |
+|---|---|---|
+| none | HNSW: 40–43 rows | HNSW: 0 to a few rows, mean 5.2 |
+| fiscal year only | HNSW for 2023–2025: 9–19 rows, mean 13.7 | exact: 50 |
+| anything with a ticker or an Item | exact: 50 | exact: 50 |
+
+**How often it bit.** Never on the golden set, which always filters on ticker
+and year. Locally recorded agent calls: 521 `search_filings` calls in `edgar`
+(517 from 12 agent eval runs, 4 from local `/ask` traces). 247 passed ticker and
+year and 274 ticker only. None was year-only or unfiltered: the agent takes the
+company from the question. `/search` calls are not logged, so their mix is
+unknown. But the deployed load test (§8) sends `/search` with no filter, so its
+dense side read about 40 passages, not 50. Production `/ask` traces were not read.
+
+**The fix.** `dense_search` runs `SET LOCAL hnsw.iterative_scan = relaxed_order`
+on the query's own connection, so the index keeps scanning until 50 rows pass
+the filters. It needs pgvector 0.8 or later; Neon has 0.8.6. SET LOCAL ends with
+the transaction, so it never reaches another client through Neon's pooler. The
+options, measured against exact search (the true top 50), on `edgar_deploy`
+year-only / `edgar` unfiltered:
+
+| option | rows | overlap with exact top 50 | overlap in top 8 |
+|---|---|---|---|
+| before | mean 18.1 / 5.2 | 18.1 / 5.2 | 7.90 / 4.88 |
+| raise `hnsw.ef_search` to 200 | 50 / 7–15 (3 queries) | — | — |
+| iterative `strict_order` | 50 / 50 | 48.5 / 46.8 | 7.90 / 7.33 |
+| iterative `relaxed_order`, outer sort unchanged | 50 / 50 | 49.6 / 49.2 | 8.00 / 7.90 |
+| **iterative `relaxed_order`, re-sorted on `distance + 0` (shipped)** | 50 / 50 | **49.6 / 49.2** | **8.00 / 7.96** |
+
+Raising `ef_search` fixes `edgar_deploy` only because the planner switches
+year-only to exact at 100. Unfiltered on `edgar` would need about 500, and that
+grows as the refresh job adds filings. Exact search whenever a filter is set
+means exact always, since every search filters on strategy; that retires the
+index PR #7 kept usable. `strict_order` keeps the order but finds fewer of the
+true top 50. `relaxed_order` returns rows slightly out of order, and the outer
+`ORDER BY distance, chunk_id::bigint` did not fix that: Postgres planned it as
+an Incremental Sort that trusts the inner order. 32 to 62 of 232 lists came back
+out of distance order; in one, a row at distance 0.484 sat 33rd, behind rows at
+0.495. Sorting on `distance + 0` makes Postgres sort for real, and on exact
+plans it gives the same order.
+
+**Proof, free.**
+- `edgar-intel eval retrieval` on `edgar`, before and after: all six rows
+  identical on every metric (shipped hit@5 0.7749, MRR 0.5603; dense-only hit@5
+  0.7013, MRR 0.4613; `reports/retrieval_iterative_scan.json`).
+- Dense ids per golden question (ticker and year, k=50), old SQL against new
+  code: 232 of 232 identical on `edgar` and on `edgar_deploy`. Those plans
+  never use HNSW, so the setting cannot change them. No paid run is needed for
+  this change, and the tiebreak prediction above stands.
+- Spot check through `dense_search` ("What were research and development
+  expenses?"): 50 rows with no filter, year 2024, year 2025, AAPL, and AAPL
+  2024, on both databases.
+- Cost, the dense query alone (232 questions × 3 passes, p50 / p95):
+  `edgar_deploy` unfiltered 1.7 / 4.9 → 2.4 / 5.3 ms, year-only 1.9 / 2.8 →
+  3.4 / 6.3 ms, ticker and year 2.4 / 4.0 → 2.5 / 3.7 ms; `edgar` unfiltered
+  2.3 / 5.1 → 5.1 / 25.4 ms. That is the price of reading 50 rows, not 5.
+- `tests/test_retrieval_tiebreak.py` checks that the SET LOCAL goes out on the
+  query's own connection and that the outer sort is on `distance + 0`.
 
 ---
 

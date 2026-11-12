@@ -177,15 +177,14 @@ Measured on the 18 Oct deploy (`reports/retrieval_neon_20261018.json`): dense-on
 identical on every metric, hybrid hit@5 0.7619 in both, hit@10 0.8528 → 0.8615.
 No iterative scan was needed.
 
-If dense-only falls, turn on pgvector's iterative index scans for the database
-(pgvector 0.8 or later), so a filtered scan keeps going until it has k rows, and
-measure again:
-
-```bash
-psql "$REMOTE_DSN" -c "ALTER DATABASE <dbname> SET hnsw.iterative_scan = strict_order;"
-```
-
-On an older pgvector, stop there: the query has to change, not the settings.
+Since 11 Nov, `dense_search` turns on pgvector's iterative index scans for its
+own transaction (`SET LOCAL hnsw.iterative_scan = relaxed_order`), so an HNSW
+scan keeps going until k rows pass the filters; nothing needs setting on the
+database. Without it, a search with no filter or with a fiscal year alone got
+0–43 rows instead of 50 (`docs/METRICS.md` §1, "Dense rows without a ticker").
+The setting needs pgvector 0.8 or later. Neon has 0.8.6, and the local and CI
+images run 0.8.x. Check the version from §1 before pointing the app at a new
+database: older versions do not have the setting.
 
 **Storage:** trimmed, `chunks` is 5,468 rows — about 10 MB of text and 8 MB of
 vectors — plus the `body_tsv` GIN and HNSW indexes, the sections and the eval

@@ -145,6 +145,19 @@ def test_a_run_that_cannot_start_exits_as_failed(monkeypatch):
     assert result.exit_code == 2 and "connection refused" in result.output
 
 
+def test_a_pasted_dsn_loses_its_trailing_newline(monkeypatch, tmp_path):
+    seen = []
+
+    def connect(dsn, **_):
+        seen.append(dsn)
+        raise ConnectionError("stop here")
+
+    monkeypatch.setattr(refresh.psycopg, "connect", connect)
+    with pytest.raises(ConnectionError):
+        refresh.run("postgresql://u:p@host/db?channel_binding=require\n", client=object(), report_dir=str(tmp_path))
+    assert seen == ["postgresql://u:p@host/db?channel_binding=require"]
+
+
 def test_staging_may_not_be_the_live_database(monkeypatch):
     monkeypatch.setenv("EDGAR_DB_DSN", "postgresql://u:p@host/live")
     with pytest.raises(refresh.RefreshError, match="same database"):

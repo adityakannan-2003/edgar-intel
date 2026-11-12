@@ -109,6 +109,5 @@ yoy-COST-CashAndCashEquivalentsAtCarryingValue-2025-2026: expected increased
 $21,301 in FY2026,' |
 
 report: 
-/Users/adityakannan/dev/edgar-intel/.claude/worktrees/exp-rag-vs-long-context-37
-0712/reports/refresh/proof3/refresh-20261111T200528Z.md
+reports/refresh/proof3/refresh-20261111T200528Z.md
 EDGAR_LLM_PROVIDER=openai EDGAR_EMBED_PROVIDER=local EDGAR_DB_DSN= =$L   run   11.45s user 3.12s system 22% cpu 1:04.06 total

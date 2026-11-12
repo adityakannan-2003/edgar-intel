@@ -106,8 +106,7 @@ How to read it:
 | Data | `filings`: count, newest `created_at` (when a filing was last loaded) and newest `filing_date` (its SEC date) |
 | Refresh job | the newest row in `refresh_runs`, and the newest with `status = 'ok'` |
 
-The scheduled SEC refresh is being built on branch
-`claude/week4-sec-refresh-c92ee8`. It writes one row per run to `refresh_runs`
+The scheduled SEC refresh (`docs/REFRESH.md`, merged in PR #6) writes one row per run to `refresh_runs`
 in the live database, created by its `sql/006_refresh_runs.sql`. This panel
 reads `started_at`, `finished_at`, `status` and `filings_added`:
 

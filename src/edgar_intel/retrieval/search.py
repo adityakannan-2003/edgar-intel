@@ -139,7 +139,7 @@ class RetrievalResult:
         return [i for i, h in enumerate(source, start=1) if h.chunk_id in chunk_ids]
 
 
-_BASE_SELECT = """
+_COLUMNS = """
     SELECT c.id::text AS chunk_id,
            c.body,
            c.filing_id,
@@ -147,12 +147,16 @@ _BASE_SELECT = """
            s.item,
            f.cik,
            f.fiscal_year,
-           co.ticker
+           co.ticker"""
+
+_FROM = """
       FROM chunks c
       JOIN filings f  ON f.id = c.filing_id
       JOIN companies co ON co.cik = f.cik
       LEFT JOIN sections s ON s.id = c.section_id
 """
+
+_BASE_SELECT = _COLUMNS + _FROM
 
 
 def _filters(
@@ -189,15 +193,27 @@ def dense_search(
     vec = get_embedder().embed([query])[0]
     where, params = _filters(ticker, fiscal_year, item)
 
-    # `<=>` is pgvector's cosine distance: 0 identical, 2 opposite. Converting
-    # to a similarity keeps "higher is better" consistent across retrievers.
+    # `<=>` is pgvector's cosine distance: 0 identical, 2 opposite.
+    #
+    # Ties are real: 130 chunk bodies repeat across one company's years, so a
+    # ticker-only search sees identical distances. The id tiebreak sits in the
+    # outer query because pgvector's HNSW index serves only a bare
+    # `ORDER BY distance`; adding `, c.id` there turns every unfiltered search
+    # into an exact scan. WITH TIES keeps every row tied with the k-th, so
+    # which of them makes the cut is decided by id, not by the plan.
     sql = f"""
-        {_BASE_SELECT}
-         WHERE c.strategy = %s AND c.embedding IS NOT NULL{where}
-         ORDER BY c.embedding <=> %s::vector
+        SELECT * FROM (
+            {_COLUMNS},
+                   c.embedding <=> %s::vector AS distance
+            {_FROM}
+             WHERE c.strategy = %s AND c.embedding IS NOT NULL{where}
+             ORDER BY distance
+             FETCH FIRST %s ROWS WITH TIES
+        ) nearest
+         ORDER BY distance, chunk_id::bigint
          LIMIT %s
     """
-    rows = db.query(sql, [strategy, *params, vec, k])
+    rows = db.query(sql, [vec, strategy, *params, k, k])
     return [
         Hit(
             chunk_id=r["chunk_id"],
@@ -237,7 +253,7 @@ def lexical_search(
         {_BASE_SELECT}
          WHERE c.strategy = %s
            AND c.body_tsv @@ to_tsquery('english', %s){where}
-         ORDER BY ts_rank_cd(c.body_tsv, to_tsquery('english', %s)) DESC
+         ORDER BY ts_rank_cd(c.body_tsv, to_tsquery('english', %s)) DESC, c.id
          LIMIT %s
     """
     rows = db.query(sql, [strategy, tsquery, *params, tsquery, k])
@@ -287,7 +303,9 @@ def reciprocal_rank_fusion(
                 merged[hit.chunk_id] = hit
 
     fused: list[Hit] = []
-    for chunk_id, score in sorted(scores.items(), key=lambda kv: kv[1], reverse=True):
+    # Tied scores are common (rank 3 in one list = rank 3 in the other), so they
+    # are ordered by chunk id rather than by which list happened to arrive first.
+    for chunk_id, score in sorted(scores.items(), key=lambda kv: (-kv[1], kv[0])):
         hit = merged[chunk_id]
         hit.score = score
         hit.source = "fused"

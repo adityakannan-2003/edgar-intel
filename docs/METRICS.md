@@ -241,6 +241,82 @@ That was on the v6 set. On the rebuilt labels, the free sweep tells the same
 story: reranking moves hit@5 0.762 → 0.749 and nDCG@10 0.429 → 0.454, for
 about 530 ms. The paid single-variable run has not been repeated on the v7 set.
 
+### Tied passages: ordered by chunk id since 11 Nov
+
+**Found by** the week-4 refresh (PR #6, `docs/REFRESH.md`, "tied passages
+follow the visibility map"). On identical data, the golden set scored hybrid
+hit@5 0.7619 when `chunks` had not been vacuumed and 0.7662 after a VACUUM, and
+93 of 232 questions changed passages. Many chunks share a `ts_rank_cd` score,
+and search returned tied chunks in whatever order the plan produced.
+
+**Fix.** Every ordering now breaks ties by chunk id. Lexical sorts on
+`ts_rank_cd DESC, c.id`, and RRF sorts on score, then chunk id. Dense sorts on
+distance, then id, in an outer query. The inner query keeps a bare
+`ORDER BY distance`, because pgvector's HNSW index can serve nothing else:
+EXPLAIN shows `, c.id` there turning unfiltered and year-only searches into
+exact scans, which would change their results. `FETCH FIRST k ROWS WITH TIES`
+means the id also decides which tied rows make the cut at k. Dense ties are
+real, though not on this golden set: 130 chunk texts repeat across one
+company's years, but none repeats within one filing.
+
+Seen on the way and not changed: a dense search filtered on fiscal year alone
+uses HNSW and gets 15 rows, not 50, because pgvector filters after the index
+returns its 40 candidates (`docs/DEPLOY.md` §2d). Every golden question filters
+on ticker too, so no metric here sees it. `/search` and the agent's
+`search_filings` can.
+
+**Proof, free.** `scripts/refresh_proofs/plan_stability.py` (PR #6), run
+against a fresh copy of `edgar_deploy` each time:
+
+| `MODE` | before the fix | with the fix |
+|---|---|---|
+| `vacuum-then-analyze` | 93 of 232 changed, hit@5 0.7662 → 0.7619 | **0 of 232**, 0.7749 → 0.7749 |
+| `vacuum-both` | 0 of 232 (PR #6) | 0 of 232, 0.7749 → 0.7749 |
+| `none` | 0 of 232 (PR #6) | 0 of 232, 0.7749 → 0.7749 |
+
+**Which way it lands: up, by about three cases.** These are free sweeps of the
+shipped configuration on the D15 labels. The old code, re-run today on the same
+database, reproduces the 5 Oct sweep on every metric, so the change is the
+tiebreak alone (`reports/retrieval_tiebreak.json`):
+
+| shipped config (hybrid, k=50, top_n=8) | hit@1 | hit@5 | hit@8 | recall@5 | MRR | nDCG@10 |
+|---|---|---|---|---|---|---|
+| before, 5 Oct and today | 0.4026 | 0.7619 | 0.8528 | 0.4084 | 0.5552 | 0.4288 |
+| SQL tiebreak only, RRF unchanged | 0.4199 | 0.7706 | 0.8528 | 0.4142 | 0.5647 | 0.4357 |
+| **SQL and RRF tiebreak (shipped)** | 0.4113 | **0.7749** | 0.8528 | 0.4151 | **0.5603** | 0.4341 |
+
+Dense-only is identical on every metric. Lexical-only moves hit@5 0.6667 →
+0.6797 and MRR 0.4827 → 0.4863. Before, RRF already ordered ties by the order
+the lists arrived in, dense first, which is deterministic once the SQL is. The
+id tiebreak there is a choice, not a fix: it gains one case at hit@5, loses two
+at hit@1 and costs 0.004 MRR. That is noise either way.
+
+Three cases out of 231 is within noise (one standard error of hit@5 is about
+0.028). The old tie order was no better founded than the new one. What matters
+is that the order no longer depends on the table's physical state. hit@8, which
+counts the passages the model actually reads, does not move: one question gains
+its evidence (`num-UNH-CashAndCashEquivalentsAtCarryingValue-2025`) and one
+loses it (`nar-COST-supply-concentration`).
+
+**Answers will move more than hit@5 suggests.** Against the reference run
+(`exp-prompt-conventions-c0f6e105`), whose stored contexts the old code
+reproduces for 232 of 232 questions, 184 questions now read a different context.
+118 get the same passages in a different order, and 66 get at least one
+different passage. The SQL tiebreak accounts for 182 of those, RRF for 2. Until
+a paid run records a new reference, the headline stays hit@5 0.762 / MRR 0.555,
+the figures the stored reference run carries.
+
+**Prediction for the paid `eval run`, written before it (about $0.18, not yet
+run).** Numeric 0.856 (178 of 208, against 179), range 0.841–0.880 (175–183).
+Five to ten cases flip each way, almost all among the 163 numeric questions
+whose context changed, and at most one among the 45 whose context did not.
+Narrative 20–22 of 24 (21 now). `num-UNH-CashAndCashEquivalentsAtCarryingValue-2025`
+turns to a pass now that its evidence is in the context. Reasoning: hit@8 does
+not move, so this is reordering noise. Earlier evidence: a new embedder that
+reordered most questions' passages flipped 9 cases one way and 10 the other. A
+same-config re-run moves about one case. The point estimate leans down by one
+case because the reference is the best of several runs.
+
 ---
 
 ## 2. The eval set itself

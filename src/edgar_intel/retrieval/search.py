@@ -201,6 +201,16 @@ def dense_search(
     # `ORDER BY distance`; adding `, c.id` there turns every unfiltered search
     # into an exact scan. WITH TIES keeps every row tied with the k-th, so
     # which of them makes the cut is decided by id, not by the plan.
+    #
+    # When the planner does pick HNSW (unfiltered, and year-only on the
+    # deployed corpus), the index stops after `hnsw.ef_search` (40) candidates
+    # and every WHERE clause, strategy included, applies after it: 0-43 rows
+    # came back instead of k. An iterative scan keeps going until k rows
+    # survive. `relaxed_order` finds more of the true top k than `strict_order`
+    # but yields rows slightly out of order, so the outer sort is on
+    # `distance + 0`: on plain `distance` the planner trusts the inner order
+    # and runs an Incremental Sort that leaves it as it is. SET LOCAL ends with
+    # the transaction, so it never reaches another client through Neon's pooler.
     sql = f"""
         SELECT * FROM (
             {_COLUMNS},
@@ -210,10 +220,12 @@ def dense_search(
              ORDER BY distance
              FETCH FIRST %s ROWS WITH TIES
         ) nearest
-         ORDER BY distance, chunk_id::bigint
+         ORDER BY distance + 0, chunk_id::bigint
          LIMIT %s
     """
-    rows = db.query(sql, [vec, strategy, *params, k, k])
+    with db.connection() as conn:
+        conn.execute("SET LOCAL hnsw.iterative_scan = relaxed_order")
+        rows = conn.execute(sql, [vec, strategy, *params, k, k]).fetchall()
     return [
         Hit(
             chunk_id=r["chunk_id"],

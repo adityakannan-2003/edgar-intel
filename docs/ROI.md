@@ -172,5 +172,7 @@ assumption halved and doubled:
   (`docs/METRICS.md` §6), long context $2.12 (`docs/LONG_CONTEXT.md`),
   fine-tune $5.87 (`docs/FINETUNE_RUN.md`) and serving $0.85
   (`docs/SERVING.md`). Earlier eval runs are not included.
-- Neon's free plan also limits compute. How close the always-on service
-  runs to that limit is not checked.
+- Neon's free plan also limits compute: 100 CU-hours a month. Fly's 60 s
+  `/ready` check kept the compute awake around the clock, the quota ran out on
+  19 Nov, and every database request failed from then on (`docs/DEPLOY.md`, Known
+  limitations). Without that poll the compute runs only while it is queried.

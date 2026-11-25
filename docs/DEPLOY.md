@@ -302,6 +302,15 @@ to everyone else for the price of a rounding error.
   so public requests timed out at 30 s and the `/ready` check read "connect: no
   route to host". A stop and start fixed it at once. `auto_stop_machines =
   "off"` with `min_machines_running = 1` keeps it from recurring.
+- Neon's free compute suspends after 5 minutes without a query and has 100
+  CU-hours a month. Fly polled `/ready`, which counts `chunks`, every 60 s, so it
+  never suspended. The quota ran out on 19 Nov at 00:30 UTC. From then on every
+  connection failed with "Your account or project has exceeded the quota", and
+  the scheduled refresh on 23 Nov exited 2. Because `/ready` was a Fly service
+  check, the proxy also stopped routing to the only machine, so even `/health`
+  returned 503 to the public. Fly now checks only `/health`, and the deploy job
+  calls `/ready` once after each deploy. A `/ready` check on a timer more often
+  than every 5 minutes would spend the quota again.
 - The local latencies in `docs/METRICS.md` (§8, "Local") are end-to-end
   `eval run` figures on a laptop. The deployed instance's are the `/search`
   sweep in §8, "Deployed": about 25 req/s on one machine. Never quote one as the other.

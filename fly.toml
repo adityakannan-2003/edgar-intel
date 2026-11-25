@@ -50,14 +50,10 @@ primary_region = "ewr"
     timeout = "5s"
     path = "/health"
 
-  [[http_service.checks]]
-    # Readiness. Database + index + embedder. The long grace period is the
-    # MiniLM load on a cold machine.
-    grace_period = "120s"
-    interval = "60s"
-    method = "GET"
-    timeout = "15s"
-    path = "/ready"
+  # No /ready check here. Polled every 60 s it kept Neon's free compute from ever
+  # suspending and spent the month's quota by 19 Nov; and with one machine, a
+  # failing check made the proxy refuse every path, /health included
+  # (docs/DEPLOY.md, Known limitations). The deploy job calls /ready once instead.
 
 [[vm]]
   # 1 GB is not padding. MiniLM-L6-v2 plus the ms-marco cross-encoder plus torch

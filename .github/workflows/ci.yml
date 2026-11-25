@@ -79,8 +79,8 @@ jobs:
 
   # Ship only what passed. `needs` means a failing test or a regression the eval
   # gate catches stops the deploy; the `if` keeps pull requests and other
-  # branches off the live machine. flyctl waits for both health checks to pass,
-  # so a build that boots but cannot serve fails this job too.
+  # branches off the live machine. flyctl waits for the /health check, and the
+  # one /ready call after it fails this job for a build that boots but cannot serve.
   deploy:
     needs: [test, eval-gate]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -95,3 +95,5 @@ jobs:
       - run: flyctl deploy --remote-only --ha=false
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      # Once per deploy, not on a timer: a poll keeps Neon's free compute awake.
+      - run: curl -fsS --retry 12 --retry-delay 10 --retry-all-errors https://edgar-intel.fly.dev/ready
